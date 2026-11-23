@@ -31,7 +31,7 @@ void main(List<String> args) async {
 Standard flags are provided by `CLIBase.argsParser` (`-a` atsign, `-k` path to
 `.atKeys`, `-n` namespace if not fixed in code, `-s` storage directory,
 verbose, etc.). This is the same pattern the canonical TUI example uses
-(`packages/at_client/example/bin/collections_todos.dart`).
+([collections_todos.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/example/bin/collections_todos.dart)).
 
 `CLIBase` waits for the client to come online, and otherwise stops it and
 throws: `AtCredentialRefusedException` when the atServer refuses the keys,
@@ -130,7 +130,7 @@ if (lease != null && !lease.isSpent) {
   and p3.16.5; before that it blocks for up to about ten and a half minutes.
 - If the coordination is specifically "N instances of one RPC responder", you
   don't need to write this yourself — `AtRpc.server(enableRequestMutex: true)`
-  is this pattern, packaged (see [13-rpc.md](13-rpc.md)).
+  is this pattern, packaged (see the RPC reference in at-client-skills-core).
 - The mutex coordinates *work*, not *storage*. Each instance is still a
   separate client and needs its **own** storage path — see
   [One process, one storage path](#one-process-one-storage-path) above.
@@ -170,7 +170,7 @@ final client = await Atsign(atSign).open(
 > test-only). `CLIBase`'s `--never-sync` flag opens the client with it. And it
 > must be paired with `remoteLocalPref = remoteOnly` (or
 > `useRemoteAtServer` per call — see
-> [12-remote-atserver.md](12-remote-atserver.md)): with sync disabled, a
+> the remote-atServer reference in at-client-skills-core): with sync disabled, a
 > default local write would never leave the machine.
 
 | Instances…                          | Pattern                                    |
@@ -207,13 +207,12 @@ final passcode = await atClient.enrollments.otp();  // what the new device quote
 ```
 
 From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do the
-same. Pass them `--posture pqActive`: without it they run at at_client's
-default, legacy, and a legacy approver cannot approve a post-quantum request —
-it stays pending.
+same; pass them `--posture pqActive`.
 
 The Flutter-side enrollment flows (the requesting device) are in
-[05-flutter-auth.md](05-flutter-auth.md) (Flow 4); the passcode and approver
-rules are in [15-client-lifecycle.md](15-client-lifecycle.md) (section 8).
+the at-client-skills-flutter skill (Flow 4); the passcode and approver
+rules, including why an approver must run post-quantum, are in
+at-client-skills-core's lifecycle reference (section 8).
 
 ## AtCollection-first boundary
 

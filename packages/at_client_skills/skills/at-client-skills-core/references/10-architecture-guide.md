@@ -40,12 +40,8 @@ await todos.create(
   sharedWith: {'@bob'.toAtsign()},
 );
 
-// Receiver (@bob): reactive watch — hold the stream in State, never in build()
-final _todos = todos.query().where((t) => !t.obj.done).watch();
-StreamBuilder<List<CItem<Todo>>>(
-  stream: _todos,
-  builder: (ctx, snap) { ... },
-)
+// Receiver (@bob): reactive watch — create the stream once and hold it
+todos.query().where((t) => !t.obj.done).watch().listen(render);
 ```
 
 **Choose this when:**
@@ -123,8 +119,8 @@ SQLite pattern:
   Uses `atClient.notificationService.send()` in a polling loop.  
   Short `expiration` (5 min) — stale samples are silently dropped.
 
-- **Flutter subscriber**: `packages/at_client_flutter/example/dockerstats/`  
-  Receives notifications, appends to SQLite, renders charts.
+- **Subscriber**: a Flutter app that receives the notifications, appends them
+  to SQLite and renders charts; the at-client-skills-flutter skill links it.
 
 ---
 

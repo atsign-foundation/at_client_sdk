@@ -42,7 +42,7 @@ const namespace = 'my_app';
 
 AtClientPreference _preference() => AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = namespace
-  ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
+  ..syncRegex = namespace;   // scope sync to this app (see at-client-skills-core)
 
 /// Screens that read AtClientManager.getInstance().atClient need this; an app
 /// that passes the client around does not.
@@ -293,7 +293,7 @@ client.connection.changes.listen((s) => setState(() => _state = s));
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
 
-See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
+See at-client-skills-core's lifecycle reference for the full state model,
 the services and the shutdown checklist.
 
 ---
@@ -315,9 +315,9 @@ hook, not a logout.
 ## Canonical Examples
 
 <!-- pyml disable-num-lines 3 md013-->
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
-- [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
-- [packages/at_client_flutter/example/todos/lib/onboarding.dart](../../../../at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
+- [packages/at_client_flutter/example/lib/walkthrough.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
+- [packages/at_client_flutter/example/lib/apkam_example.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
+- [packages/at_client_flutter/example/todos/lib/onboarding.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 
 ---
 
@@ -328,7 +328,8 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 // Exports all of at_client plus: AtSignSelectionDialog (→ AtsignSelection),
 // PkamDialog, CramDialog, RegistrarCramDialog, AtKeysFileDialog,
 // ApkamActivationDialog, EnrollmentRequestList, KeychainStorage,
-// KeychainAtKeysIo, and RegistrarService (the one at_auth type an app wants).
+// KeychainAtKeysIo, and RegistrarService (from at_auth, which the app does not
+// import).
 
 import 'package:at_client_flutter/extensions.dart';
 // Adds FileAtKeysIo.getAtsign() (used in Flow 2).

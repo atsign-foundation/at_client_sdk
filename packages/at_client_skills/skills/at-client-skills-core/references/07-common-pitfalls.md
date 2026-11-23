@@ -60,7 +60,7 @@ To read a leaf item after a `CSubItemUpdated` event, use `getDescendant()`.
 
 **Problem:** A single item this device cannot read, corrupt or sealed to a
 namespace key it does not hold yet, causes an unhandled stream error that
-terminates the stream and may crash the widget.
+terminates the stream, and with it whatever renders from it.
 
 **Fix:** Chain `.handleError()` to log-and-skip such items, or use
 `getItems()` if you want the entire list or nothing:
@@ -190,8 +190,7 @@ no automatic deduplication.
 
 **Fix options:**
 
-- **Accept it** if your handler is idempotent (e.g., just calls
-  `setState(() {})`)
+- **Accept it** if your handler is idempotent (e.g., it only re-renders)
 - **Debounce** with a short timer if processing is expensive
 - **Switch source** — use `EventSource.data` (requires SyncService) or
   `EventSource.notifs` if you only need one path

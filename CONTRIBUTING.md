@@ -102,17 +102,24 @@ documents should follow the [`docs/packages/devdoc_template.md`](docs/packages/d
 
 ## Updating the AI Agent Skill
 
-The `packages/at_client_skills/` package ships an AI agent skill (`at_client_skills-sdk`)
-that works with any AI coding agent supporting the [agentskills.io](https://agentskills.io)
-spec — Claude Code, Cursor, GitHub Copilot, Cline, and others.
-It is maintained like any other package in this repo — with its own version and CHANGELOG.
-If your PR changes a public API in `at_client`, `at_client_flutter`, or `at_auth`,
-open a follow-up `at_client_skills` PR to keep the skill accurate.
+The `packages/at_client_skills/` package ships three AI agent skills that work with
+any AI coding agent supporting the [agentskills.io](https://agentskills.io) spec —
+Claude Code, Cursor, GitHub Copilot, Cline, and others:
+
+- `at-client-skills-core` — what every app needs, whatever its platform
+- `at-client-skills-cli` — only what `at_client_cli` programs need
+- `at-client-skills-flutter` — only what `at_client_flutter` apps need
+
+Each fact lives in one skill: anything two platform skills would both need
+belongs in core. The package is maintained like any other in this repo — with
+its own version and CHANGELOG. If your PR changes a public API in `at_client`,
+`at_client_cli`, `at_client_flutter`, or `at_auth`, open a follow-up
+`at_client_skills` PR to keep the skills accurate.
 
 ### Skill content location
 
 ```
-packages/at_client_skills/skills/at_client_skills-sdk/
+packages/at_client_skills/skills/<skill>/   ← at-client-skills-core, -cli, -flutter
   SKILL.md              ← main skill body (edit this for API changes)
   references/           ← reference files, one per topic area
   evals/evals.json      ← eval definitions (add one when adding new guidance)
@@ -184,7 +191,7 @@ regardless of which agent you normally use for development.
    {
      "permissions": {
        "allow": [
-         "Write(packages/at_client_skills/skills/at_client_skills-sdk-workspace/**)",
+         "Write(packages/at_client_skills/skills/*-workspace/**)",
          "Read(**)",
          "Bash(python*)",
          "Bash(python3*)"
@@ -199,13 +206,13 @@ regardless of which agent you normally use for development.
 /skill-creator
 ```
 
-Tell skill-creator: *"Run a full eval for the skill at
-`packages/at_client_skills/skills/at_client_skills-sdk`. Use the evals in
+Run each skill's evals separately. Tell skill-creator: *"Run a full eval for
+the skill at `packages/at_client_skills/skills/<skill>`. Use the evals in
 `evals/evals.json`. This is iteration N."* (increment N each run to avoid
 overwriting previous results).
 
 skill-creator writes results to
-`packages/at_client_skills/skills/at_client_skills-sdk-workspace/iteration-N/`
+`packages/at_client_skills/skills/<skill>-workspace/iteration-N/`
 (gitignored — results stay local).
 
 **What to look for:**

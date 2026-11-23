@@ -161,7 +161,7 @@ derail the wait:
 await sync.waitUntilCaughtUp(
   timeout: const Duration(seconds: 30),
   onProgress: (p) =>
-      setState(() => _status = 'syncing ${p.localCommitId} / ${p.serverCommitId}'),
+      log.info('syncing ${p.localCommitId} / ${p.serverCommitId}'),
 );
 ```
 
@@ -184,5 +184,5 @@ else.
 
 ## Canonical example
 
-<!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/example/todos/](../../../../at_client_flutter/example/todos/README.md) — an `AtCollection<T>` app driving sync, shares, and read receipts through the widget stack.
+- The Flutter todos app drives sync, shares and read receipts through its
+  widgets; the at-client-skills-flutter skill links it.

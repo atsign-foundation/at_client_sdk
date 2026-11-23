@@ -100,18 +100,10 @@ await collection.delete(item);
 
 ---
 
-## Deprecated Packages
+## Deprecated and discontinued packages
 
-| Package                 | Status          | Use instead                                               |
-| ----------------------- | --------------- | --------------------------------------------------------- |
-| `at_common_flutter`     | ⛔ DEPRECATED   | `at_client_flutter`                                       |
-| `at_onboarding_flutter` | ⛔ DISCONTINUED | `at_client_flutter`                                       |
-| `at_backupkey_flutter`  | ⛔ DEPRECATED   | Copy `at_client_flutter` backup-key snippet into your app |
-| `at_invitation_flutter` | ⛔ DEPRECATED   | `AtClientInvitations` in `at_client`                      |
-| `at_sync_ui_flutter`    | ⛔ DEPRECATED   | Avoid; being removed                                      |
-| `at_theme_flutter`      | ⛔ DEPRECATED   | Avoid; being removed                                      |
-| `at_cli_commons`        | ⛔ DEPRECATED   | `at_client_cli`, which its latest release only re-exports |
-| `at_onboarding_cli`     | ⛔ DEPRECATED   | `at_client_cli`, which its latest release only re-exports |
+Which packages an app never adds, which are in migration, and what replaces
+each, is in [06-package-map.md](06-package-map.md).
 
 ## Retired auth API (at_client_flutter 2.0, at_auth 4.0)
 
@@ -123,49 +115,8 @@ await collection.delete(item);
 | `AtClientManager.getInstance().setCurrentAtSign(...)` after auth        | `AtClientManager.getInstance().use(client)`                                                   |
 | `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing; `RegistrarService` comes through the platform package                                |
 
-See [05-flutter-auth.md](05-flutter-auth.md) and
+See the at-client-skills-flutter skill and
 [15-client-lifecycle.md](15-client-lifecycle.md).
-
-### at_common_flutter
-
-The `at_common_flutter` package's own README states: _"Deprecated in favour of
-`at_client_flutter`."_ Do not add `at_common_flutter` to `pubspec.yaml`.
-Existing code
-using it should migrate to `at_client_flutter` equivalents.
-
-### at_onboarding_flutter
-
-**Discontinued.** pub.dev marks this package discontinued and names
-`at_client_flutter` as its replacement. Do not add `at_onboarding_flutter` to
-`pubspec.yaml`. Onboarding and authentication belong to the `at_client_flutter`
-dialogs — see [05-flutter-auth.md](05-flutter-auth.md) for all four flows (CRAM
-activation, `.atKeys` file, device keychain, APKAM enrolment).
-
-### at_backupkey_flutter
-
-This package has been deleted from the repository. Implement backup-key
-functionality
-by copying the snippet from
-`packages/at_client_flutter/example/lib/snippets/at_backup_key.dart`
-directly into your own app. Do not take a dependency on `at_backupkey_flutter`.
-
-### at_invitation_flutter
-
-This package is deprecated. Use `AtClientInvitations`, which both platform
-packages re-export; the Flutter app in
-`packages/at_client_flutter/example/invitations` shows it end to end. Do not
-take a dependency on `at_invitation_flutter`.
-
-### at_sync_ui_flutter / at_theme_flutter
-
-Both packages are being deprecated and removed. Do not use them in new projects.
-
-### at_cli_commons / at_onboarding_cli
-
-Deprecated. Their latest releases only re-export `at_client_cli`, which
-carries their code. Depend on
-`at_client_cli` and import `package:at_client_cli/at_client_cli.dart`; the
-command-line table under *Removed in at_client 4.0* below maps what changed.
 
 ---
 
@@ -231,28 +182,6 @@ These still compile, with a deprecation warning. Avoid them in new code.
 | Deprecated                                                   | Instead                                                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AtClientPreference.hiveStoragePath`                         | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage:`; at_client ignores the field, and at_client_flutter's dialogs read it only when given no storage |
-
----
-
-## Packages In Migration (avoid for new projects)
-
-These packages are still published but are in the process of being deprecated.
-Their functionality will be replaced by example application code (copy the
-pattern, don't depend on the package).
-
-| Package                     | Status       |
-| --------------------------- | ------------ |
-| `at_chat_flutter`           | In migration |
-| `at_contacts_flutter`       | In migration |
-| `at_contacts_group_flutter` | In migration |
-| `at_events_flutter`         | In migration |
-| `at_follows_flutter`        | In migration |
-| `at_location_flutter`       | In migration |
-| `at_notify_flutter`         | In migration |
-
-For new projects: look at the source of these packages for inspiration, then
-implement the pattern directly in your app rather than adding them as
-dependencies.
 
 ---
 

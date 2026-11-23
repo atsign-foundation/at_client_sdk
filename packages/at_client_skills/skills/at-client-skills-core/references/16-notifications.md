@@ -192,6 +192,26 @@ Catch `StoppedException` by name and let the work end; see
 
 ---
 
+## Receiving: accept only the senders you expect
+
+```dart
+atClient.notificationService
+    .subscribeFiltered(
+        acceptedSenders: {'@alice'.toAtsign()}, namespace: 'sample.my_app')
+    .listen((n) => handle(n.value));
+```
+
+`subscribeFiltered` matches `sample.my_app` and any id before it, decrypts
+each value, and drops a notification from any other sender, and one it cannot
+decrypt. Each drop is logged at warning and emitted on
+`notificationService.droppedEvents`. A notification a `legacy` client cannot
+open is lost; one configured `pqReady` or above reads the ones that follow.
+Plain `subscribe(regex:, shouldDecrypt:)` takes every sender, and its
+`shouldDecrypt` defaults to `false`, which hands back each value still
+encrypted.
+
+---
+
 ## Receiving: a stop can replay a notification
 
 Delivery to your subscribers is **at least once, not exactly once.** The
@@ -205,7 +225,7 @@ handlers that can run twice on the same notification without doing the work
 twice** — key the effect off `notification.id`, or make it idempotent: an
 upsert rather than an insert, a state assignment rather than an increment.
 This is the same discipline a multi-instance deployment needs for a different
-reason — see [14-multi-agent.md](14-multi-agent.md).
+reason — see the at-client-skills-cli skill.
 
 Parked notifications are the exception, and they fail the other way. A
 notification whose key material has not been filed yet is held in memory

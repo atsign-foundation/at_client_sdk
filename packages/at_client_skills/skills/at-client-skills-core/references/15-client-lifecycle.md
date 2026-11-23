@@ -2,8 +2,8 @@
 
 `at_client` owns the atSign lifecycle: onboarding, login and enrollment are
 verbs on `Atsign`, each handing back an `AtClient` the **app owns and stops**.
-The Flutter dialogs ([05-flutter-auth.md](05-flutter-auth.md)) and `CLIBase`
-([14-multi-agent.md](14-multi-agent.md)) are these verbs behind UI and
+The Flutter dialogs (the at-client-skills-flutter skill) and `CLIBase`
+(the at-client-skills-cli skill) are these verbs behind UI and
 argument parsing; what follows is true of the client whichever way it was
 opened.
 
@@ -71,11 +71,10 @@ final principal = await Atsign('@alice').authenticatesAs(keys: keys,
 In at_client 4.0 every verb is handed what it builds a client from, and the
 compiler insists: `storage:` on `open`, `activate` and `pending.client`, and
 `lookUps:` ([section 3](#3-connections)) with `secondaryAddressFinder:` on
-`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`. A CLI program takes its
-keys and store from `CliKeys.fileFor(atSign)` and
-`CliKeys.storageFor(atSign, program: ...)`. `open` also takes
-`serviceFactory:` (a process that must not sync hands in
-`ServiceFactoryWithNoOpSyncService` from `at_client_cli`), `atLookUp:` (a
+`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`; each
+platform package supplies them. `open` also takes
+`serviceFactory:` (a process that must not sync hands in a no-op sync
+service; see the at-client-skills-cli skill), `atLookUp:` (a
 connection the caller already holds) and `connectBudget:` (how long the one
 connect attempt waits before the client comes back offline, 5 s by default).
 
@@ -92,7 +91,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
 | `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
-| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal             | Show the cause                                                |
+| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys                                                    | Show the cause                                                |
 
 ---
 
@@ -100,8 +99,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 A client holds one `AtClientStorage`, and one store is held by one live client.
 Both platform packages re-export `HiveAtClientStorage`, the durable store
-native apps use; `CliKeys.storageFor(atSign, program:)` is one at the path
-`CLIBase` uses. Both also re-export the other backends,
+native apps use. Both also re-export the other backends,
 `SqliteAtClientStorage` and `InMemoryAtClientStorage`.
 
 ```dart
@@ -114,9 +112,7 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
   caller closes it. Use this only when something else shares the store.
 - `storage:` is required, so a verb without one does not compile. at_client
   ignores the deprecated `preference.hiveStoragePath`: to keep the store an
-  app used on at_client 3.x, pass that folder as `storagePath`. The Flutter
-  dialogs, given no storage, still open Hive under `hiveStoragePath` while
-  the app sets it, and otherwise in the app support directory. at_client 4.0
+  app used on at_client 3.x, pass that folder as `storagePath`. at_client 4.0
   removed `commitLogPath`; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
   Hive location is refused, and a second process on a Hive store another
@@ -152,11 +148,8 @@ AtLookupMuxable mine({required atSign, required rootDomain, required authenticat
   optional address finder. The factory captures how bytes travel; what a
   connection announces about the client travels in its authenticator's
   `from:`.
-- The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
-  and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
-  none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
-  at_client_cli's `lookUpsFor(rootDomain)`: `proxyLookUps()` when the root
-  domain names a proxy (`proxy:host:port`), TLS otherwise.
+- Each platform package supplies a default and takes yours in its place; the
+  platform skills name both.
 - at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
   `tlsKeysSavePath`: the transport is the factory's to configure, through the
   `SecureSocketConfig` given to `secureSocketLookUps(config:)`.
@@ -200,8 +193,8 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30),
 
 Every verb the client runs on its own connection keeps the state current, so
 an app rarely needs `attempt()`; it subscribes to `changes` and renders.
-**Flutter:** subscribe once (in `initState`), cancel in `dispose`, and follow
-the client the app switches to via `AtClientManager.listenToAtSignChange`.
+Subscribe once, cancel when the listener goes away, and follow the client the
+app switches to via `AtClientManager.listenToAtSignChange`.
 
 ---
 
@@ -387,7 +380,6 @@ atSign's root keys onto it.
 
 ## Canonical examples
 
-<!-- pyml disable-num-lines 3 md013-->
-- [packages/at_client/README.md](../../../../at_client/README.md) — "atSign lifecycle (short version)" and "In code: four verbs"
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — the four flows, `_adopt`
-- [packages/at_client/example/bin/](../../../../at_client/example/bin/) — CLI programs opened through `CLIBase`
+<!-- pyml disable-num-lines 2 md013-->
+- [at_client README](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/README.md) — "atSign lifecycle (short version)" and "In code: four verbs"
+- [at_client examples](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client/example/bin) — programs opened through the verbs

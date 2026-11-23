@@ -38,7 +38,7 @@ await atClient.put(
 Use when a write must be on the server _now_ and you cannot wait for the next
 sync round — e.g. a coordination key another process polls, or a mutex/lock key
 (`Metadata()..immutable = true` written remotely so the first writer wins across
-instances — see [14-multi-agent.md](14-multi-agent.md)). For ordinary app data,
+instances — see the at-client-skills-cli skill). For ordinary app data,
 prefer the default local write + background sync.
 
 ## `GetRequestOptions.useRemoteAtServer` / `bypassCache`
@@ -106,7 +106,7 @@ the changes down afterwards). Because `AtCollection<T>` operations are plain
 **collection** operations remote — there is no per-call option at the
 collection layer. Typical use: a stateless agent instance that pairs
 `remoteOnly` with a no-op sync service
-(see [14-multi-agent.md](14-multi-agent.md)).
+(see the at-client-skills-cli skill).
 
 One subtlety: passing a request-options object overrides the preference with
 that object's `useRemoteAtServer` value — which defaults to `false`. So on a
@@ -122,7 +122,7 @@ that object's `useRemoteAtServer` value — which defaults to `false`. So on a
 | Cross-process coordination / mutex keys               | `put` + `useRemoteAtServer = true`                                                      |
 | Read-your-write right after a remote write            | `get` + `useRemoteAtServer = true`                                                      |
 | Cached copy of another atsign's key looks stale       | `get` + `bypassCache = true`                                                            |
-| Stateless / horizontally-scaled instance with no sync | `remoteLocalPref = remoteOnly` client-wide (see [14-multi-agent.md](14-multi-agent.md)) |
+| Stateless / horizontally-scaled instance with no sync | `remoteLocalPref = remoteOnly` client-wide (see the at-client-skills-cli skill) |
 
 > Remote operations trade offline-tolerance and speed for immediacy. They open
 > a network round-trip on every call and fail when the atServer is unreachable —

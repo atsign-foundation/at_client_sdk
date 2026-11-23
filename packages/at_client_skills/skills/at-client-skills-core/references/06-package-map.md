@@ -39,15 +39,8 @@ dart pub add at_client_flutter   # the one SDK dependency
 (`export 'package:at_client/at_client_io.dart'`), its Hive, SQLite and
 in-memory stores and its mixins, so a Flutter app only needs this one entry.
 
-`at_client_flutter` adds:
-
-- Auth dialogs: `AtSignSelectionDialog`, `PkamDialog`, `CramDialog`,
-  `RegistrarCramDialog`, `AtKeysFileDialog`, `ApkamActivationDialog`
-- `KeychainStorage` — device keychain (iOS Keychain, Android Keystore)
-- `KeychainAtKeysIo` — read/write keys from the device keychain
-- `RegistrarService` — the registrar client CRAM onboarding needs
-- Flutter extensions on core types
-  (`import 'package:at_client_flutter/extensions.dart'`)
+What it adds — the sign-in dialogs, the device keychain, `RegistrarService`
+and its extensions — is in the at-client-skills-flutter skill.
 
 ---
 
@@ -72,27 +65,11 @@ for onboarding comes through its platform package.
 dart pub add at_client_cli   # the one SDK dependency
 ```
 
-`at_client_cli` covers every native Dart program that isn't Flutter. Beside
-at_client's native API, its Hive, SQLite and in-memory stores and its mixins,
-the registrar and the io logging handlers (`StdErrLoggingHandler`, `FileLoggingHandler`, `CLILoggingHandler`),
-it provides:
-
-- `CLIBase` — one-line arg parsing + `.atKeys` loading + an online client;
-  see [14-multi-agent.md](14-multi-agent.md)
-- `CliKeys` — `CliKeys.fileFor(atSign, path:, passPhrase:)` (default
-  `~/.atsign/keys/<atSign>_key.atKeys`) and `CliKeys.storageFor(atSign,
-  program:, id:, path:)` (default: the store `CLIBase` opens for that
-  namespace), for a program that calls the `Atsign` verbs itself
-- `createAtClient(atSign:, atKeysFilePath:, ...)` — the client at_activate's
-  commands open: from the keyfile, syncing nothing, on a store of its own
-- `lookUpsFor(rootDomain)` — the `lookUps:` `CLIBase` uses: `proxyLookUps()`
-  for a root domain of the form `proxy:host:port`, `secureSocketLookUps()`
-  otherwise
-- `ServiceFactoryWithNoOpSyncService` for stateless no-sync instances
-- the `at_activate` and `at_register` executables; `at_register`, and
-  `at_activate onboard` without `-c`, send the registrar API key in
-  `AT_REGISTRAR_API_KEY` when it is set, and otherwise a built-in key
-  (`dart pub global activate at_client_cli`)
+`at_client_cli` covers every native Dart program that isn't Flutter. It
+re-exports at_client's native API, its Hive, SQLite and in-memory stores and
+its mixins. What it adds — `CLIBase`, `CliKeys`, `lookUpsFor`, the no-sync
+service factory, the io logging handlers, and the `at_activate` and
+`at_register` executables — is in the at-client-skills-cli skill.
 
 Not needed in Flutter apps. It replaces `at_cli_commons` and
 `at_onboarding_cli`, whose last majors are deprecated re-exports of it.

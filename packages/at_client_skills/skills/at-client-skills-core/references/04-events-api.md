@@ -177,32 +177,11 @@ different `leadTime`.
 
 ---
 
-## Flutter Subscribe/Dispose Pattern
+## Subscribing and cancelling
 
-```dart
-late StreamSubscription<CItemUpdated> _sub;
-
-@override
-void initState() {
-  super.initState();
-  _sub = collection.updates.listen((_) => setState(() {}));
-}
-
-@override
-void dispose() {
-  _sub.cancel();
-  super.dispose();
-}
-```
-
-For `watch()` in `StreamBuilder`, hold the stream in `State` — never create it
-in `build()` (see [03-query-api.md](03-query-api.md)):
-
-```dart
-late final _todos = todos.query().where((t) => !t.obj.done).watch();
-// ...
-StreamBuilder<List<CItem<Todo>>>(stream: _todos, builder: (ctx, snap) { ... })
-```
+Subscribe once, and cancel the `StreamSubscription` when whatever listens goes
+away, or its handler keeps running. Where that is in a widget's lifecycle is
+in the at-client-skills-flutter skill.
 
 ---
 
