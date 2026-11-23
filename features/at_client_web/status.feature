@@ -16,8 +16,10 @@ Feature: The connection status is readable and observable
   #   close answers {code: closed}", "onStatus listener error does not skip
   #   sibling listeners").
   # Replay: status reports live connection state transitions from AtConnection
-  #   and retains the last state after close without replaying stale transitions
-  #   ("status() reads the latest value").
+  #   and re-classifies the current state when the browser's online/offline
+  #   state changes, emitting only when the status differs; it retains the last
+  #   state after close without replaying stale transitions ("status() reads the
+  #   latest value", "an event that changes nothing reports nothing").
   # DoS: non-function callbacks are rejected synchronously without registering a
   #   listener ("onStatus with non-function callback returns {code: invalid_argument}
   #   without throwing").
@@ -51,3 +53,13 @@ Feature: The connection status is readable and observable
     Given an open session with two status listeners where the first throws
     When the connection status changes
     Then the second listener still receives the new status
+
+  Scenario: an event re-reads whether the browser is online and reports it
+    Given a session whose connection is down, built with a browser-online check and a network-change stream
+    When the browser goes offline and a network event arrives, then comes back online and another event arrives
+    Then the session reclassifies each time and the listener saw waiting:network and then waiting:server
+
+  Scenario: an event that changes nothing reports nothing
+    Given a session whose connection is down with a status listener
+    When a network event arrives and the browser's online state is unchanged
+    Then the status is the same and the listener was not called

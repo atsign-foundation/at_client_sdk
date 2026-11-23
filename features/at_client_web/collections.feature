@@ -214,3 +214,22 @@ Feature: Collections store, read and share items through the session
     Given a listing with one record that cannot be read and one whose data nests 65 levels
     When list or query is called
     Then unreadable holds {id, owner, code} with COLLECTION_ITEM_UNREADABLE for the first and COLLECTION_ITEM_TOO_DEEP for the second
+
+  Scenario: a repeated collection call builds a fresh adapter each time
+    Given an open session
+    When collection is called three times for one name, type and options, once with the name already ending in the namespace
+    Then each call returns its own handle and the session keeps no adapter
+
+  Scenario: two handles with different eventSource and expiration serialise on one namespace, id and owner
+    Given two handles on one collection opened with different eventSource and expiration
+    When each removes the same item, the id differing only in case
+    Then the second starts after the first finishes, and an operation on another id does not wait
+
+  Scenario: the item lock map is empty once the operations complete
+    Given several operations on one item have finished
+    Then the session holds no item lock
+
+  Scenario: close clears the item lock map
+    Given an operation is holding an item lock
+    When the session closes
+    Then the session holds no item lock

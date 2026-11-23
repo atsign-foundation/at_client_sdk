@@ -104,3 +104,8 @@ Feature: create opens a session and close ends it
     Given a session that has been closed
     When notify, subscribe, onStatus, collection, otp, pendingEnrollments, approve or deny is called on the session, or any operation on a collection it opened
     Then each throws SessionClosedException, an AtException; at_client's StoppedException never reaches the caller
+
+  Scenario: a close whose stop failed can be tried again
+    Given a session whose stop fails on the first close
+    When close is called, rejects, and is called again twice
+    Then the second close stops the client, the third is a no-op, and stop ran twice in all

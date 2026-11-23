@@ -530,7 +530,8 @@ const client = await AtClient.create({
 **Status shape.** `ConnectionStatus` is one of `'connecting'`, `'connected'`,
 `'waiting:network'`, `'waiting:server'`, `'waiting:auth'`. `status` is the latest state;
 `onStatus` reports each change and returns the function that stops it. The state is
-classified when the connection changes; a browser online/offline event alone does not emit.
+classified when the connection changes; a browser online/offline event re-classifies the
+current connection state, and a status is emitted only when it changes.
 The client reconnects by itself and exposes no retry.
 
 **Errors.** Every call rejects with an `AtError` carrying `code`; collection failures add
