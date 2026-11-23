@@ -5,7 +5,16 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
-import 'package:at_client/at_client.dart' show Atsign, AtEnrollmentException;
+import 'package:at_client/at_client.dart'
+    show
+        AtConnectionCause,
+        AtConnectionState,
+        AtEnrollmentException,
+        AtNoCredentialException,
+        AtOpenRefusedException,
+        Atsign;
+import 'package:at_client_web/at_client_web.dart'
+    show PortalSessionOfflineException;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/js/js_session.dart';
@@ -100,6 +109,9 @@ class _FakeSession implements JsSession {
 
   @override
   String get atSign => '@alice';
+
+  @override
+  bool get isClosed => closed;
 
   void _call(String name, [JsKey? key]) {
     if (closed) throw SessionClosedException();
@@ -230,18 +242,19 @@ Map<String, Object?> _nested(int levels) {
 JSObject _obj(Map<String, Object?> map) => map.jsify()! as JSObject;
 
 JSAny? _call(JSObject target, String name, [List<JSAny?> args = const []]) =>
-    switch (args.length) {
-      0 => target.callMethod(name.toJS),
-      1 => target.callMethod(name.toJS, args[0]),
-      2 => target.callMethod(name.toJS, args[0], args[1]),
-      3 => target.callMethod(name.toJS, args[0], args[1], args[2]),
-      _ => target.callMethod(name.toJS, args[0], args[1], args[2], args[3]),
-    };
+    args.isEmpty
+        ? target.callMethod(name.toJS)
+        : target.callMethodVarArgs(name.toJS, args);
 
 /// A JS object built by `JSON.parse`, so it can carry a `__proto__` key.
 JSObject _json(String text) =>
     (globalContext['JSON']! as JSObject).callMethod('parse'.toJS, text.toJS)!
         as JSObject;
+
+final JSObject _reflectClass = globalContext['Reflect']! as JSObject;
+
+JSAny _jsConstruct(String ctor, [List<JSAny?> args = const []]) => _reflectClass
+    .callMethod('construct'.toJS, globalContext[ctor]!, args.toJS)!;
 
 void main() {
   late _FakeSession session;
@@ -335,14 +348,52 @@ void main() {
 
     test('a bad rootDomain rejects naming the parameter, never its value',
         () async {
-      final r = await _rejected(_call(api, 'create', [
-        _obj(opts({'rootDomain': 'a:b:c:d-sentinel-9'}))
-      ]));
+      for (final bad in [
+        'a:b:c:d-sentinel-9',
+        'evil.com/path?sentinel=1:443',
+        'bad host sentinel',
+      ]) {
+        final r = await _rejected(_call(api, 'create', [
+          _obj(opts({'rootDomain': bad}))
+        ]));
 
-      expect(r.code, 'internal');
-      expect(r.message, contains('rootDomain'));
-      expect(r.message, isNot(contains('sentinel')));
+        expect(r.code, 'internal');
+        expect(r.message, contains('rootDomain'));
+        expect(r.message, isNot(contains('sentinel')));
+      }
       expect(opened, isEmpty);
+    });
+
+    test('invalid or empty atSign rejects naming atSign', () async {
+      for (final bad in ['', '   ', '@a@b-sentinel', '@alice sentinel']) {
+        final r = await _rejected(_call(api, 'create', [
+          _obj(opts({'atSign': bad}))
+        ]));
+        expect(r.code, 'internal');
+        expect(r.message, contains('atSign'));
+        expect(r.message, isNot(contains('sentinel')));
+      }
+      expect(opened, isEmpty);
+    });
+
+    test('invalid or empty namespace rejects naming namespace', () async {
+      for (final bad in ['', '   ', 'a.b-sentinel', 'a b sentinel']) {
+        final r = await _rejected(_call(api, 'create', [
+          _obj(opts({'namespace': bad}))
+        ]));
+        expect(r.code, 'internal');
+        expect(r.message, contains('namespace'));
+        expect(r.message, isNot(contains('sentinel')));
+      }
+      expect(opened, isEmpty);
+    });
+
+    test('credential-less keys reject with bad_key', () async {
+      openFailure = AtNoCredentialException('@alice');
+
+      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+
+      expect(r.code, 'bad_key');
     });
 
     test('keys that are not JSON reject with bad_key', () async {
@@ -403,6 +454,34 @@ void main() {
       final r = await _rejected(_call(api, 'create', [_obj(opts())]));
 
       expect(r.code, 'internal');
+      expect(r.message, 'internal error');
+      expect(r.message, isNot(contains('sentinel')));
+    });
+
+    test(
+        'external ArgumentError, AtOpenRefusedException, and PortalSessionOfflineException do not leak internal details',
+        () async {
+      openFailure =
+          ArgumentError.value('sentinel-secret-arg', 'root', 'bad root');
+      var r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      expect(r.code, 'internal');
+      expect(r.message, 'internal error');
+      expect(r.message, isNot(contains('sentinel')));
+
+      openFailure = AtOpenRefusedException(
+          '@alice',
+          AtConnectionState.refused(AtConnectionCause.revoked,
+              error: StateError('sentinel-server-detail')));
+      r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      expect(r.code, 'pkam_refused');
+      expect(r.message, isNot(contains('sentinel')));
+
+      openFailure = PortalSessionOfflineException(
+          '@alice',
+          AtConnectionState.offline(AtConnectionCause.unreachable,
+              error: StateError('sentinel-socket-detail')));
+      r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      expect(r.code, 'offline');
       expect(r.message, isNot(contains('sentinel')));
     });
   });
@@ -606,6 +685,32 @@ void main() {
       expect(session.listeners, isEmpty);
     });
 
+    test(
+        'bridge subscribe drops notifications and errors after session is closed',
+        () async {
+      final seen = <Object?>[];
+      final errors = <Object?>[];
+      _call(s, 'subscribe', [
+        '.*'.toJS,
+        ((JSAny? event) => seen.add(event.dartify())).toJS,
+        ((JSAny? err) => errors.add(err.dartify())).toJS,
+      ]);
+
+      await _resolved(_call(s, 'close'));
+      session.listeners.single((
+        id: 'n2',
+        from: '@bob',
+        key: 'k.tally@bob',
+        value: 'late',
+        epochMillis: 99,
+        operation: 'update',
+      ));
+      session.errorSink!(StateError('late'));
+
+      expect(seen, isEmpty);
+      expect(errors, isEmpty);
+    });
+
     group('subscribe failures', () {
       // The `{code, message}` a failed subscribe answers with, in place of
       // the unsubscribe function.
@@ -629,6 +734,23 @@ void main() {
 
         expect(e['code'].dartify(), 'internal');
         expect(e['message'].dartify() as String, contains('regex'));
+      });
+
+      test('subscribe with invalid regex rejects naming regex', () {
+        final e = failed('['.toJS);
+
+        expect(e['code'].dartify(), 'internal');
+        expect(e['message'].dartify() as String, contains('regex'));
+      });
+
+      test(
+          'subscribe with non-function callback returns {code: internal} without throwing',
+          () {
+        for (final bad in [null, 5.toJS, _obj({})]) {
+          final r = _call(s, 'subscribe', ['x'.toJS, bad])! as JSObject;
+          expect(r['code'].dartify(), 'internal');
+          expect(r['message'].dartify() as String, contains('callback'));
+        }
       });
     });
 
@@ -724,6 +846,16 @@ void main() {
         final r = _call(s, 'onStatus', [(() {}).toJS])! as JSObject;
 
         expect(r['code'].dartify(), 'closed');
+      });
+
+      test(
+          'onStatus with non-function callback returns {code: internal} without throwing',
+          () {
+        for (final bad in [null, 5.toJS, _obj({})]) {
+          final r = _call(s, 'onStatus', [bad])! as JSObject;
+          expect(r['code'].dartify(), 'internal');
+          expect(r['message'].dartify() as String, contains('callback'));
+        }
       });
     });
 
@@ -893,6 +1025,18 @@ void main() {
 
         expect(r.code, CollectionErrorCodes.tooDeep);
         expect(r.message, isNot(contains('internal')));
+      });
+
+      test('tooDeep from collection item preserves id and owner', () async {
+        adapter.item = {...adapter.item, 'data': _nested(65)};
+
+        final r = await _rejected(_call(c, 'get', [
+          _obj({'id': 'i1'})
+        ]));
+
+        expect(r.code, CollectionErrorCodes.tooDeep);
+        expect(r.field('id'), 'i1');
+        expect(r.field('owner'), '@alice');
       });
 
       test('collection item data nested exactly 64 levels deep resolves',
@@ -1079,6 +1223,205 @@ void main() {
 
         expect(r['code'].dartify(), 'internal');
         expect(r['message'].dartify() as String, contains('onEvent'));
+      });
+
+      test(
+          'collection operations and watch reject with closed after session close',
+          () async {
+        await _resolved(_call(s, 'close'));
+
+        for (final (method, args) in [
+          (
+            'create',
+            <JSAny?>[
+              _obj({'a': 1})
+            ]
+          ),
+          (
+            'get',
+            <JSAny?>[
+              _obj({'id': 'i1'})
+            ]
+          ),
+          ('list', <JSAny?>[]),
+          ('query', <JSAny?>[<JSAny?>[].toJS]),
+          (
+            'update',
+            <JSAny?>[
+              _obj({'id': 'i1'}),
+              _obj({'a': 2})
+            ]
+          ),
+          (
+            'share',
+            <JSAny?>[
+              _obj({'id': 'i1'}),
+              ['bob'].jsify()
+            ]
+          ),
+          (
+            'remove',
+            <JSAny?>[
+              _obj({'id': 'i1'})
+            ]
+          ),
+        ]) {
+          expect((await _rejected(_call(c, method, args))).code, 'closed',
+              reason: method);
+        }
+
+        final watchRes = _call(c, 'watch', [((JSAny? _) {}).toJS])! as JSObject;
+        expect(watchRes['code'].dartify(), 'closed');
+      });
+
+      test(
+          'invalid address owner rejects with COLLECTION_INVALID_ARGUMENT naming owner',
+          () async {
+        for (final (method, args) in [
+          (
+            'get',
+            <JSAny?>[
+              _obj({'id': 'i1', 'owner': '@a@b-sentinel'})
+            ]
+          ),
+          (
+            'update',
+            <JSAny?>[
+              _obj({'id': 'i1', 'owner': '@a@b-sentinel'}),
+              _obj({'a': 1})
+            ]
+          ),
+          (
+            'share',
+            <JSAny?>[
+              _obj({'id': 'i1', 'owner': '@a@b-sentinel'}),
+              ['@bob'].jsify()
+            ]
+          ),
+          (
+            'remove',
+            <JSAny?>[
+              _obj({'id': 'i1', 'owner': '@a@b-sentinel'})
+            ]
+          ),
+        ]) {
+          final r = await _rejected(_call(c, method, args));
+          expect(r.code, CollectionErrorCodes.invalidArgument, reason: method);
+          expect(r.message, contains('owner'));
+          expect(r.message, isNot(contains('sentinel')));
+          expect(r.field('id'), 'i1');
+        }
+      });
+
+      test(
+          'non-plain JS objects in collection arguments reject naming the parameter',
+          () async {
+        final nonPlain = <JSAny>[
+          _jsConstruct('Date'),
+          _jsConstruct('Uint8Array', [
+            [1, 2].jsify()
+          ]),
+          _jsConstruct('Map'),
+          _jsConstruct('Set'),
+          _jsConstruct('RegExp', ['a'.toJS]),
+          _jsConstruct('ArrayBuffer', [4.toJS]),
+        ];
+        for (final bad in nonPlain) {
+          final optRes = await _rejected(_call(c, 'create', [
+            _obj({'a': 1}),
+            bad
+          ]));
+          expect(optRes.code, 'internal');
+          expect(optRes.message, contains('opts'));
+
+          final dataRes = await _rejected(_call(c, 'create', [
+            _obj({'nested': bad})
+          ]));
+          expect(dataRes.code, 'internal');
+          expect(dataRes.message, contains('data'));
+        }
+        final arrOpts = await _rejected(_call(c, 'create', [
+          _obj({'a': 1}),
+          <JSAny?>[].toJS
+        ]));
+        expect(arrOpts.code, 'internal');
+        expect(arrOpts.message, contains('opts'));
+      });
+
+      test(
+          'prototype-polluted Object.prototype fields are ignored across bridge calls',
+          () async {
+        final proto =
+            (globalContext['Object']! as JSObject)['prototype']! as JSObject;
+        final polluted = <String, JSAny?>{
+          'rootDomain': 'evil.example:443'.toJS,
+          'sharedWith': ['eve'].jsify(),
+          'sharedBy': '@eve'.toJS,
+          'public': true.toJS,
+          'cached': true.toJS,
+          'noNamespace': true.toJS,
+          'owner': '@eve'.toJS,
+          'cascade': true.toJS,
+          'eventSource': 'data'.toJS,
+          'expiration': 999.toJS,
+          'id': 'polluted-id'.toJS,
+        };
+        for (final entry in polluted.entries) {
+          proto[entry.key] = entry.value;
+        }
+        try {
+          await create();
+          expect(opened.last.rootDomain, isNull);
+
+          await _resolved(_call(s, 'notify', [
+            _obj({'key': 'k'}),
+            'v'.toJS
+          ]));
+          final sentKey = session.keysSeen.last;
+          expect((
+            sentKey.sharedWith,
+            sentKey.sharedBy,
+            sentKey.isPublic,
+            sentKey.isCached,
+            sentKey.noNamespace
+          ), (
+            null,
+            null,
+            false,
+            false,
+            false
+          ));
+
+          await _resolved(_call(s, 'collection', [
+            'clean'.toJS,
+            _obj({'type': 't'})
+          ]));
+          expect(session.collectionArgs.last, ('clean', 't', null, null));
+
+          await _resolved(_call(c, 'create', [
+            _obj({'a': 1}),
+            _obj({})
+          ]));
+          final (_, createdId, createdShared) =
+              adapter.last! as (Map<String, dynamic>, String?, List<String>);
+          expect(createdId, isNull);
+          expect(createdShared, isEmpty);
+
+          await _resolved(_call(c, 'get', [
+            _obj({'id': 'i1'})
+          ]));
+          expect(adapter.last, ('i1', '@alice'));
+
+          await _resolved(_call(c, 'remove', [
+            _obj({'id': 'i1'}),
+            _obj({})
+          ]));
+          expect(adapter.last, ('i1', '@alice', false));
+        } finally {
+          for (final key in polluted.keys) {
+            _reflectClass.callMethod('deleteProperty'.toJS, proto, key.toJS);
+          }
+        }
       });
     });
 

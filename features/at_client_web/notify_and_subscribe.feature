@@ -10,6 +10,36 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   npm package turns {code, message} into AtError and the callbacks into async
   iterators, and specifies that in at_js.
 
+  # Threats. Each answer names the scenario that holds it.
+  #
+  # Race: an echo arriving before notify returns is still suppressed ("drops an
+  #   echo that arrives before notify resolves"), a notify interrupted by close
+  #   while polling rejects closed ("notify interrupted by close rejects with
+  #   closed"), and subscribe stops delivering once close starts and cancels if
+  #   closed during startListening ("close stops delivering subscription events
+  #   and errors even if the stream emits before cancel settles", "subscribe
+  #   cancels immediately if close occurs during startListening", "bridge
+  #   subscribe drops notifications and errors after session is closed").
+  # Replay: the last 1024 sent notification ids are remembered for the session's
+  #   own atSign and failed sends do not evict live ids ("remembers only the last
+  #   1024 sent ids", "failed notify does not evict sent echo ids").
+  # DoS: invalid keys, invalid regexes, and non-function callbacks are refused
+  #   before sending or subscribing ("notify with empty or invalid key or
+  #   invalid sharedWith rejects with bad_key and sends nothing", "subscribe
+  #   with invalid regex rejects naming regex", "subscribe with non-function
+  #   callback returns {code: internal} without throwing").
+  # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
+  #   without recipient, wrong sharedWith, injected text keys) and mismatched
+  #   sender/key owner are dropped ("delivers only a notification sent by the
+  #   key owner", "subscribe drops notifications with malformed keys or wrong
+  #   sharedWith").
+  # Impersonation: outbound notify refuses mismatched sharedBy, public, or
+  #   cached keys upfront before any lookup, and inbound notifications compare
+  #   canonical sender and owner ("notify with mismatched sharedBy rejects with
+  #   bad_key and sends nothing", "notify with public or cached flag rejects
+  #   with bad_key and sends nothing", "matches the sender and the key owner by
+  #   canonical atSign").
+
   Scenario: notify resolves true when delivered and false when not
     Given an open session and a recipient
     When notify is called on a key shared with the recipient
@@ -21,6 +51,34 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When notify is called on a key with no sharedWith
     Then it fails with a bad key
     And nothing is sent to the atServer
+
+  Scenario: notify with mismatched sharedBy rejects with bad_key and sends nothing
+    Given an open session as @alice
+    When notify is called with sharedBy @carol
+    Then it rejects with bad_key
+    And nothing is sent to the atServer
+
+  Scenario: notify with public or cached flag rejects with bad_key and sends nothing
+    Given an open session
+    When notify is called with public true or cached true
+    Then each rejects with bad_key
+    And nothing is sent to the atServer
+
+  Scenario: notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing
+    Given an open session
+    When notify is called with an empty or malformed key or an invalid sharedWith
+    Then each rejects with bad_key
+    And nothing is sent to the atServer
+
+  Scenario: notify interrupted by close rejects with closed
+    Given an open session with an in-flight undelivered notify
+    When close is called before notify completes
+    Then notify rejects with closed
+
+  Scenario: failed notify does not evict sent echo ids
+    Given an open session that sent 1024 notifications followed by failed notify calls
+    When the atServer delivers the echo of the first sent notification
+    Then the subscription still drops that echo
 
   Scenario: drops the echo of a notification this session sent
     Given a subscription on every key and a notification this session has sent
@@ -56,6 +114,21 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then they are delivered with from as the canonical atSign
     And a notification with no key owner is not delivered
 
+  Scenario: subscribe drops notifications with malformed keys or wrong sharedWith
+    Given a subscription on every key
+    When notifications arrive with multiple @s, a bare @name.ns key, cached: without recipient, wrong sharedWith, or injected text keys
+    Then none of them is delivered
+
+  Scenario: subscribe with invalid regex rejects naming regex
+    Given an open session
+    When subscribe is called with an invalid regular expression
+    Then it returns {code: internal} naming regex without starting the monitor
+
+  Scenario: subscribe with non-function callback returns {code: internal} without throwing
+    Given an open session
+    When subscribe is called with a non-function callback
+    Then it returns {code: internal} naming callback without throwing
+
   Scenario: subscribe errors go to onError as {code, message}
     Given a subscription with an onError function
     When the session reports a subscription error that no code maps
@@ -71,3 +144,18 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given a subscription with no onError
     When the session reports a subscription error
     Then nothing is thrown
+
+  Scenario: close stops delivering subscription events and errors even if the stream emits before cancel settles
+    Given an active subscription whose stream emits an event or error after close starts
+    When close is called
+    Then neither onEvent nor onError receives post-close deliveries
+
+  Scenario: subscribe cancels immediately if close occurs during startListening
+    Given an open session whose startListening triggers close synchronously
+    When subscribe is called
+    Then the subscription is cancelled immediately without leaking into active subscriptions
+
+  Scenario: bridge subscribe drops notifications and errors after session is closed
+    Given a BridgeSession subscription and a session marked closed
+    When the underlying session emits a notification or error
+    Then neither the JS event callback nor the JS error callback is invoked

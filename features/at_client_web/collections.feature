@@ -10,6 +10,33 @@ Feature: Collections store, read and share items through the session
   npm package turns {code, message} into AtError and the callbacks into async
   iterators, and specifies that in at_js.
 
+  # Threats. Each answer names the scenario that holds it.
+  #
+  # Race: concurrent writes to one item in an adapter run sequentially so no
+  #   write overwrites another, and closing the session stops collection calls
+  #   and watches ("concurrent update, share and remove on one item run
+  #   sequentially without losing writes", "collection operations and watch
+  #   reject with closed after session close").
+  # Replay: watch delivers events from authenticated AtCollection notifications
+  #   only while open and stops on cancel or session close ("collection watch
+  #   delivers events, including unknown, and unsubscribes (T6.5, T6.8)").
+  # DoS: data nesting is capped at 64 levels both inbound and outbound,
+  #   unreadable items never fail list/query, and non-plain objects are rejected
+  #   ("collection data that is an array or too deep rejects naming data", "A
+  #   list reports an item nested 100000 levels deep without overflowing the
+  #   stack", "non-plain JS objects in collection arguments reject naming the
+  #   parameter").
+  # Forgery: item data crosses to JS as null-prototype objects and bridge reads
+  #   inspect only own properties so Object.prototype pollution cannot alter
+  #   arguments ("collection item data is a null-prototype object (T6.3)",
+  #   "a data key named __proto__ arrives as data, not a prototype",
+  #   "prototype-polluted Object.prototype fields are ignored across bridge
+  #   calls").
+  # Impersonation: items are addressed by validated (id, owner) with owner
+  #   defaulting to the session atSign and invalid owner rejected ("collection
+  #   get defaults the owner to the session and resolves null", "invalid address
+  #   owner rejects with COLLECTION_INVALID_ARGUMENT naming owner").
+
   Scenario: collection passes name, type, eventSource and expiration
     Given an open session
     When collection is called with a name and {type, eventSource, expiration}, the expiration in milliseconds
@@ -20,6 +47,11 @@ Feature: Collections store, read and share items through the session
     Given an open session
     When collection is called with a name and only a type
     Then the bridge passes no eventSource and no expiration, leaving both to the session's defaults
+
+  Scenario: opening a notification-backed collection starts listening on notificationService
+    Given an open session whose notification monitor is not yet listening
+    When collection is opened with eventSource notifs or default both, and separately with data
+    Then startListening is called for notifs and default both, and not for data
 
   Scenario: collection create maps data, id and sharedWith
     Given an open collection
@@ -45,6 +77,18 @@ Feature: Collections store, read and share items through the session
     When update is called with an address and data, share with an address and atSigns, and remove with an address
     Then the collection receives each call's id, owner and arguments, the owner defaulting to the session's atSign
     And remove passes cascade as given, false when left out, and resolves no value
+
+  Scenario: concurrent update, share and remove on one item run sequentially without losing writes
+    Given an item in an open adapter
+    When update and share (or remove) are started concurrently for that item
+    Then they execute one after the other for that (id, owner)
+    And the second operation sees the state written by the first without losing writes
+
+  Scenario: collection operations and watch reject with closed after session close
+    Given an open collection handle from a session
+    When session.close() is called
+    Then subsequent collection calls reject with closed and watch returns {code: closed}
+    And any active watch is cancelled
 
   Scenario: collection item data is a null-prototype object (T6.3)
     Given an item whose data has keys named __proto__ and toString, a nested object and an object inside an array
@@ -72,6 +116,21 @@ Feature: Collections store, read and share items through the session
     When get is called with a string for the address, create with a number for the data, query with a number for where, or share with a string for atSigns
     Then each rejects with code internal and a message naming that parameter
 
+  Scenario: invalid address owner rejects with COLLECTION_INVALID_ARGUMENT naming owner
+    Given an open collection
+    When get, update, share or remove is called with an invalid address owner
+    Then each rejects with COLLECTION_INVALID_ARGUMENT naming owner without its value
+
+  Scenario: non-plain JS objects in collection arguments reject naming the parameter
+    Given an open collection
+    When create is called with Date, Uint8Array, Map or array in opts or nested data
+    Then each rejects with code internal naming the parameter
+
+  Scenario: prototype-polluted Object.prototype fields are ignored across bridge calls
+    Given extra properties defined on Object.prototype
+    When create, collection, notify, remove and query omit optional fields
+    Then none of the polluted Object.prototype fields is read
+
   Scenario: collection data that is an array or too deep rejects naming data
     Given an open collection
     When create or update is called with an array as the data, or create with data nested 100 levels deep or with a cyclic object
@@ -81,6 +140,21 @@ Feature: Collections store, read and share items through the session
     Given a collection whose item data nests 65 levels, and one that nests 64
     When get is called
     Then the 65-level item rejects with COLLECTION_ITEM_TOO_DEEP and the 64-level item resolves
+
+  Scenario: tooDeep from collection item preserves id and owner
+    Given an item whose data nests 65 levels deep
+    When get rejects with COLLECTION_ITEM_TOO_DEEP across the bridge
+    Then the rejection carries the item's id and owner
+
+  Scenario: collection get errors carry id and owner
+    Given an open adapter
+    When get fails with an invalid id or unexpected error
+    Then the rejection carries id and owner
+
+  Scenario: collection list safely skips malformed unreadable keys without throwing in onError
+    Given a collection listing containing an unreadable key whose key.toString() throws InvalidAtKeyException
+    When list is called
+    Then list completes without hanging and logs a sanitized warning
 
   Scenario: A list reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP
     Given an item another atSign shared whose data nests 65 levels

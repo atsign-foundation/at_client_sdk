@@ -143,8 +143,12 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - name: Install dependencies in at_client_web
-        run: dart pub get
+      - name: Check dart-workspace.lock is current and install dependencies
+        working-directory: .
+        run: |
+          cp packages/at_client_web/dart-workspace.lock pubspec.lock
+          cd packages/at_client_web
+          dart pub get --no-example --enforce-lockfile
 
       - name: Analyze project source in at_client_web
         run: dart analyze
@@ -152,12 +156,15 @@ jobs:
       - name: Check that at_client_web is correctly formatted
         run: dart format . -o none --set-exit-if-changed
 
+      - name: Build at_client_bridge_entry
+        run: tool/build.sh at_client_bridge_entry
+
       - name: Run at_client_web VM tests
         run: dart test --concurrency=1
 
       - name: Check that every at_client_web scenario has a proving test
         working-directory: .
-        run: test -z "$(features/at_client_web/check_scenarios.sh)"
+        run: features/at_client_web/check_scenarios.sh
 
   at_client_web_browser:
     runs-on: ubuntu-latest

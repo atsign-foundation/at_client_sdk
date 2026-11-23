@@ -12,12 +12,16 @@ String atErrorCode(Object error) => switch (error) {
       AtOpenRefusedException() => 'pkam_refused',
       PortalSessionOfflineException() => 'offline',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
+      EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       AtEnrollmentException() => 'enrollment_denied',
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
       UnsupportedError() ||
       ManageAccessException() =>
         'unsupported',
-      BadKeyException() => 'bad_key',
+      BadKeyException() ||
+      AtNoCredentialException() ||
+      InvalidAtSignException() =>
+        'bad_key',
       _ => 'internal',
     };

@@ -12,10 +12,15 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     if: github.ref == 'refs/heads/trunk'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     env:
@@ -28,15 +33,27 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Skip when the release exists
+      - name: Skip when the tag or release exists
         id: tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${TAG_PREFIX}${GITHUB_SHA::12}"
           echo "name=$tag" >> "$GITHUB_OUTPUT"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          set +e
+          tag_out=$(git ls-remote --exit-code --tags origin "refs/tags/$tag" 2>&1)
+          tag_rc=$?
+          release_out=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" 2>&1)
+          release_rc=$?
+          set -e
+          if [ "$tag_rc" -eq 0 ] || [ "$release_rc" -eq 0 ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif [ "$tag_rc" -ne 2 ]; then
+            echo "git ls-remote failed ($tag_rc): $tag_out" >&2
+            exit "$tag_rc"
+          elif ! printf '%s\n' "$release_out" | grep -qi 'release not found'; then
+            echo "gh release view failed ($release_rc): $release_out" >&2
+            exit "$release_rc"
           fi
 
       - uses: ./actions/setup-flutter-and-dart
@@ -50,7 +67,7 @@ jobs:
         run: |
           cp packages/at_client_web/dart-workspace.lock pubspec.lock
           cd packages/at_client_web
-          dart pub get --enforce-lockfile
+          dart pub get --no-example --enforce-lockfile
           tool/build.sh at_client_bridge_entry
 
       - name: Write the checksum
@@ -72,6 +89,7 @@ jobs:
     needs: build
     if: github.ref == 'refs/heads/trunk' && needs.build.outputs.exists != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       id-token: write

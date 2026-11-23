@@ -1,9 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 
 import '../collections/js_collections_adapter.dart';
+
+final _sessionNamespacePattern = RegExp('^${Regexes.charsInNamespace}\$');
+
+/// Returns [namespace] folded to lower case, or throws an [ArgumentError]
+/// naming `namespace` without its value when it is empty or invalid.
+String normalizeSessionNamespace(String namespace) {
+  if (!_sessionNamespacePattern.hasMatch(namespace)) {
+    throw ArgumentError('namespace must be a non-empty valid segment');
+  }
+  return namespace.toLowerCase();
+}
 
 /// A key as the JS bridge names it: [key] under [namespace] (the session's
 /// own when null), shared with [sharedWith] when that is set, by [sharedBy]
@@ -79,6 +89,9 @@ abstract interface class JsSession {
   /// The atSign this session acts as.
   String get atSign;
 
+  /// Whether [close] has started or completed on this session.
+  bool get isClosed;
+
   /// Notifies [key]'s `sharedWith` of [value]; true only once the atServer
   /// reports it delivered. Throws a [BadKeyException] without `sharedWith`.
   Future<bool> notify(JsKey key, String value);
@@ -125,12 +138,13 @@ abstract interface class JsSession {
   /// Denies the pending request [id]; same throws as [approve].
   Future<void> deny(String id);
 
-  /// Stops the client and every subscription; a second call does nothing.
+  /// Stops the client and every subscription; concurrent calls await the same
+  /// teardown.
   Future<void> close();
 }
 
 /// A [JsSession] on an [AtClient], keying each value as
-/// `<key>.<namespace>@<sharedBy>` with the namespace taken verbatim.
+/// `<key>.<namespace>@<sharedBy>` with the namespace folded to lower case.
 class AtClientJsSession implements JsSession {
   /// [warn] receives the warnings the session raises, by default through the
   /// atSign logger; [isNavigatorOnline] tells a [JsSession.status] of
@@ -139,16 +153,22 @@ class AtClientJsSession implements JsSession {
       {required String namespace,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline})
-      : _namespace = namespace,
+      : _namespace = normalizeSessionNamespace(namespace),
         _warn = warn ?? _logger.warning,
         _isNavigatorOnline = isNavigatorOnline ?? (() => true) {
     _status = _statusOf(_client.connection.current) ?? 'connecting';
     _connection = _client.connection.changes.listen((state) {
+      if (_closed) return;
       final next = _statusOf(state);
       if (next == null || next == _status) return;
       _status = next;
       for (final listener in [..._statusListeners]) {
-        listener(next);
+        if (_closed || !_statusListeners.contains(listener)) continue;
+        try {
+          listener(next);
+        } on Object catch (_) {
+          _warn('Status listener threw an error');
+        }
       }
     });
   }
@@ -161,16 +181,26 @@ class AtClientJsSession implements JsSession {
   /// How many sent notification ids are remembered for dropping echoes.
   static const sentIdLimit = 1024;
 
+  static final _keySegmentInvalidChars = RegExp(r'[:@\s\x00-\x1f\x7f-\x9f]');
+  static final _collectionNameAllowed =
+      RegExp('^(?:${Regexes.charsInEntity}|${Regexes.allowedEmoji})+\$');
+  static final _notifyNamespacePattern = RegExp(
+      '^(?:(?:${Regexes.charsInEntity}|${Regexes.allowedEmoji})+\\.)?${Regexes.charsInNamespace}\$');
+  static final _notifInvalidChars = RegExp(r'[\s\x00-\x1f\x7f-\x9f]');
+
   final AtClient _client;
   final String _namespace;
   final _sent = <String>{};
   final _subscriptions = <StreamSubscription<Object?>>{};
+  final _watchCancels = <Future<void> Function()>{};
+  final _deciding = <String>{};
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
   final _statusListeners = <void Function(String)>{};
   late StreamSubscription<AtConnectionState> _connection;
   late String _status;
   bool _closed = false;
+  Future<void>? _closing;
 
   /// The [JsSession.status] [state] is, or null for the connection having
   /// stopped, which says nothing about the atServer.
@@ -189,6 +219,9 @@ class AtClientJsSession implements JsSession {
   String get atSign => _client.getCurrentAtSign()!;
 
   @override
+  bool get isClosed => _closed;
+
+  @override
   String get status => _status;
 
   @override
@@ -198,19 +231,42 @@ class AtClientJsSession implements JsSession {
     return () => _statusListeners.remove(onChange);
   }
 
-  /// [name] qualified with [namespace] unless it already ends in it.
-  static String qualified(String name, String namespace) =>
-      name.endsWith('.$namespace') ? name : '$name.$namespace';
+  /// [name] qualified with [namespace] unless it already ends in it, folded to
+  /// lower case.
+  static String qualified(String name, String namespace) {
+    final ns = namespace.toLowerCase();
+    final lower = name.toLowerCase();
+    return lower.endsWith('.$ns') ? lower : '$lower.$ns';
+  }
+
+  static String _validateCollectionName(String name) {
+    if (name.isEmpty ||
+        name.startsWith('.') ||
+        name.endsWith('.') ||
+        name.contains('..') ||
+        _keySegmentInvalidChars.hasMatch(name) ||
+        !_collectionNameAllowed.hasMatch(name)) {
+      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
+          'collection name must be a valid key name');
+    }
+    return name;
+  }
 
   @override
   Future<JsCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs}) async {
     _open();
-    return JsCollectionsAdapter.open(_client,
-        namespace: qualified(name, _namespace),
+    final validName = _validateCollectionName(name);
+    final adapter = await JsCollectionsAdapter.open(_client,
+        namespace: qualified(validName, _namespace),
         type: type,
         expirationMs: expirationMs ?? defaultExpirationMs,
         eventSource: eventSource);
+    _open();
+    if (eventSource != 'data') {
+      _client.notificationService.startListening();
+    }
+    return _SessionCollection(this, adapter);
   }
 
   void _open() {
@@ -218,52 +274,165 @@ class AtClientJsSession implements JsSession {
   }
 
   AtKey _atKey(JsKey key) {
-    final sharedBy = key.sharedBy?.toAtsign() ?? _client.getCurrentAtSign()!;
-    final namespace = key.noNamespace ? null : key.namespace ?? _namespace;
-    final sharedWith = key.sharedWith;
-    final builder = key.isPublic
-        ? AtKey.public(key.key, namespace: namespace, sharedBy: sharedBy)
-        : sharedWith == null
-            ? AtKey.self(key.key, namespace: namespace, sharedBy: sharedBy)
-            : (AtKey.shared(key.key, namespace: namespace, sharedBy: sharedBy)
-              ..sharedWith(sharedWith.toAtsign()));
-    // Not namespace-aware: at_client would otherwise fold the session's
-    // namespace into [namespace] (`rpc.tally` -> `rpc.tally.<app>`).
-    final atKey = builder.build()..metadata.namespaceAware = false;
-    if (key.isCached) atKey.metadata.isCached = true;
+    if (key.isPublic) {
+      throw BadKeyException('public keys cannot be sent with notify');
+    }
+    if (key.isCached) {
+      throw BadKeyException('cached keys cannot be sent with notify');
+    }
+    final rawSharedWith = key.sharedWith;
+    if (rawSharedWith == null) {
+      throw BadKeyException('notify needs sharedWith');
+    }
+    final Atsign sharedWith;
+    try {
+      sharedWith = rawSharedWith.toAtsign();
+    } on InvalidAtSignException {
+      throw BadKeyException('sharedWith must be a valid atSign');
+    }
+    final own = _canonical(_client.getCurrentAtSign()!)!;
+    final Atsign sharedBy;
+    if (key.sharedBy != null) {
+      try {
+        sharedBy = key.sharedBy!.toAtsign();
+      } on InvalidAtSignException {
+        throw BadKeyException('sharedBy must be a valid atSign');
+      }
+      if (sharedBy != own) {
+        throw BadKeyException('sharedBy must match the session atSign');
+      }
+    } else {
+      sharedBy = own.toAtsign();
+    }
+    if (key.key.isEmpty ||
+        key.key.startsWith('.') ||
+        key.key.endsWith('.') ||
+        key.key.contains('..') ||
+        _keySegmentInvalidChars.hasMatch(key.key)) {
+      throw BadKeyException('key is not a valid key name');
+    }
+    String? namespace;
+    if (!key.noNamespace) {
+      final rawNs = key.namespace ?? _namespace;
+      if (rawNs.isEmpty ||
+          rawNs.startsWith('.') ||
+          rawNs.endsWith('.') ||
+          rawNs.contains('..') ||
+          _keySegmentInvalidChars.hasMatch(rawNs) ||
+          !_notifyNamespacePattern.hasMatch(rawNs)) {
+        throw BadKeyException('namespace is not valid');
+      }
+      namespace = rawNs.toLowerCase();
+    }
+    final AtKey atKey;
+    final String serialized;
+    try {
+      // Not namespace-aware: at_client would otherwise fold the session's
+      // namespace into [namespace] (`rpc.tally` -> `rpc.tally.<app>`).
+      final builder =
+          AtKey.shared(key.key, namespace: namespace, sharedBy: sharedBy)
+            ..sharedWith(sharedWith);
+      atKey = builder.build()..metadata.namespaceAware = false;
+      serialized = atKey.toString();
+    } on AtException {
+      throw BadKeyException('key is not a valid atKey');
+    }
+    final validation = AtKeyValidators.get().validate(
+      serialized,
+      ValidationContext()
+        ..atSign = sharedBy
+        ..validateOwnership = true
+        ..enforceNamespace = false,
+    );
+    if (!validation.isValid) {
+      throw BadKeyException('key is not a valid atKey');
+    }
     return atKey;
   }
 
   @override
   Future<bool> notify(JsKey key, String value) async {
     _open();
-    if (key.sharedWith == null) {
-      throw BadKeyException('notify needs sharedWith');
+    final atKey = _atKey(key);
+    var remembered = false;
+    final result = await _client.notificationService
+        .notify(NotificationParams.forUpdate(atKey, value: value),
+            onSentToSecondary: (sent) {
+      remembered = true;
+      _remember(sent.notificationID);
+    });
+    if (!remembered && result.atClientException == null) {
+      _remember(result.notificationID);
     }
-    final result = await _client.notificationService.notify(
-        NotificationParams.forUpdate(_atKey(key), value: value),
-        onSentToSecondary: (sent) => _remember(sent.notificationID));
-    _remember(result.notificationID);
     if (result.notificationStatusEnum == NotificationStatusEnum.delivered) {
       return true;
     }
+    _open();
     if (result.atClientException case final cause?) throw cause;
     return false;
   }
 
   void _remember(String id) {
+    if (id.isEmpty) return;
     _sent.add(id);
     if (_sent.length > sentIdLimit) _sent.remove(_sent.first);
   }
 
-  /// The canonical atSign that sent [n], or null when it is not the owner of
-  /// the notification's key (the atSign after the key's last `@`).
-  static String? _sender(AtNotification n) {
-    final at = n.key.lastIndexOf('@');
-    if (at < 0) return null;
-    final owner = _canonical(n.key.substring(at));
+  /// The canonical atSign that sent [n], or null when [n.key] is malformed,
+  /// targets another recipient, or its owner does not match [n.from].
+  static String? _sender(AtNotification n, {required String own}) {
     final from = _canonical(n.from);
-    return owner != null && owner == from ? from : null;
+    if (from == null) return null;
+    if (n.key.isEmpty || _notifInvalidChars.hasMatch(n.key)) return null;
+    final colonParts = n.key.split(':');
+    if (colonParts.length > 3) return null;
+    final String keyBody;
+    if (colonParts.length == 3) {
+      if (colonParts[0] != 'cached') return null;
+      final target = colonParts[1];
+      if (target != 'public' &&
+          (!target.startsWith('@') || _canonical(target) == null)) {
+        return null;
+      }
+      keyBody = colonParts[2];
+    } else if (colonParts.length == 2) {
+      final prefix = colonParts[0];
+      if (prefix != 'public' &&
+          (!prefix.startsWith('@') || _canonical(prefix) == null)) {
+        return null;
+      }
+      keyBody = colonParts[1];
+    } else {
+      keyBody = colonParts[0];
+    }
+    final at = keyBody.indexOf('@');
+    if (at <= 0 || at != keyBody.lastIndexOf('@') || at == keyBody.length - 1) {
+      return null;
+    }
+    final namePart = keyBody.substring(0, at);
+    if (namePart.startsWith('.') ||
+        namePart.endsWith('.') ||
+        namePart.contains('..')) {
+      return null;
+    }
+    final AtKey parsed;
+    try {
+      parsed = AtKey.fromString(n.key);
+    } on Exception {
+      return null;
+    } on Error {
+      return null;
+    }
+    if (parsed.key.isEmpty) return null;
+    final rawOwner = parsed.sharedBy;
+    if (rawOwner == null) return null;
+    final owner = _canonical(rawOwner);
+    if (owner == null || owner != from) return null;
+    if (!parsed.metadata.isPublic && parsed.sharedWith != null) {
+      final recipient = _canonical(parsed.sharedWith!);
+      if (recipient != own) return null;
+    }
+    return from;
   }
 
   /// [atSign] trimmed, lower-cased and put in `@name` form; null when it is
@@ -280,37 +449,70 @@ class AtClientJsSession implements JsSession {
   void Function() subscribe(String regex, void Function(JsNotification) onEvent,
       {required void Function(Object error) onError}) {
     _open();
+    try {
+      RegExp(regex);
+    } on FormatException {
+      throw ArgumentError('regex must be a valid regular expression');
+    }
     final service = _client.notificationService;
-    final own = _canonical(_client.getCurrentAtSign()!);
-    final subscription = service
+    final own = _canonical(_client.getCurrentAtSign()!)!;
+    var done = false;
+    late final StreamSubscription<JsNotification?> subscription;
+    subscription = service
         .subscribe(regex: regex, shouldDecrypt: true)
-        .map((n) => (n, _sender(n)))
-        .where((e) {
-      final (n, from) = e;
-      if (from == null) {
-        // Never the value: it is the sender's, decrypted for this client.
-        _warn('Dropped notification ${jsonEncode(n.id)}: its sender '
-            'is not the owner of its key');
-        return false;
-      }
-      return !(from == own && _sent.contains(n.id));
-    }).listen((e) {
-      final (n, from) = e;
-      onEvent((
-        id: n.id,
-        from: from!,
-        key: n.key,
-        value: n.value,
-        epochMillis: n.epochMillis,
-        operation:
-            n.operation?.endsWith('delete') == true ? 'delete' : 'update',
-      ));
-    }, onError: (Object error) => onError(error));
-    _subscriptions.add(subscription);
-    service.startListening();
+        .map((n) {
+          final from = _sender(n, own: own);
+          if (from == null) {
+            // Never the value: it is the sender's, decrypted for this client.
+            _warn('Dropped notification ${sanitizeLogText(n.id)}: its sender '
+                'is not the owner of its key');
+            return null;
+          }
+          if (from == own && _sent.contains(n.id)) return null;
+          return (
+            id: n.id,
+            from: from,
+            key: n.key,
+            value: n.value,
+            epochMillis: n.epochMillis,
+            operation:
+                n.operation?.endsWith('delete') == true ? 'delete' : 'update',
+          );
+        })
+        .where((e) => e != null)
+        .cast<JsNotification>()
+        .listen(
+          (event) {
+            if (_closed) return;
+            onEvent(event);
+          },
+          onError: (Object error) {
+            if (_closed) return;
+            onError(error);
+          },
+          onDone: () {
+            done = true;
+            _subscriptions.remove(subscription);
+          },
+        );
+    try {
+      service.startListening();
+    } catch (_) {
+      unawaited(subscription.cancel().catchError((Object _) {}));
+      rethrow;
+    }
+    if (_closed) {
+      unawaited(subscription.cancel().catchError((Object _) {
+        _warn('Failed to cancel notification subscription on close');
+      }));
+    } else if (!done) {
+      _subscriptions.add(subscription);
+    }
     return () {
       if (_subscriptions.remove(subscription)) {
-        unawaited(subscription.cancel());
+        unawaited(subscription.cancel().catchError((Object _) {
+          _warn('Failed to cancel notification subscription');
+        }));
       }
     };
   }
@@ -318,12 +520,14 @@ class AtClientJsSession implements JsSession {
   @override
   Future<String> otp() async {
     await _requireManage();
+    _open();
     return (await _managed(() => _client.enrollments.otp())).value;
   }
 
   @override
   Future<List<JsEnrollment>> pendingEnrollments() async {
     await _requireManage();
+    _open();
     return [
       for (final e in await _pending())
         (
@@ -340,15 +544,26 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  Future<void> approve(String id) async {
-    await _requirePending(id);
-    await _managed(() => _client.enrollments.approve(id));
-  }
+  Future<void> approve(String id) =>
+      _decide(id, () => _managed(() => _client.enrollments.approve(id)));
 
   @override
-  Future<void> deny(String id) async {
-    await _requirePending(id);
-    await _managed(() => _client.enrollments.deny(id));
+  Future<void> deny(String id) =>
+      _decide(id, () => _managed(() => _client.enrollments.deny(id)));
+
+  Future<void> _decide(String id, Future<void> Function() action) async {
+    _open();
+    if (!_deciding.add(id)) {
+      throw AtEnrollmentException(
+          '${_client.getCurrentAtSign()} already has a decision in flight');
+    }
+    try {
+      await _requirePending(id);
+      _open();
+      await action();
+    } finally {
+      _deciding.remove(id);
+    }
   }
 
   /// The result of [call], with the atServer's refusal of a session that
@@ -380,20 +595,112 @@ class AtClientJsSession implements JsSession {
     await _requireManage();
     if (!(await _pending()).any((e) => e.enrollmentId == id)) {
       throw AtEnrollmentException(
-          '${_client.getCurrentAtSign()} has no pending enrollment $id');
+          '${_client.getCurrentAtSign()} has no pending enrollment');
     }
   }
 
   @override
-  Future<void> close() async {
-    if (_closed) return;
+  Future<void> close() => _closing ??= _tearDown();
+
+  Future<void> _tearDown() async {
     _closed = true;
-    unawaited(_connection.cancel());
     _statusListeners.clear();
-    for (final subscription in _subscriptions) {
-      unawaited(subscription.cancel());
+    try {
+      await _connection.cancel();
+    } on Object catch (_) {
+      _warn('Failed to cancel status subscription on close');
+    }
+    for (final subscription in [..._subscriptions]) {
+      try {
+        await subscription.cancel();
+      } on Object catch (_) {
+        _warn('Failed to cancel notification subscription on close');
+      }
     }
     _subscriptions.clear();
+    for (final cancelWatch in [..._watchCancels]) {
+      try {
+        await cancelWatch();
+      } on Object catch (_) {
+        _warn('Failed to cancel collection watch on close');
+      }
+    }
+    _watchCancels.clear();
     await _client.stop();
+  }
+}
+
+class _SessionCollection implements JsCollection {
+  _SessionCollection(this._session, this._inner);
+
+  final AtClientJsSession _session;
+  final JsCollection _inner;
+
+  @override
+  Future<JsItem> create(Map<String, dynamic> data,
+      {String? id, List<String> sharedWith = const []}) async {
+    _session._open();
+    return _inner.create(data, id: id, sharedWith: sharedWith);
+  }
+
+  @override
+  Future<JsItem?> get(JsItemAddress address) async {
+    _session._open();
+    return _inner.get(address);
+  }
+
+  @override
+  Future<JsListing> list() async {
+    _session._open();
+    return _inner.list();
+  }
+
+  @override
+  Future<JsListing> query(List<JsWhereClause> clauses) async {
+    _session._open();
+    return _inner.query(clauses);
+  }
+
+  @override
+  Future<JsItem> update(
+      JsItemAddress address, Map<String, dynamic> data) async {
+    _session._open();
+    return _inner.update(address, data);
+  }
+
+  @override
+  Future<JsItem> share(JsItemAddress address, List<String> atSigns) async {
+    _session._open();
+    return _inner.share(address, atSigns);
+  }
+
+  @override
+  Future<void> remove(JsItemAddress address, {bool cascade = false}) async {
+    _session._open();
+    return _inner.remove(address, cascade: cascade);
+  }
+
+  @override
+  Future<void> Function() watch(
+    void Function(JsEvent event) onEvent, {
+    required void Function(JsCollectionsError error) onError,
+  }) {
+    _session._open();
+    late final Future<void> Function() cancel;
+    cancel = _inner.watch(
+      (event) {
+        if (_session.isClosed) return;
+        onEvent(event);
+      },
+      onError: (error) {
+        if (_session.isClosed) return;
+        onError(error);
+      },
+    );
+    _session._watchCancels.add(cancel);
+    return () async {
+      _session._watchCancels.remove(cancel);
+      await cancel();
+    };
   }
 }

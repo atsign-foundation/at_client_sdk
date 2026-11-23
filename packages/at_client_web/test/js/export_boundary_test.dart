@@ -25,11 +25,82 @@ const _jsTypes = {
   'JSBigInt',
 };
 
-/// [source] without comments and string literals, so braces and quotes in
-/// them cannot confuse the scan.
-String _stripped(String source) => source
-    .replaceAll(RegExp(r'//[^\n]*'), '')
-    .replaceAll(RegExp(r"'(?:\\.|[^'\\\n])*'|" r'"(?:\\.|[^"\\\n])*"'), "''");
+/// [source] without line/block comments (including nested `/* ... */`) and
+/// string literals (single-line, multiline, and raw), so braces, quotes, and
+/// `@JSExport` in them cannot confuse the scan.
+String _stripped(String source) {
+  final out = StringBuffer();
+  var i = 0;
+  final n = source.length;
+  while (i < n) {
+    // Line comment
+    if (i + 1 < n && source[i] == '/' && source[i + 1] == '/') {
+      i += 2;
+      while (i < n && source[i] != '\n') {
+        i++;
+      }
+      continue;
+    }
+    // Nested block comment
+    if (i + 1 < n && source[i] == '/' && source[i + 1] == '*') {
+      i += 2;
+      var depth = 1;
+      while (i < n && depth > 0) {
+        if (i + 1 < n && source[i] == '/' && source[i + 1] == '*') {
+          depth++;
+          i += 2;
+        } else if (i + 1 < n && source[i] == '*' && source[i + 1] == '/') {
+          depth--;
+          i += 2;
+        } else {
+          if (source[i] == '\n') out.write('\n');
+          i++;
+        }
+      }
+      out.write(' ');
+      continue;
+    }
+    // Raw string: r'...' / r"..." / r'''...''' / r"""..."""
+    if (source[i] == 'r' &&
+        i + 1 < n &&
+        (source[i + 1] == '\'' || source[i + 1] == '"')) {
+      final quote = source[i + 1];
+      final triple =
+          i + 3 < n && source[i + 2] == quote && source[i + 3] == quote;
+      final delim = triple ? quote * 3 : quote;
+      i += 1 + delim.length;
+      while (i < n && !source.startsWith(delim, i)) {
+        if (!triple && source[i] == '\n') break;
+        i++;
+      }
+      if (source.startsWith(delim, i)) i += delim.length;
+      out.write("''");
+      continue;
+    }
+    // Regular or multiline string: '...' / "..." / '''...''' / """..."""
+    if (source[i] == '\'' || source[i] == '"') {
+      final quote = source[i];
+      final triple =
+          i + 2 < n && source[i + 1] == quote && source[i + 2] == quote;
+      final delim = triple ? quote * 3 : quote;
+      i += delim.length;
+      while (i < n && !source.startsWith(delim, i)) {
+        if (source[i] == r'\' && i + 1 < n) {
+          i += 2;
+          continue;
+        }
+        if (!triple && source[i] == '\n') break;
+        i++;
+      }
+      if (source.startsWith(delim, i)) i += delim.length;
+      out.write("''");
+      continue;
+    }
+    out.write(source[i]);
+    i++;
+  }
+  return out.toString();
+}
 
 /// The members of every `@JSExport` class in [source] as `Class.member`
 /// signatures: `(name, returnType, parameterTypes)`.
@@ -38,14 +109,15 @@ List<({String owner, String name, String returns, List<String> params})>
   final code = _stripped(source);
   final members =
       <({String owner, String name, String returns, List<String> params})>[];
-  final classes =
-      RegExp(r'@JSExport\([^)]*\)\s*class\s+(\w+)[^{]*\{').allMatches(code);
+  final classes = RegExp(
+    r'@JSExport\([^)]*\)(?:\s*@\w+(?:\([^)]*\))?)*\s*(?:(?:abstract|final|base|interface)\s+)*class\s+(\w+)[^{]*\{',
+  ).allMatches(code);
   for (final c in classes) {
     final owner = c.group(1)!;
     var depth = 1;
     var i = c.end;
     final start = i;
-    while (depth > 0) {
+    while (i < code.length && depth > 0) {
       final ch = code[i++];
       if (ch == '{') depth++;
       if (ch == '}') depth--;
@@ -83,42 +155,118 @@ List<({String owner, String name, String returns, List<String> params})>
       if (d == 0 && !arrow) top.write(ch);
     }
     for (final raw in top.toString().split(';')) {
-      final text = _signature(raw);
-      final signature = RegExp(r'^(?:static )?(?:([^(]+?) )?(\w+)\s*\((.*)\)$')
-          .firstMatch(text);
-      if (signature == null || text.startsWith('final ')) continue;
-      final name = signature.group(2)!;
-      if (name == owner || name.startsWith('_')) continue;
-      members.add((
-        owner: owner,
-        name: name,
-        returns: signature.group(1) ?? 'dynamic',
-        params: _parameterTypes(signature.group(3)!),
-      ));
+      final parsed = _parseMember(owner, raw);
+      if (parsed != null) members.add(parsed);
     }
   }
   return members;
+}
+
+({String owner, String name, String returns, List<String> params})?
+    _parseMember(String owner, String raw) {
+  var text = _signature(raw);
+  if (text.isEmpty) return null;
+  // Drop leading annotations like `@override`.
+  text = text.replaceFirst(RegExp(r'^(?:@\w+(?:\([^)]*\))?\s+)+'), '');
+  // Drop member modifiers that are not types.
+  text = text.replaceFirst(RegExp(r'^(?:external|static|late)\s+'), '');
+  if (text.startsWith('$owner(') ||
+      text.startsWith('$owner.') ||
+      text.startsWith('factory ')) {
+    return null;
+  }
+  final method = RegExp(r'^(?:(.+?)\s+)?(\w+)\s*\((.*)\)$').firstMatch(text);
+  if (method != null) {
+    final prefix = method.group(1)?.trim();
+    final name = method.group(2)!;
+    if (name == owner || name.startsWith('_')) return null;
+    if (prefix == 'set' || prefix == 'void set') {
+      return (
+        owner: owner,
+        name: name,
+        returns: 'void',
+        params: _parameterTypes(method.group(3)!),
+      );
+    }
+    return (
+      owner: owner,
+      name: name,
+      returns: prefix ?? 'dynamic',
+      params: _parameterTypes(method.group(3)!),
+    );
+  }
+  final getter = RegExp(r'^(?:(.+?)\s+)?get\s+(\w+)$').firstMatch(text);
+  if (getter != null) {
+    final name = getter.group(2)!;
+    if (name.startsWith('_')) return null;
+    return (
+      owner: owner,
+      name: name,
+      returns: getter.group(1)?.trim() ?? 'dynamic',
+      params: const [],
+    );
+  }
+  // Field declaration (final, const, var, or typed), with optional initializer.
+  final decl = text.replaceFirst(RegExp(r'\s*=.*$'), '').trim();
+  final field =
+      RegExp(r'^(?:(final|const|var)\s+)?(?:(.+?)\s+)?(\w+)$').firstMatch(decl);
+  if (field != null) {
+    final qualifier = field.group(1);
+    final type = field.group(2)?.trim();
+    final name = field.group(3)!;
+    if (name.startsWith('_')) return null;
+    if (qualifier == null && type == null) return null;
+    return (
+      owner: owner,
+      name: name,
+      returns: type ?? 'dynamic',
+      params: const [],
+    );
+  }
+  return null;
 }
 
 /// [raw] up to the parenthesis that closes its parameter list, so a
 /// constructor's initializers and a body modifier like `async` are dropped.
 String _signature(String raw) {
   final text = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
-  final open = text.indexOf('(');
-  if (open < 0) return text;
-  var depth = 0;
-  for (var i = open; i < text.length; i++) {
-    if (text[i] == '(') depth++;
-    if (text[i] == ')' && --depth == 0) return text.substring(0, i + 1);
+  var i = 0;
+  while (true) {
+    final open = text.indexOf('(', i);
+    if (open < 0) return text;
+    var depth = 0;
+    var close = -1;
+    for (var j = open; j < text.length; j++) {
+      if (text[j] == '(') depth++;
+      if (text[j] == ')' && --depth == 0) {
+        close = j;
+        break;
+      }
+    }
+    if (close < 0) return text;
+    final after = text.substring(close + 1);
+    if (after.isEmpty ||
+        RegExp(r'^(?:\s+(?:async|sync)\*?)?(?:\s*(?:\{|=>|;|:)|$)')
+                .hasMatch(after) &&
+            !RegExp(r'\bFunction\s*$').hasMatch(text.substring(0, open))) {
+      return text.substring(0, close + 1);
+    }
+    i = close + 1;
   }
-  return text;
 }
 
-/// The declared type of each parameter in [list] (`JSAny? a, [JSAny? b]`).
+/// The declared type of each parameter in [list] (`JSAny? a, [JSAny? b = null]`).
 List<String> _parameterTypes(String list) => [
-      for (final p in _splitTopLevel(list.replaceAll(RegExp(r'[\[\]{}]'), '')))
-        if (p.trim().isNotEmpty)
-          p.trim().replaceFirst(RegExp(r'\s*\w+$'), '').trim()
+      for (final raw
+          in _splitTopLevel(list.replaceAll(RegExp(r'[\[\]{}]'), '')))
+        if (raw.trim().isNotEmpty)
+          raw
+              .trim()
+              .replaceFirst(RegExp(r'^required\s+'), '')
+              .replaceFirst(RegExp(r'\s*=.*$'), '')
+              .trim()
+              .replaceFirst(RegExp(r'\s*\w+$'), '')
+              .trim()
     ];
 
 List<String> _splitTopLevel(String text) {
@@ -208,14 +356,25 @@ void main() {
 
   test('the check flags Dart types on an exported member', () {
     const bad = '''
+/*
+@JSExport()
+class CommentedOut { Future<void> ignored() async {} }
+*/
 @JSExport()
 class Leaky {
   Future<void> a() async {}
   JSPromise<JSAny?> b(List<int> x) => throw 0;
-  Stream<int> c([JSAny? y]) => throw 0;
+  Stream<int> c([JSAny? y = null]) => throw 0;
   JSPromise<Uint8List> d() => throw 0;
   JSFunction e(JSAny? ok, Object other) => throw 0;
-  JSPromise<JSArray<JSString>> fine(JSAny? a, [JSAny? b]) => throw 0;
+  Future<String> get badGetter => throw 0;
+  set badSetter(List<int> v) {}
+  String badField = r\'\'\'
+    @JSExport() class InsideRaw { Future<void> ignored() async {} }
+  \'\'\';
+  final List<int> badFinalField = const [];
+  var untypedField = 1;
+  JSPromise<JSArray<JSString>> fine(JSAny? a, [JSAny? b = null]) => throw 0;
   void alsoFine(JSFunction f) {}
 }
 ''';
@@ -225,6 +384,11 @@ class Leaky {
       'Leaky.c: Stream<int>',
       'Leaky.d: JSPromise<Uint8List>',
       'Leaky.e: Object',
+      'Leaky.badGetter: Future<String>',
+      'Leaky.badSetter: List<int>',
+      'Leaky.badField: String',
+      'Leaky.badFinalField: List<int>',
+      'Leaky.untypedField: dynamic',
     ]);
   });
 
