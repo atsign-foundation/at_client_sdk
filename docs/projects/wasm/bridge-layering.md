@@ -127,10 +127,16 @@ single stop. **[reconstructed: confirm]**
 
 **Options considered.**
 - Keep the spread: rejected because two errors stay outside the catch-all and the layers stay coupled by imports.
-- Move everything into one file but reuse at_commons' `StoppedException` for the closed-session case: rejected
-  because [`StoppedException`](../../../packages/at_commons/lib/src/exception/stopped_exception.dart) is deliberately
-  not an `AtException` (its doc says a fallback catch should not read a stop as an ordinary failure), so raising it
-  to a caller would amend A22; changing at_commons for a name was not worth it.
+- Move everything into one file and reuse at_commons' `StoppedException` for the closed session: the original choice
+  in [`a0fd351bd`](https://github.com/atsign-foundation/at_client_sdk/commit/a0fd351bd9d501aad2f2acd96928806cea4aaf56),
+  taken so that at_commons would not change for a name.
+  [`31384cb89`](https://github.com/atsign-foundation/at_client_sdk/commit/31384cb89dae7b0477ff238273525123dbc533ab)
+  recorded that the choice needs A22 amended, because
+  [`StoppedException`](../../../packages/at_commons/lib/src/exception/stopped_exception.dart) is deliberately not an
+  `AtException`.
+  [`879e992d8`](https://github.com/atsign-foundation/at_client_sdk/commit/879e992d85fc6c9b7d1f28e3bbc2e90fd54337e9)
+  then scoped the decision to the five trunk exceptions: the closed-session type exists only in #2537, so that choice
+  and the amendment are left to that PR.
 - Move the five trunk exceptions into one file and extend `AtException` (chosen). The closed-session type is left to
   the implementing PR, where the #2537-only names live.
 
@@ -173,8 +179,8 @@ set in at_js's `error.ts`. Nothing compares either with the bundle, so a code or
 
 **Options considered.**
 - Keep the hand-kept lists: this is the drift the decision exists to remove.
-- Hand-write a manifest: rejected by the decision's "anything written by hand" rule; a third hand-kept list would
-  drift the same way.
+- Hand-write a manifest: rejected because it would be a third hand-kept list beside [`js-api.md`](js-api.md) and
+  at_js's `error.ts`, and would drift the same way.
 - Generate the manifest from the Dart constants and ship it with the bundle (chosen).
 
 **Decision and why.** Each release publishes `bridge-manifest.json` with a `schemaVersion`, every exported method and
@@ -194,15 +200,18 @@ surface. **[reconstructed: confirm]**
 
 **Problem.** The trunk build script takes no argument: it always runs both compilers, warns and exits 0 when the
 dart2wasm build fails unless `WASM_REQUIRED=1`, and writes `at_client.js`. The release ships the dart2js bundle only.
-The target is therefore implicit in whatever the script last ran, and a failed wasm build can leave a dart2js-only
-artifact ([D-38](../../architecture/decisions.md)).
+On trunk the web release ships the dart2js bundle only, and no workflow publishes the bridge at all. The target is
+therefore implicit in whatever the script last ran, and a failed wasm build can leave a dart2js-only artifact ([D-38](../../architecture/decisions.md)).
 
 **Options considered.**
 - Keep the dual-build script: rejected because the target stays implicit and a wasm failure can pass silently.
-- Make the target package configuration: rejected because the bridge code is target-agnostic (`dart:js_interop`);
-  only the compiler changes, so this is a build choice, not package configuration.
-- Keep dart2js as the only target (the older project decision): rejected because the same source remains wasm-ready
-  at no source cost; the open question is how to build and ship it, not whether to keep the source compatible.
+- Make the target package configuration: rejected because the bridge code is target-agnostic (`dart:js_interop`) and
+  only the compiler changes, so this is a build choice. **[reconstructed: confirm]**
+- Keep dart2js as the primary target: D-38 does not reopen this. It keeps `dart2js` as the default, which is the
+  position of [wasm D-7](decisions.md), and D-7 already keeps `dart2wasm` available "at zero cost". The measured
+  evidence favoured dart2js: one 77 KB file (24.5 KB gzipped) against dart2wasm's four files at about 25 KB, and
+  Sass ships dart2js ([js-api.md](js-api.md) section 2). D-38 decides how a wasm build is made and shipped, not
+  which target is primary.
 - A `--target` flag with `dart2js` as the default (chosen).
 
 **Decision and why.** `tool/build.sh` takes `--target dart2js|dart2wasm`; `dart2js` is the default, `dart2wasm` is
