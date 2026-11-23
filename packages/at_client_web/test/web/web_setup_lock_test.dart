@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 
 import 'package:at_auth/passkey.dart' show setupLockName;
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/web_setup_lock.dart';
 import 'package:test/test.dart';
 

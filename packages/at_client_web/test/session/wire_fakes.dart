@@ -37,7 +37,7 @@ class Wire {
   var stopThrows = false;
 
   /// What the atServer answers a command with; null answers nothing.
-  String? Function(String command)? answer;
+  FutureOr<String?> Function(String command)? answer;
 
   /// Called on each dial with its 1-based ordinal; a throw fails the dial.
   void Function(int dial)? onDial;
@@ -101,14 +101,14 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Future<String?> executeCommand(String command, {bool auth = false}) async {
     _wire.commands.add(command);
-    return _wire.answer?.call(command);
+    return await _wire.answer?.call(command);
   }
 
   @override
   Future<String?> executeVerb(VerbBuilder builder) async {
     final command = builder.buildCommand();
     _wire.commands.add(command);
-    return _wire.answer?.call(command);
+    return await _wire.answer?.call(command);
   }
 
   @override

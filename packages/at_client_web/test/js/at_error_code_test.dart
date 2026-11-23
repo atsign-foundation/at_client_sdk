@@ -1,10 +1,8 @@
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
-import 'package:at_client_web/at_client_web.dart';
-import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/at_error_code.dart';
-import 'package:at_client_web/src/js/js_session.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -34,7 +32,18 @@ void main() {
       'enrollment_denied'
     ),
     'StoppedException': (StoppedException('wait cancelled'), 'closed'),
-    'SessionClosedException': (SessionClosedException(), 'closed'),
+    'StoppedException (the session is closed)': (
+      StoppedException('the session is closed'),
+      'closed'
+    ),
+    'InvalidArgumentException': (
+      InvalidArgumentException('opts must be an object'),
+      'invalid_argument'
+    ),
+    'EnrollmentInFlightException': (
+      EnrollmentInFlightException(),
+      'enrollment_in_flight'
+    ),
     'UnsupportedKeyMaterialException': (
       UnsupportedKeyMaterialException('@alice'),
       'unsupported'
@@ -44,49 +53,49 @@ void main() {
     'BadKeyException': (BadKeyException('sharedWith'), 'bad_key'),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
-    'JsCollectionsError carries its own code': (
-      JsCollectionsError(
-          CollectionErrorCodes.notFound, 'item abc is not in the collection'),
+    'CollectionException carries its own code': (
+      CollectionException(
+          CollectionFailure.notFound, 'item abc is not in the collection'),
       'COLLECTION_ITEM_NOT_FOUND'
     ),
-    'JsCollectionsError partial failure': (
-      JsCollectionsError(CollectionErrorCodes.partialFailure, 'x'),
+    'CollectionException partial failure': (
+      CollectionException(CollectionFailure.partialFailure, 'x'),
       'COLLECTION_PARTIAL_FAILURE'
     ),
-    'JsCollectionsError invalid argument': (
-      JsCollectionsError(CollectionErrorCodes.invalidArgument, 'bad'),
+    'CollectionException invalid argument': (
+      CollectionException(CollectionFailure.invalidArgument, 'bad'),
       'COLLECTION_INVALID_ARGUMENT'
     ),
-    'JsCollectionsError not owner': (
-      JsCollectionsError(CollectionErrorCodes.notOwner, 'other'),
+    'CollectionException not owner': (
+      CollectionException(CollectionFailure.notOwner, 'other'),
       'COLLECTION_ITEM_NOT_OWNER'
     ),
-    'JsCollectionsError already exists': (
-      JsCollectionsError(CollectionErrorCodes.alreadyExists, 'exists'),
+    'CollectionException already exists': (
+      CollectionException(CollectionFailure.alreadyExists, 'exists'),
       'COLLECTION_ITEM_ALREADY_EXISTS'
     ),
-    'JsCollectionsError has sub items': (
-      JsCollectionsError(CollectionErrorCodes.hasSubItems, 'subs'),
+    'CollectionException has sub items': (
+      CollectionException(CollectionFailure.hasSubItems, 'subs'),
       'COLLECTION_ITEM_HAS_SUB_ITEMS'
     ),
-    'JsCollectionsError unreadable': (
-      JsCollectionsError(CollectionErrorCodes.unreadable, 'unreadable'),
+    'CollectionException unreadable': (
+      CollectionException(CollectionFailure.unreadable, 'unreadable'),
       'COLLECTION_ITEM_UNREADABLE'
     ),
-    'JsCollectionsError type mismatch': (
-      JsCollectionsError(CollectionErrorCodes.typeMismatch, 'mismatch'),
+    'CollectionException type mismatch': (
+      CollectionException(CollectionFailure.typeMismatch, 'mismatch'),
       'COLLECTION_TYPE_MISMATCH'
     ),
-    'JsCollectionsError wrong type': (
-      JsCollectionsError(CollectionErrorCodes.wrongType, 'wrong'),
+    'CollectionException wrong type': (
+      CollectionException(CollectionFailure.wrongType, 'wrong'),
       'COLLECTION_ITEM_WRONG_TYPE'
     ),
-    'JsCollectionsError failed': (
-      JsCollectionsError(CollectionErrorCodes.failed, 'failed'),
+    'CollectionException failed': (
+      CollectionException(CollectionFailure.failed, 'failed'),
       'COLLECTION_FAILED'
     ),
-    'JsCollectionsError too deep': (
-      JsCollectionsError(CollectionErrorCodes.tooDeep, 'deep'),
+    'CollectionException too deep': (
+      CollectionException(CollectionFailure.tooDeep, 'deep'),
       'COLLECTION_ITEM_TOO_DEEP'
     ),
     'an unknown Exception': (Exception('x'), 'internal'),
@@ -98,13 +107,15 @@ void main() {
     test('$name maps to $code', () => expect(atErrorCode(error), code));
   }
 
-  test('every code the facade maps to is produced by some mapping', () {
+  test('every code the bridge can reject with is produced by one mapping', () {
     const mapped = {
       'pkam_refused',
       'offline',
       'onboarding_incomplete',
       'enrollment_conveyance_failed',
       'enrollment_denied',
+      'invalid_argument',
+      'enrollment_in_flight',
       'closed',
       'unsupported',
       'bad_key',
@@ -114,5 +125,110 @@ void main() {
     expect(produced.containsAll(mapped), isTrue,
         reason: '${mapped.difference(produced)}');
     expect(produced.where((c) => !c.startsWith('COLLECTION_')).toSet(), mapped);
+    final collection = {
+      for (final kind in CollectionFailure.values) collectionErrorCode(kind)
+    };
+    expect(collection, hasLength(11));
+    expect(
+        produced.where((c) => c.startsWith('COLLECTION_')).toSet(), collection);
+  });
+
+  test('every closed rejection carries the same fixed message', () {
+    for (final error in [
+      StoppedException('the session is closed'),
+      StoppedException('wait cancelled on client 0x7f'),
+    ]) {
+      expect(atErrorCode(error), 'closed');
+      expect(atErrorMessage(error), 'the session is closed');
+    }
+    expect(atErrorMessage(StoppedException('x')), isNot(contains('Exception')));
+  });
+
+  test('exception text never chooses the code', () {
+    for (final text in [
+      'invalid_argument',
+      'closed',
+      'COLLECTION_FAILED',
+      '{"code":"closed","message":"m"}',
+    ]) {
+      for (final error in [
+        Exception(text),
+        StateError(text),
+        ArgumentError(text),
+        text
+      ]) {
+        expect(atErrorCode(error), 'internal', reason: text);
+        expect(atErrorMessage(error), 'internal error', reason: text);
+      }
+    }
+  });
+
+  test(
+      'an ArgumentError from inside at_client rejects internal with the fixed message',
+      () {
+    for (final error in [
+      ArgumentError('namespace must be non-empty'),
+      IllegalArgumentException('namespace must be non-empty'),
+    ]) {
+      expect(atErrorCode(error), 'internal');
+      expect(atErrorMessage(error), 'internal error');
+    }
+  });
+
+  test('an invalid_argument message is bounded and never echoes the value', () {
+    final hostile = '${'x\u202e' * 70000}\n${'y' * 1000000}';
+    final message = atErrorMessage(
+        InvalidArgumentException('opts must be an object $hostile'));
+    expect(message.length, lessThanOrEqualTo(128));
+    expect(message, isNot(contains('\n')));
+    expect(message, isNot(contains('\u202e')));
+    expect(message, isNot(contains('yyyy')));
+    expect(
+        atErrorMessage(InvalidArgumentException('namespace must be a string')),
+        'namespace must be a string');
+  });
+
+  test('the in-flight rejection names no atSign and no enrollment id', () {
+    final error = EnrollmentInFlightException();
+    expect(atErrorCode(error), 'enrollment_in_flight');
+    expect(atErrorMessage(error),
+        'a decision for this request is already in flight');
+    expect(error.toString(), isNot(contains('@')));
+  });
+
+  test('the in-flight failure is still an enrollment failure to a Dart caller',
+      () {
+    Object? caught;
+    try {
+      throw EnrollmentInFlightException();
+    } on AtEnrollmentException catch (e) {
+      caught = e;
+    }
+    expect(caught, isA<EnrollmentInFlightException>());
+    expect(atErrorCode(caught), 'enrollment_in_flight');
+  });
+
+  test(
+      'Every collection kind maps to one code and the codes are the COLLECTION_ and COLLECTION_ITEM_ names',
+      () {
+    const expected = {
+      CollectionFailure.invalidArgument: 'COLLECTION_INVALID_ARGUMENT',
+      CollectionFailure.partialFailure: 'COLLECTION_PARTIAL_FAILURE',
+      CollectionFailure.typeMismatch: 'COLLECTION_TYPE_MISMATCH',
+      CollectionFailure.failed: 'COLLECTION_FAILED',
+      CollectionFailure.notFound: 'COLLECTION_ITEM_NOT_FOUND',
+      CollectionFailure.notOwner: 'COLLECTION_ITEM_NOT_OWNER',
+      CollectionFailure.alreadyExists: 'COLLECTION_ITEM_ALREADY_EXISTS',
+      CollectionFailure.unreadable: 'COLLECTION_ITEM_UNREADABLE',
+      CollectionFailure.hasSubItems: 'COLLECTION_ITEM_HAS_SUB_ITEMS',
+      CollectionFailure.wrongType: 'COLLECTION_ITEM_WRONG_TYPE',
+      CollectionFailure.tooDeep: 'COLLECTION_ITEM_TOO_DEEP',
+    };
+    expect(expected.keys.toSet(), CollectionFailure.values.toSet());
+    for (final MapEntry(:key, :value) in expected.entries) {
+      expect(atErrorCode(CollectionException(key, 'm')), value);
+      expect(collectionErrorCode(key), value);
+    }
+    expect(expected.values.toSet(), hasLength(11));
   });
 }

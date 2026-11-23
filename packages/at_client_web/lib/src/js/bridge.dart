@@ -5,19 +5,16 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
     show
-        AtEnrollmentException,
-        AtEnrollmentPendingException,
         AtKeys,
-        AtNoCredentialException,
-        AtOpenRefusedException,
         AtRootDomain,
         AtSignLogger,
         Atsign,
-        EnrollmentConveyanceException,
-        InvalidAtSignException;
+        InvalidAtSignException,
+        StoppedException;
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
+import '../exceptions.dart';
 import '../session/portal_session.dart';
 import '../session/session_transport.dart';
 import '../session/session_transport_options.dart';
@@ -61,7 +58,27 @@ Future<JsSession> _openSession(BridgeOptions o) async {
   return AtClientJsSession(client,
       namespace: o.namespace,
       isNavigatorOnline: () => web.window.navigator.onLine,
+      networkChanges: _networkChanges(),
       warn: _logger.warning);
+}
+
+/// An event each time the browser goes online or offline, so a session's
+/// `waiting:network` and `waiting:server` follow it.
+Stream<void> _networkChanges() {
+  late StreamController<void> controller;
+  late final JSFunction listener;
+  controller = StreamController<void>(
+    onListen: () {
+      listener = ((web.Event _) => controller.add(null)).toJS;
+      web.window.addEventListener('online', listener);
+      web.window.addEventListener('offline', listener);
+    },
+    onCancel: () {
+      web.window.removeEventListener('online', listener);
+      web.window.removeEventListener('offline', listener);
+    },
+  );
+  return controller.stream;
 }
 
 /// The root domain [value] names, `host` or `host:port` (the port defaults to
@@ -79,58 +96,24 @@ AtRootDomain parseRootDomain(String value) {
   }
 }
 
-final class _BridgeArgumentError extends ArgumentError {
-  _BridgeArgumentError(super.message);
-}
-
-final _controlChars =
-    RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
-
-String _safeMessage(String value) => value.replaceAll(_controlChars, ' ');
-
-String _rejectionMessage(Object error, String code) {
-  if (error is _BridgeArgumentError) return error.toString();
-  return switch (error) {
-    AtOpenRefusedException(:final state) =>
-      'the atServer refused the session (${state.cause?.name ?? 'refused'})',
-    PortalSessionOfflineException(:final state) =>
-      'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
-    AtEnrollmentPendingException() =>
-      'onboarding is incomplete: no usable credential',
-    EnrollmentConveyanceException(:final keyPackageStatus) =>
-      'enrollment approved on server, but key conveyance failed (${keyPackageStatus.name})',
-    AtEnrollmentException() =>
-      'the enrollment request was denied or is not pending',
-    SessionClosedException() => error.toString(),
-    UnsupportedKeyMaterialException() =>
-      'the keys carry unsupported cryptographic material',
-    ManageAccessException() => error.toString(),
-    UnsupportedError(:final message) =>
-      _safeMessage(message ?? 'unsupported operation'),
-    BadKeyException() => error.toString(),
-    AtNoCredentialException() => 'keys hold no usable credential',
-    InvalidAtSignException() => 'atSign is not valid',
-    _ when code == 'closed' => SessionClosedException().toString(),
-    _ => 'internal error',
-  };
-}
-
 /// A rejection reason: a plain object with `code` and `message`, never an
 /// `Error`; a collection failure adds `id`, `owner`, `kind` and `failures`
-/// where it has them.
+/// where it has them, and the rejection of a bad address owner adds `id`.
 JSObject _rejection(Object error) {
   final code = atErrorCode(error);
   final reason = JSObject()..['code'] = code.toJS;
-  if (error is JsCollectionsError) {
-    reason['message'] = error.message.toJS;
-    if (error.id case final id?) reason['id'] = id.toJS;
-    if (error.owner case final owner?) reason['owner'] = owner.toJS;
-    if (error.kind case final kind?) reason['kind'] = kind.toJS;
-    if (error.failures.isNotEmpty) {
-      reason['failures'] = _jsValue(error.failures);
-    }
-  } else {
-    reason['message'] = _rejectionMessage(error, code).toJS;
+  reason['message'] = atErrorMessage(error).toJS;
+  switch (error) {
+    case CollectionException():
+      if (error.id case final id?) reason['id'] = id.toJS;
+      if (error.owner case final owner?) reason['owner'] = owner.toJS;
+      if (error.causeType case final kind?) reason['kind'] = kind.toJS;
+      if (error.failures.isNotEmpty) {
+        reason['failures'] = _jsValue(error.failures);
+      }
+    case InvalidArgumentException(:final id?):
+      reason['id'] = id.toJS;
+    default:
   }
   return reason;
 }
@@ -146,11 +129,11 @@ JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
 
 /// An argument error that names the parameter and the type it expects, never
 /// the value received.
-_BridgeArgumentError _expected(String name, String type) =>
-    _BridgeArgumentError('$name must be $type');
+InvalidArgumentException _expected(String name, String type) =>
+    InvalidArgumentException('$name must be $type');
 
-_BridgeArgumentError _required(String name) =>
-    _BridgeArgumentError('$name must not be null');
+InvalidArgumentException _required(String name) =>
+    InvalidArgumentException('$name must not be null');
 
 final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSAny _objectPrototype = _objectClass['prototype']!;
@@ -332,8 +315,8 @@ JsKey _jsKey(JSAny? value) {
         isPublic: _flag(object, 'public'),
         isCached: _flag(object, 'cached'),
         noNamespace: _flag(object, 'noNamespace'));
-  } on ArgumentError catch (e) {
-    throw BadKeyException('$e');
+  } on InvalidArgumentException catch (e) {
+    throw BadKeyException(e.message);
   }
 }
 
@@ -493,11 +476,8 @@ class BridgeCollection {
     try {
       return (id: id, owner: Atsign(rawOwner ?? _self));
     } on InvalidAtSignException {
-      throw JsCollectionsError(
-        CollectionErrorCodes.invalidArgument,
-        'owner must be a valid atSign',
-        id: id.toLowerCase(),
-      );
+      throw InvalidArgumentException('owner must be a valid atSign',
+          id: id.toLowerCase());
     }
   }
 
@@ -511,8 +491,8 @@ class BridgeCollection {
   JSObject _item(JsItem item) {
     try {
       return _envelope(item);
-    } on JsCollectionsError catch (e) {
-      if (e.code == CollectionErrorCodes.tooDeep &&
+    } on CollectionException catch (e) {
+      if (e.kind == CollectionFailure.tooDeep &&
           (e.id == null || e.owner == null)) {
         throw itemTooDeep(
           id: e.id ?? item['id'] as String?,
@@ -527,7 +507,11 @@ class BridgeCollection {
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
     ..['unreadable'] = _jsValue([
       for (final u in listing.unreadable)
-        {'id': u.id, 'owner': u.owner.toString(), 'code': u.code}
+        {
+          'id': u.id,
+          'owner': u.owner.toString(),
+          'code': collectionErrorCode(u.kind)
+        }
     ]);
 
   /// Creates an item from `data`; `opts` may name its `id` and who it is
@@ -668,7 +652,7 @@ class AtClientWebBridge {
     final String namespace;
     try {
       namespace = normalizeSessionNamespace(rawNamespace);
-    } on ArgumentError {
+    } on InvalidArgumentException {
       throw _expected('namespace', 'a non-empty namespace segment');
     }
     final rootDomain = _field(object, 'rootDomain');

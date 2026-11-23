@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/exceptions.dart';
+import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -46,54 +48,44 @@ final class _Collect implements LoggingHandler {
       lines.add('${record.level.name}|${record.loggerName}|${record.message}');
 }
 
-Matcher _rejectsWith(String code, {String? id, String? owner, String? kind}) =>
-    throwsA(isA<JsCollectionsError>()
-        .having((e) => e.code, 'code', code)
+Matcher _rejectsWith(CollectionFailure kind,
+        {String? id, String? owner, String? causeType}) =>
+    throwsA(isA<CollectionException>()
+        .having(atErrorCode, 'code', collectionErrorCode(kind))
         .having((e) => e.id, 'id', id ?? anything)
         .having((e) => e.owner, 'owner', owner ?? anything)
-        .having((e) => e.kind, 'kind', kind ?? anything));
+        .having((e) => e.causeType, 'kind', causeType ?? anything));
 
 void main() {
   setUpAll(registerAdapterFallbacks);
 
-  test('JsCollectionsError is an AtException and keeps its fields', () {
-    final error = JsCollectionsError(
-        CollectionErrorCodes.partialFailure, 'boom',
+  test(
+      'The collection exception is an AtException and keeps its kind, message, id, owner, cause type and failures',
+      () {
+    final error = CollectionException(CollectionFailure.partialFailure, 'boom',
         id: 'i',
         owner: '@alice',
-        kind: 'K',
+        causeType: 'K',
         failures: const [
           {'op': 'put'}
         ]);
     expect(error, isA<AtException>());
-    expect(error.code, CollectionErrorCodes.partialFailure);
+    expect(error.kind, CollectionFailure.partialFailure);
+    expect(atErrorCode(error), 'COLLECTION_PARTIAL_FAILURE');
     expect(error.message, 'boom');
     expect(error.id, 'i');
     expect(error.owner, '@alice');
-    expect(error.kind, 'K');
+    expect(error.causeType, 'K');
     expect(error.failures, [
       {'op': 'put'}
     ]);
-    expect(error.toString(),
-        'JsCollectionsError(COLLECTION_PARTIAL_FAILURE): boom');
-  });
-
-  test('The error codes are the COLLECTION_ and COLLECTION_ITEM_ names', () {
-    expect(
-        {
-          CollectionErrorCodes.invalidArgument: 'COLLECTION_INVALID_ARGUMENT',
-          CollectionErrorCodes.partialFailure: 'COLLECTION_PARTIAL_FAILURE',
-          CollectionErrorCodes.typeMismatch: 'COLLECTION_TYPE_MISMATCH',
-          CollectionErrorCodes.failed: 'COLLECTION_FAILED',
-          CollectionErrorCodes.notFound: 'COLLECTION_ITEM_NOT_FOUND',
-          CollectionErrorCodes.notOwner: 'COLLECTION_ITEM_NOT_OWNER',
-          CollectionErrorCodes.alreadyExists: 'COLLECTION_ITEM_ALREADY_EXISTS',
-          CollectionErrorCodes.unreadable: 'COLLECTION_ITEM_UNREADABLE',
-          CollectionErrorCodes.hasSubItems: 'COLLECTION_ITEM_HAS_SUB_ITEMS',
-          CollectionErrorCodes.wrongType: 'COLLECTION_ITEM_WRONG_TYPE',
-          CollectionErrorCodes.tooDeep: 'COLLECTION_ITEM_TOO_DEEP',
-        }.entries.every((e) => e.key == e.value),
-        isTrue);
+    expect((() {
+      try {
+        throw error;
+      } on AtException catch (e) {
+        return e;
+      }
+    })(), same(error));
   });
 
   late FakeAtServer server;
@@ -169,13 +161,27 @@ void main() {
         }.entries) {
           await expectLater(
               call.value(),
-              _rejectsWith(CollectionErrorCodes.invalidArgument,
-                  kind: 'ArgumentError'),
+              _rejectsWith(CollectionFailure.invalidArgument,
+                  causeType: 'ArgumentError'),
               reason: '${call.key} of "$id"');
         }
       }
       verifyNever(() => alice.mock.put(any(), any()));
       expect(server.keyCount, 0);
+    });
+
+    test(
+        'An argument AtCollection refuses still rejects with COLLECTION_INVALID_ARGUMENT',
+        () async {
+      final todos = await open();
+
+      await expectLater(
+          todos.get(mine('a:b')),
+          throwsA(isA<CollectionException>()
+              .having(atErrorCode, 'code', 'COLLECTION_INVALID_ARGUMENT')
+              .having((e) => e.causeType, 'kind', 'ArgumentError')
+              .having((e) => e.message, 'message', isNot('invalid argument'))
+              .having((e) => e.message.length, 'bounded', lessThan(200))));
     });
 
     test(
@@ -185,8 +191,8 @@ void main() {
 
       await expectLater(
           todos.create({'t': 1}, id: '_a'),
-          _rejectsWith(CollectionErrorCodes.invalidArgument,
-              kind: 'ArgumentError'));
+          _rejectsWith(CollectionFailure.invalidArgument,
+              causeType: 'ArgumentError'));
 
       verifyNever(() => alice.mock.put(any(), any()));
       expect(server.keyCount, 0);
@@ -199,8 +205,8 @@ void main() {
 
       await expectLater(
           todos.create({'t': 1}, id: long),
-          _rejectsWith(CollectionErrorCodes.invalidArgument,
-              kind: 'ArgumentError'));
+          _rejectsWith(CollectionFailure.invalidArgument,
+              causeType: 'ArgumentError'));
 
       verifyNever(() => alice.mock.put(any(), any()));
       expect(server.keyCount, 0);
@@ -233,7 +239,7 @@ void main() {
       await todos.create({'t': 1}, id: 'a1');
 
       await expectLater(todos.create({'t': 2}, id: 'A1'),
-          _rejectsWith(CollectionErrorCodes.alreadyExists, id: 'a1'));
+          _rejectsWith(CollectionFailure.alreadyExists, id: 'a1'));
     });
 
     test(
@@ -247,7 +253,7 @@ void main() {
         'remove': () => todos.remove(mine('B1')),
       }.entries) {
         await expectLater(
-            call.value(), _rejectsWith(CollectionErrorCodes.notFound, id: 'b1'),
+            call.value(), _rejectsWith(CollectionFailure.notFound, id: 'b1'),
             reason: call.key);
       }
     });
@@ -258,7 +264,7 @@ void main() {
       final todos = await open();
 
       await expectLater(todos.update(bobs('B1'), {'t': 2}),
-          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1'));
+          _rejectsWith(CollectionFailure.notOwner, id: 'b1'));
     });
 
     test('A get addresses an item already stored under a 65-character id',
@@ -337,13 +343,13 @@ void main() {
             type: 'Todo',
             expirationMs: _day.inMilliseconds,
             eventSource: 'bogus'),
-        _rejectsWith(CollectionErrorCodes.invalidArgument),
+        _rejectsWith(CollectionFailure.invalidArgument),
       );
     });
 
     test('An empty type rejects with COLLECTION_INVALID_ARGUMENT', () async {
       await expectLater(
-          open(type: ''), _rejectsWith(CollectionErrorCodes.invalidArgument));
+          open(type: ''), _rejectsWith(CollectionFailure.invalidArgument));
     });
 
     test('A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT',
@@ -352,7 +358,7 @@ void main() {
         await expectLater(
           JsCollectionsAdapter.open(alice.mock,
               namespace: _ns, type: 'Todo', expirationMs: ms),
-          _rejectsWith(CollectionErrorCodes.invalidArgument),
+          _rejectsWith(CollectionFailure.invalidArgument),
         );
       }
       verifyNever(() => alice.mock.collection<Map<String, dynamic>>(
@@ -371,7 +377,7 @@ void main() {
       alice.failNextCollection(StateError('upstream down'));
 
       await expectLater(open(),
-          _rejectsWith(CollectionErrorCodes.failed, kind: 'StateError'));
+          _rejectsWith(CollectionFailure.failed, causeType: 'StateError'));
     });
 
     group('An error kind is a name the adapter knows or "Unknown"', () {
@@ -379,12 +385,14 @@ void main() {
         alice.failNextCollection(AtKeyNotFoundException('gone'));
         await expectLater(
             open(),
-            _rejectsWith(CollectionErrorCodes.notFound,
-                kind: 'AtKeyNotFoundException'));
+            _rejectsWith(CollectionFailure.notFound,
+                causeType: 'AtKeyNotFoundException'));
 
         alice.failNextCollection(FormatException('bad'));
-        await expectLater(open(),
-            _rejectsWith(CollectionErrorCodes.failed, kind: 'FormatException'));
+        await expectLater(
+            open(),
+            _rejectsWith(CollectionFailure.failed,
+                causeType: 'FormatException'));
       });
 
       test('A key-level write fails with a known kind named by its literal',
@@ -396,7 +404,7 @@ void main() {
         await expectLater(
           todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
           throwsA(
-              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
+              isA<CollectionException>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'TimeoutException'}
           ])),
         );
@@ -406,8 +414,8 @@ void main() {
           () async {
         alice.failNextCollection(_LaterError());
 
-        await expectLater(
-            open(), _rejectsWith(CollectionErrorCodes.failed, kind: 'Unknown'));
+        await expectLater(open(),
+            _rejectsWith(CollectionFailure.failed, causeType: 'Unknown'));
       });
 
       test('A failed key-level write of an unknown reason has kind "Unknown"',
@@ -419,7 +427,7 @@ void main() {
         await expectLater(
           todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
           throwsA(
-              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
+              isA<CollectionException>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
           ])),
         );
@@ -465,7 +473,7 @@ void main() {
 
       await expectLater(
         todos.create({'title': 'b'}, id: 'i1'),
-        _rejectsWith(CollectionErrorCodes.alreadyExists),
+        _rejectsWith(CollectionFailure.alreadyExists),
       );
     });
 
@@ -492,8 +500,9 @@ void main() {
 
       await expectLater(
         todos.get(bobs('b1')),
-        throwsA(isA<JsCollectionsError>()
-            .having((e) => e.code, 'code', CollectionErrorCodes.unreadable)
+        throwsA(isA<CollectionException>()
+            .having(atErrorCode, 'code',
+                collectionErrorCode(CollectionFailure.unreadable))
             .having((e) => e.id, 'id', 'b1')
             .having((e) => e.owner, 'owner', '@bob')
             .having((e) => e.message, 'message', isNot(contains('json')))
@@ -527,7 +536,7 @@ void main() {
       expect(await todos.get(mine('f1')), isNull);
       await expectLater(
           todos.update((id: 'f1', owner: '@carol'.toAtsign()), {'x': 1}),
-          _rejectsWith(CollectionErrorCodes.notOwner, owner: '@carol'));
+          _rejectsWith(CollectionFailure.notOwner, owner: '@carol'));
     });
 
     test('A list returns readable items and reports unreadable ones', () async {
@@ -537,10 +546,10 @@ void main() {
 
       expect(ids(await itemsOf(todos.list())), ['a1']);
       expect(await unreadableOf(todos.list()),
-          [(id: 'b1', owner: '@bob', code: CollectionErrorCodes.unreadable)]);
+          [(id: 'b1', owner: '@bob', kind: CollectionFailure.unreadable)]);
       await expectLater(
         todos.get(bobs('b1')),
-        _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
+        _rejectsWith(CollectionFailure.unreadable, id: 'b1', owner: '@bob'),
       );
     });
 
@@ -555,7 +564,7 @@ void main() {
 
       expect(ids(listing.items), ['a1']);
       expect(listing.unreadable,
-          [(id: 'deep', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
+          [(id: 'deep', owner: '@bob', kind: CollectionFailure.tooDeep)]);
     });
 
     test(
@@ -570,7 +579,7 @@ void main() {
 
       expect(ids(listing.items), ['a1']);
       expect(listing.unreadable,
-          [(id: 'deep', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
+          [(id: 'deep', owner: '@bob', kind: CollectionFailure.tooDeep)]);
     });
 
     test('A list returns an item nested exactly 64 levels deep', () async {
@@ -590,10 +599,8 @@ void main() {
       await bobShares('deep', _nested(65));
       final todos = await open();
 
-      await expectLater(
-          todos.get(bobs('deep')),
-          _rejectsWith(CollectionErrorCodes.tooDeep,
-              id: 'deep', owner: '@bob'));
+      await expectLater(todos.get(bobs('deep')),
+          _rejectsWith(CollectionFailure.tooDeep, id: 'deep', owner: '@bob'));
     });
 
     /// @alice's own item [id], rewritten as another client would store it,
@@ -624,7 +631,7 @@ void main() {
       final todos = await open();
 
       await expectLater(todos.share(mine('mine'), ['@bob']),
-          _rejectsWith(CollectionErrorCodes.tooDeep, id: 'mine'));
+          _rejectsWith(CollectionFailure.tooDeep, id: 'mine'));
 
       final stored = await rawCollection(alice, _ns).get('mine', alice.atSign);
       expect(stored.sharedWith, isEmpty);
@@ -659,7 +666,7 @@ void main() {
 
       expect(listing.items, isEmpty);
       expect(listing.unreadable,
-          [(id: 'huge', owner: '@bob', code: CollectionErrorCodes.tooDeep)]);
+          [(id: 'huge', owner: '@bob', kind: CollectionFailure.tooDeep)]);
     });
 
     test(
@@ -768,10 +775,8 @@ void main() {
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
 
-      await expectLater(
-          todos.update(mine('o1'), {'title': 'changed'}),
-          _rejectsWith(CollectionErrorCodes.wrongType,
-              id: 'o1', owner: '@alice'));
+      await expectLater(todos.update(mine('o1'), {'title': 'changed'}),
+          _rejectsWith(CollectionFailure.wrongType, id: 'o1', owner: '@alice'));
 
       final stored = (await todos.get(mine('o1')))!;
       expect(stored['type'], 'Other');
@@ -799,8 +804,7 @@ void main() {
 
       await expectLater(
         todos.update(mine('nope'), {'title': 'x'}),
-        _rejectsWith(CollectionErrorCodes.notFound,
-            id: 'nope', owner: '@alice'),
+        _rejectsWith(CollectionFailure.notFound, id: 'nope', owner: '@alice'),
       );
     });
 
@@ -811,11 +815,11 @@ void main() {
       final todos = await open();
 
       await expectLater(todos.update(bobs('b1'), {'title': 'mine'}),
-          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
       await expectLater(todos.share(bobs('b1'), ['@carol']),
-          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
       await expectLater(todos.remove(bobs('b1')),
-          _rejectsWith(CollectionErrorCodes.notOwner, id: 'b1', owner: '@bob'));
+          _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
 
       expect(server.hasKey('b1.$_ns@alice'), isFalse);
       expect((await todos.get(bobs('b1')))?['data'], {'title': 'bob'});
@@ -887,8 +891,7 @@ void main() {
 
       await expectLater(
         todos.share(mine('nope'), ['@bob']),
-        _rejectsWith(CollectionErrorCodes.notFound,
-            id: 'nope', owner: '@alice'),
+        _rejectsWith(CollectionFailure.notFound, id: 'nope', owner: '@alice'),
       );
     });
 
@@ -900,7 +903,7 @@ void main() {
 
       await expectLater(
         todos.share(mine('i1'), ['@a@b']),
-        _rejectsWith(CollectionErrorCodes.invalidArgument),
+        _rejectsWith(CollectionFailure.invalidArgument),
       );
       expect((await todos.get(mine('i1')))?['sharedWith'], ['@bob']);
     });
@@ -913,8 +916,9 @@ void main() {
 
       await expectLater(
         todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
-        throwsA(isA<JsCollectionsError>()
-            .having((e) => e.code, 'code', CollectionErrorCodes.partialFailure)
+        throwsA(isA<CollectionException>()
+            .having(atErrorCode, 'code',
+                collectionErrorCode(CollectionFailure.partialFailure))
             .having((e) => e.failures, 'failures', [
           {'op': 'put', 'recipient': '@bob', 'kind': 'AtClientException'}
         ])),
@@ -929,11 +933,11 @@ void main() {
 
       final error = await todos
           .create({'title': 'a'}, sharedWith: ['@bob'])
-          .then<JsCollectionsError?>((_) => null)
-          .catchError((Object e) => e as JsCollectionsError);
+          .then<CollectionException?>((_) => null)
+          .catchError((Object e) => e as CollectionException);
 
       expect(error, isNotNull);
-      expect(error!.code, CollectionErrorCodes.partialFailure);
+      expect(atErrorCode(error!), 'COLLECTION_PARTIAL_FAILURE');
       expect(error.id, isNotNull);
       expect(error.owner, '@alice');
       expect(await todos.get(mine(error.id!)), isNotNull);
@@ -950,7 +954,7 @@ void main() {
       expect(await todos.get(mine('i1')), isNull);
       await expectLater(
         todos.remove(mine('i1')),
-        _rejectsWith(CollectionErrorCodes.notFound, id: 'i1', owner: '@alice'),
+        _rejectsWith(CollectionFailure.notFound, id: 'i1', owner: '@alice'),
       );
     });
 
@@ -970,8 +974,7 @@ void main() {
 
       await expectLater(
         todos.remove(mine('p1')),
-        _rejectsWith(CollectionErrorCodes.hasSubItems,
-            id: 'p1', owner: '@alice'),
+        _rejectsWith(CollectionFailure.hasSubItems, id: 'p1', owner: '@alice'),
       );
       expect(await todos.get(mine('p1')), isNotNull);
 
@@ -1062,7 +1065,7 @@ void main() {
       final todos = await open();
       await expectLater(
           todos.get(mine('A:B')),
-          _rejectsWith(CollectionErrorCodes.invalidArgument,
+          _rejectsWith(CollectionFailure.invalidArgument,
               id: 'a:b', owner: '@alice'));
 
       final mockCollection = MockAtCollection();
@@ -1072,8 +1075,8 @@ void main() {
       final wrapped = JsCollectionsAdapter(mockCollection);
       await expectLater(
           wrapped.get(mine('I1')),
-          _rejectsWith(CollectionErrorCodes.failed,
-              id: 'i1', owner: '@alice', kind: 'StateError'));
+          _rejectsWith(CollectionFailure.failed,
+              id: 'i1', owner: '@alice', causeType: 'StateError'));
 
       when(() => mockCollection.getOrNull(any(), any()))
           .thenThrow(StoppedException('stopped'));
@@ -1189,7 +1192,7 @@ void main() {
 
       await expectLater(
         todos.query([(path: 'prio', op: '<', value: 5)]),
-        _rejectsWith(CollectionErrorCodes.typeMismatch),
+        _rejectsWith(CollectionFailure.typeMismatch),
       );
     });
 
@@ -1197,8 +1200,9 @@ void main() {
         'An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await seeded();
-      Matcher naming(String text) => throwsA(isA<JsCollectionsError>()
-          .having((e) => e.code, 'code', CollectionErrorCodes.invalidArgument)
+      Matcher naming(String text) => throwsA(isA<CollectionException>()
+          .having(atErrorCode, 'code',
+              collectionErrorCode(CollectionFailure.invalidArgument))
           .having((e) => e.message, 'message', contains(text)));
 
       await expectLater(
@@ -1219,8 +1223,9 @@ void main() {
       final longToken = 'x' * 200;
       await expectLater(
         todos.query([(path: 'x', op: longToken, value: 1)]),
-        throwsA(isA<JsCollectionsError>()
-            .having((e) => e.code, 'code', CollectionErrorCodes.invalidArgument)
+        throwsA(isA<CollectionException>()
+            .having(atErrorCode, 'code',
+                collectionErrorCode(CollectionFailure.invalidArgument))
             .having((e) => e.message.length, 'bounded length', lessThan(120))
             .having((e) => e.message, 'truncated', contains('...'))),
       );
@@ -1235,7 +1240,7 @@ void main() {
 
       expect(ids(await itemsOf(todos.query(clause))).toSet(), {'a', 'c'});
       expect(await unreadableOf(todos.query(clause)),
-          [(id: 'b1', owner: '@bob', code: CollectionErrorCodes.unreadable)]);
+          [(id: 'b1', owner: '@bob', kind: CollectionFailure.unreadable)]);
     });
 
     test(
@@ -1274,7 +1279,7 @@ void main() {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 't1');
       final events = <JsEvent>[];
-      final errors = <JsCollectionsError>[];
+      final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1300,7 +1305,7 @@ void main() {
       await bobSharesUnreadable('b1');
       final todos = await open();
       final events = <JsEvent>[];
-      final errors = <JsCollectionsError>[];
+      final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1314,7 +1319,7 @@ void main() {
       expect(errors, isEmpty);
       await expectLater(
         todos.get(bobs('b1')),
-        _rejectsWith(CollectionErrorCodes.unreadable, id: 'b1', owner: '@bob'),
+        _rejectsWith(CollectionFailure.unreadable, id: 'b1', owner: '@bob'),
       );
     });
 
@@ -1324,7 +1329,7 @@ void main() {
       await bobShares('deep', _nested(65));
       final todos = await open();
       final events = <JsEvent>[];
-      final errors = <JsCollectionsError>[];
+      final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1344,7 +1349,7 @@ void main() {
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
       final events = <JsEvent>[];
-      final errors = <JsCollectionsError>[];
+      final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1386,7 +1391,7 @@ void main() {
         final at = DateTime.utc(2030, 1, 2);
         final ancestry = [CAncestor(id: 'p1', subName: 'notes', owner: bob)];
         final events = <JsEvent>[];
-        final errors = <JsCollectionsError>[];
+        final errors = <CollectionException>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
         for (final event in <CEvent>[
@@ -1461,7 +1466,7 @@ void main() {
           'A stream error reaches onError as a collection error and later events still arrive',
           () async {
         final events = <JsEvent>[];
-        final errors = <JsCollectionsError>[];
+        final errors = <CollectionException>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
         upstream.addError(CItemReadException(
@@ -1470,7 +1475,7 @@ void main() {
         await settle();
         await cancel();
 
-        expect(errors.single.code, CollectionErrorCodes.unreadable);
+        expect(errors.single.kind, CollectionFailure.unreadable);
         expect(errors.single.id, 'b1');
         expect(errors.single.owner, '@bob');
         expect(events, [

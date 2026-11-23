@@ -465,7 +465,7 @@ rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty
 starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
 `create` is given no id, `AtCollection` generates one.
 
-**Item data.** `data` for `create` and `update` must be a plain object (no arrays or non-plain built-in objects such as `Date`, `Map`, `Set`, `RegExp`, or typed arrays), at most 64 levels deep and free of cycles; otherwise the call rejects with code `internal`, naming `data`. Arrays nested inside `data` are valid. Optional object parameters such as `opts` also require plain objects, and bridge reads inspect own properties only. Item data returned to JS nests at most 64 levels, the data object being the first. An item nested deeper (another client can write one) is reported as unreadable with `COLLECTION_ITEM_TOO_DEEP`: `list` and `query` add an `unreadable` entry and return every other item; `get` and `share` of it reject with that code (carrying `id` and `owner`), and `share` writes nothing; `update` replaces its data and resolves; `remove` deletes it and resolves.
+**Item data.** `data` for `create` and `update` must be a plain object (no arrays or non-plain built-in objects such as `Date`, `Map`, `Set`, `RegExp`, or typed arrays), at most 64 levels deep and free of cycles; otherwise the call rejects with code `invalid_argument`, naming `data`. Arrays nested inside `data` are valid. Optional object parameters such as `opts` also require plain objects, and bridge reads inspect own properties only. Item data returned to JS nests at most 64 levels, the data object being the first. An item nested deeper (another client can write one) is reported as unreadable with `COLLECTION_ITEM_TOO_DEEP`: `list` and `query` add an `unreadable` entry and return every other item; `get` and `share` of it reject with that code (carrying `id` and `owner`), and `share` writes nothing; `update` replaces its data and resolves; `remove` deletes it and resolves.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
@@ -607,7 +607,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid `address.owner`, an invalid collection `name`, or an item id AtCollection refuses | `ArgumentError`, `InvalidAtSignException`, adapter and bridge checks (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts` reject at the bridge boundary with `internal` naming the parameter) |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid collection `name`, or an item id AtCollection refuses | `CollectionException` of kind `invalidArgument`, raised by the adapter (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts`, and an invalid `address.owner`, reject at the bridge boundary with `invalid_argument` naming the parameter) |
 | `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
@@ -625,7 +625,7 @@ land. Until then no adapter operation validates data against a schema.
 ### 6.2 Session error codes (alpha)
 
 `atErrorCode` (`at_error_code.dart`) maps every error the bridge rejects with to one code. A
-`COLLECTION_*` code comes from `JsCollectionsError` (§6.1); the other codes are:
+`COLLECTION_*` code comes from `CollectionException` (§6.1); the other codes are:
 
 | Code | Raised when |
 |---|---|
@@ -633,11 +633,13 @@ land. Until then no adapter operation validates data against a schema.
 | `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
 | `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
-| `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending or already has a decision in flight |
-| `closed` | `SessionClosedException`: a call on a session or its collection after `close`; or `StoppedException` |
+| `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
+| `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
+| `closed` | `StoppedException`: a call on a session or its collection after `close`; the message is `the session is closed` |
+| `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, or an invalid `address.owner`; the message names the parameter and never its value, at most 128 characters on one line |
 | `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
 | `bad_key` | `BadKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
-| `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error`, except that bridge-authored argument errors keep their parameter-only text without echoing the received value |
+| `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
 
 ---
 

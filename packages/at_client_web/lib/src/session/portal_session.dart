@@ -5,6 +5,7 @@ import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
 import 'package:at_client/src/preference/posture_floor.dart';
 
+import '../exceptions.dart';
 import 'session_open.dart' show openOnline;
 import 'session_queue.dart';
 
@@ -20,38 +21,6 @@ typedef SessionTransport = ({
   SecondaryAddressFinder finder,
   AtRootDomain root,
 });
-
-/// Thrown by [portalSession] when the client did not come online.
-class PortalSessionOfflineException implements Exception {
-  final String atSign;
-
-  /// The connection state the open ended in.
-  final AtConnectionState state;
-
-  PortalSessionOfflineException(this.atSign, this.state);
-
-  @override
-  String toString() => 'PortalSessionOfflineException: $atSign did not come '
-      'online (${state.cause?.name})'
-      '${state.error == null ? '' : ': ${state.error}'}';
-}
-
-/// Thrown by [portalSession], before any connection is made, for keys that
-/// carry ML-DSA-65 signing or namespace key material.
-///
-/// This is a stopgap: a session's key store is in memory, so a client that
-/// raised its posture on such keys would file new material nowhere that
-/// survives. The passkey-onboarding gate replaces this check.
-class UnsupportedKeyMaterialException implements Exception {
-  final String atSign;
-
-  UnsupportedKeyMaterialException(this.atSign);
-
-  @override
-  String toString() => 'UnsupportedKeyMaterialException: the keys for $atSign '
-      'carry ML-DSA-65 signing or namespace key material, which a session '
-      'with an in-memory key store cannot hold';
-}
 
 /// The key store of a [portalSession]: [keys] for [atSign], in memory, and
 /// nothing else.

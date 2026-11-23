@@ -9,7 +9,8 @@ import 'dart:js_interop_unsafe';
 import 'package:at_chops/at_chops.dart' show AESKey, RsaKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart';
-import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/exceptions.dart';
+import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/js/js_session.dart';
 import 'package:test/test.dart';
@@ -195,15 +196,17 @@ void main() {
     final tooDeep = await _rejected(_call(todos, 'get', [
       _obj({'id': 'deep'})
     ]));
-    expect(tooDeep['code'].dartify(), CollectionErrorCodes.tooDeep);
+    expect(tooDeep['code'].dartify(),
+        collectionErrorCode(CollectionFailure.tooDeep));
     expect(tooDeep['id'].dartify(), 'deep');
     expect(tooDeep['owner'].dartify(), '@alice');
 
-    // 7. Invalid owner rejects with COLLECTION_INVALID_ARGUMENT naming owner.
+    // 7. Invalid owner rejects with invalid_argument naming owner.
     final badOwner = await _rejected(_call(dataOnly, 'get', [
       _obj({'id': 't1', 'owner': '@a@b-sentinel'})
     ]));
-    expect(badOwner['code'].dartify(), CollectionErrorCodes.invalidArgument);
+    expect(badOwner['code'].dartify(), 'invalid_argument');
+    expect(badOwner['id'].dartify(), 't1');
     expect(badOwner['message'].dartify() as String, contains('owner'));
     expect(
         badOwner['message'].dartify() as String, isNot(contains('sentinel')));

@@ -3,14 +3,17 @@ import 'dart:async';
 import 'package:at_client/at_client.dart';
 
 import '../collections/js_collections_adapter.dart';
+import '../exceptions.dart';
 
 final _sessionNamespacePattern = RegExp('^${Regexes.charsInNamespace}\$');
 
-/// Returns [namespace] folded to lower case, or throws an [ArgumentError]
-/// naming `namespace` without its value when it is empty or invalid.
+/// Returns [namespace] folded to lower case, or throws an
+/// [InvalidArgumentException] naming `namespace` without its value when it
+/// is empty or invalid.
 String normalizeSessionNamespace(String namespace) {
   if (!_sessionNamespacePattern.hasMatch(namespace)) {
-    throw ArgumentError('namespace must be a non-empty valid segment');
+    throw InvalidArgumentException(
+        'namespace must be a non-empty valid segment');
   }
   return namespace.toLowerCase();
 }
@@ -49,23 +52,6 @@ typedef JsNotification = ({
   String operation,
 });
 
-/// Thrown when a [JsKey] cannot do what was asked of it, such as a notify
-/// with no `sharedWith`.
-class BadKeyException implements Exception {
-  BadKeyException(this.reason);
-
-  final String reason;
-
-  @override
-  String toString() => 'BadKeyException: $reason';
-}
-
-/// Thrown by every call on a [JsSession] after [JsSession.close].
-class SessionClosedException implements Exception {
-  @override
-  String toString() => 'SessionClosedException: the session is closed';
-}
-
 /// An enrollment request awaiting a decision, as filed: its [id], the
 /// [appName] and [deviceName] it names, and the [namespaces] it asks for, each
 /// with its access (`r` or `rw`).
@@ -75,14 +61,6 @@ typedef JsEnrollment = ({
   String deviceName,
   Map<String, String> namespaces,
 });
-
-/// Thrown by the pairing calls of a session that holds no `__manage`, which
-/// only the atServer's roster-managing enrollments do.
-class ManageAccessException implements Exception {
-  @override
-  String toString() =>
-      'ManageAccessException: this session cannot manage enrollments';
-}
 
 /// What the JS bridge exposes of one open client.
 abstract interface class JsSession {
@@ -118,7 +96,7 @@ abstract interface class JsSession {
   /// unless it already ends in it) whose items carry the wire type tag
   /// [type]. [expirationMs] defaults to seven days; [eventSource] is
   /// `data`, `notifs` or `both`. Throws a [SessionClosedException] after
-  /// [close] and rejects with a [JsCollectionsError] for a bad argument.
+  /// [close] and rejects with a [CollectionException] for a bad argument.
   Future<JsCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs});
 
@@ -148,29 +126,22 @@ abstract interface class JsSession {
 class AtClientJsSession implements JsSession {
   /// [warn] receives the warnings the session raises, by default through the
   /// atSign logger; [isNavigatorOnline] tells a [JsSession.status] of
-  /// `waiting:network` from `waiting:server`, by default always online.
+  /// `waiting:network` from `waiting:server`, by default always online, and
+  /// [networkChanges] says when it may have changed (each event re-reads it;
+  /// by default there are none).
   AtClientJsSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
-      bool Function()? isNavigatorOnline})
+      bool Function()? isNavigatorOnline,
+      Stream<void>? networkChanges})
       : _namespace = normalizeSessionNamespace(namespace),
         _warn = warn ?? _logger.warning,
         _isNavigatorOnline = isNavigatorOnline ?? (() => true) {
     _status = _statusOf(_client.connection.current) ?? 'connecting';
-    _connection = _client.connection.changes.listen((state) {
-      if (_closed) return;
-      final next = _statusOf(state);
-      if (next == null || next == _status) return;
-      _status = next;
-      for (final listener in [..._statusListeners]) {
-        if (_closed || !_statusListeners.contains(listener)) continue;
-        try {
-          listener(next);
-        } on Object catch (_) {
-          _warn('Status listener threw an error');
-        }
-      }
-    });
+    _connection =
+        _client.connection.changes.listen((state) => _reportStatusOf(state));
+    _network = networkChanges
+        ?.listen((_) => _reportStatusOf(_client.connection.current));
   }
 
   static final _logger = AtSignLogger('AtClientJsSession');
@@ -194,13 +165,32 @@ class AtClientJsSession implements JsSession {
   final _subscriptions = <StreamSubscription<Object?>>{};
   final _watchCancels = <Future<void> Function()>{};
   final _deciding = <String>{};
+  final _adapters = <String, Future<JsCollectionsAdapter>>{};
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
   final _statusListeners = <void Function(String)>{};
   late StreamSubscription<AtConnectionState> _connection;
+  StreamSubscription<void>? _network;
   late String _status;
   bool _closed = false;
   Future<void>? _closing;
+
+  /// Moves [status] to the one [state] gives and tells each listener, once per
+  /// change.
+  void _reportStatusOf(AtConnectionState state) {
+    if (_closed) return;
+    final next = _statusOf(state);
+    if (next == null || next == _status) return;
+    _status = next;
+    for (final listener in [..._statusListeners]) {
+      if (_closed || !_statusListeners.contains(listener)) continue;
+      try {
+        listener(next);
+      } on Object catch (_) {
+        _warn('Status listener threw an error');
+      }
+    }
+  }
 
   /// The [JsSession.status] [state] is, or null for the connection having
   /// stopped, which says nothing about the atServer.
@@ -246,7 +236,7 @@ class AtClientJsSession implements JsSession {
         name.contains('..') ||
         _keySegmentInvalidChars.hasMatch(name) ||
         !_collectionNameAllowed.hasMatch(name)) {
-      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
+      throw CollectionException(CollectionFailure.invalidArgument,
           'collection name must be a valid key name');
     }
     return name;
@@ -257,11 +247,24 @@ class AtClientJsSession implements JsSession {
       {required String type, String? eventSource, int? expirationMs}) async {
     _open();
     final validName = _validateCollectionName(name);
-    final adapter = await JsCollectionsAdapter.open(_client,
-        namespace: qualified(validName, _namespace),
+    final namespace = qualified(validName, _namespace);
+    final expiration = expirationMs ?? defaultExpirationMs;
+    // One adapter per collection and options, so a repeated call reuses the
+    // one open and its grants instead of fetching them again; a failed open
+    // is dropped so the next call tries again.
+    final cacheKey = '$namespace\u0000$type\u0000$expiration\u0000$eventSource';
+    final opened = _adapters[cacheKey] ??= JsCollectionsAdapter.open(_client,
+        namespace: namespace,
         type: type,
-        expirationMs: expirationMs ?? defaultExpirationMs,
+        expirationMs: expiration,
         eventSource: eventSource);
+    final JsCollectionsAdapter adapter;
+    try {
+      adapter = await opened;
+    } on Object {
+      _adapters.removeWhere((k, v) => k == cacheKey && identical(v, opened));
+      rethrow;
+    }
     _open();
     if (eventSource != 'data') {
       _client.notificationService.startListening();
@@ -452,7 +455,8 @@ class AtClientJsSession implements JsSession {
     try {
       RegExp(regex);
     } on FormatException {
-      throw ArgumentError('regex must be a valid regular expression');
+      throw InvalidArgumentException(
+          'regex must be a valid regular expression');
     }
     final service = _client.notificationService;
     final own = _canonical(_client.getCurrentAtSign()!)!;
@@ -501,13 +505,7 @@ class AtClientJsSession implements JsSession {
       unawaited(subscription.cancel().catchError((Object _) {}));
       rethrow;
     }
-    if (_closed) {
-      unawaited(subscription.cancel().catchError((Object _) {
-        _warn('Failed to cancel notification subscription on close');
-      }));
-    } else if (!done) {
-      _subscriptions.add(subscription);
-    }
+    if (!done) _subscriptions.add(subscription);
     return () {
       if (_subscriptions.remove(subscription)) {
         unawaited(subscription.cancel().catchError((Object _) {
@@ -554,8 +552,7 @@ class AtClientJsSession implements JsSession {
   Future<void> _decide(String id, Future<void> Function() action) async {
     _open();
     if (!_deciding.add(id)) {
-      throw AtEnrollmentException(
-          '${_client.getCurrentAtSign()} already has a decision in flight');
+      throw EnrollmentInFlightException();
     }
     try {
       await _requirePending(id);
@@ -600,13 +597,18 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  Future<void> close() => _closing ??= _tearDown();
+  Future<void> close() => _closing ??= _tearDown().catchError((Object e) {
+        // A failed teardown may be tried again; the next close() re-runs it.
+        _closing = null;
+        throw e;
+      });
 
   Future<void> _tearDown() async {
     _closed = true;
     _statusListeners.clear();
     try {
       await _connection.cancel();
+      await _network?.cancel();
     } on Object catch (_) {
       _warn('Failed to cancel status subscription on close');
     }
@@ -683,7 +685,7 @@ class _SessionCollection implements JsCollection {
   @override
   Future<void> Function() watch(
     void Function(JsEvent event) onEvent, {
-    required void Function(JsCollectionsError error) onError,
+    required void Function(CollectionException error) onError,
   }) {
     _session._open();
     late final Future<void> Function() cancel;

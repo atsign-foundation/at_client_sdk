@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/js_session.dart';
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
@@ -88,6 +88,12 @@ class _FakeCollection<T> extends Fake implements AtCollection<T> {
 class _FakeClient extends Fake implements AtClient {
   var stops = 0;
   Completer<void>? stopHold;
+
+  /// When set, the next `stop` throws it, then clears it.
+  Object? stopFailure;
+
+  /// When set, the next collection open throws it, then clears it.
+  Object? openFailure;
   final openedCollections = <(String, Duration, EventSource, String?)>[];
   final collections = <_FakeCollection<Object?>>[];
 
@@ -113,6 +119,10 @@ class _FakeClient extends Fake implements AtClient {
   }) async {
     openedCollections
         .add((namespace, defaultExpiration, eventSource, writeTypeTag));
+    if (openFailure case final failure?) {
+      openFailure = null;
+      throw failure;
+    }
     final collection = _FakeCollection<T>(namespace);
     collections.add(collection as _FakeCollection<Object?>);
     return collection;
@@ -122,6 +132,10 @@ class _FakeClient extends Fake implements AtClient {
   Future<void> stop() async {
     stops++;
     await stopHold?.future;
+    if (stopFailure case final failure?) {
+      stopFailure = null;
+      throw failure;
+    }
   }
 }
 
@@ -476,7 +490,7 @@ void main() {
 
     test('subscribe with invalid regex rejects naming regex', () {
       expect(() => session.subscribe('[', (_) {}, onError: (_) {}),
-          throwsA(isA<ArgumentError>()));
+          throwsA(isA<InvalidArgumentException>()));
       expect(service.starts, 0);
     });
   });
@@ -615,6 +629,66 @@ void main() {
       expect(session.status, 'connected');
     });
 
+    group('network changes', () {
+      late StreamController<void> network;
+      late AtClientJsSession watching;
+
+      setUp(() async {
+        network = StreamController<void>.broadcast();
+        watching = AtClientJsSession(client,
+            namespace: 'wavi',
+            isNavigatorOnline: () => navigatorOnline,
+            networkChanges: network.stream);
+        await client.connection
+            .report(AtConnectionState.offline(AtConnectionCause.unreachable));
+        await pumpEventQueue();
+      });
+
+      tearDown(() async {
+        await watching.close();
+        await network.close();
+      });
+
+      test('an event re-reads whether the browser is online and reports it',
+          () async {
+        final seen = <String>[];
+        watching.onStatus(seen.add);
+        expect(watching.status, 'waiting:server');
+
+        navigatorOnline = false;
+        network.add(null);
+        await pumpEventQueue();
+        network.add(null);
+        navigatorOnline = true;
+        await pumpEventQueue();
+
+        expect(seen, ['waiting:network', 'waiting:server']);
+      });
+
+      test('an event that changes nothing reports nothing', () async {
+        final seen = <String>[];
+        watching.onStatus(seen.add);
+
+        network.add(null);
+        await pumpEventQueue();
+
+        expect(seen, isEmpty);
+      });
+
+      test('close stops listening to it', () async {
+        final seen = <String>[];
+        watching.onStatus(seen.add);
+        await watching.close();
+
+        navigatorOnline = false;
+        network.add(null);
+        await pumpEventQueue();
+
+        expect(seen, isEmpty);
+        expect(network.hasListener, isFalse);
+      });
+    });
+
     test('onStatus after close throws SessionClosedException', () async {
       await session.close();
       expect(() => session.onStatus((_) {}),
@@ -649,8 +723,8 @@ void main() {
         'with the adapter code', () async {
       await expectLater(
           session.collection('todos', type: 'Todo', expirationMs: 0),
-          throwsA(isA<JsCollectionsError>().having(
-              (e) => e.code, 'code', CollectionErrorCodes.invalidArgument)));
+          throwsA(isA<CollectionException>().having(
+              (e) => e.kind, 'kind', CollectionFailure.invalidArgument)));
     });
 
     test('a name already ending in the namespace is kept', () {
@@ -674,6 +748,35 @@ void main() {
       expect(client.openedCollections.last.$1, 'notes.wavi');
     });
 
+    test('a repeated collection call reuses the one open adapter', () async {
+      await session.collection('todos', type: 'Todo');
+      await session.collection('todos', type: 'Todo');
+      await session.collection('todos.wavi', type: 'Todo');
+
+      expect(client.openedCollections, hasLength(1));
+    });
+
+    test('a different type, expiration or event source opens its own',
+        () async {
+      await session.collection('todos', type: 'Todo');
+      await session.collection('todos', type: 'Note');
+      await session.collection('todos', type: 'Todo', expirationMs: 1000);
+      await session.collection('todos', type: 'Todo', eventSource: 'data');
+
+      expect(client.openedCollections, hasLength(4));
+    });
+
+    test('a failed open is not kept, the next call opens again', () async {
+      client.openFailure = StateError('boom');
+      await expectLater(session.collection('todos', type: 'Todo'),
+          throwsA(isA<CollectionException>()));
+
+      await session.collection('todos', type: 'Todo');
+      await session.collection('todos', type: 'Todo');
+
+      expect(client.openedCollections, hasLength(2));
+    });
+
     test('rejects invalid collection names and folds mixed-case namespace',
         () async {
       final mixed = AtClientJsSession(client, namespace: 'MyApp');
@@ -683,14 +786,53 @@ void main() {
       for (final bad in ['', '.wavi', 'todos.', 'a..b', 'a b', 'a@b', 'a:b']) {
         await expectLater(
             mixed.collection(bad, type: 'Todo'),
-            throwsA(isA<JsCollectionsError>().having(
-                (e) => e.code, 'code', CollectionErrorCodes.invalidArgument)),
+            throwsA(isA<CollectionException>().having(
+                (e) => e.kind, 'kind', CollectionFailure.invalidArgument)),
             reason: bad);
       }
-      expect(
-          () => AtClientJsSession(client, namespace: ''), throwsArgumentError);
+      expect(() => AtClientJsSession(client, namespace: ''),
+          throwsA(isA<InvalidArgumentException>()));
       expect(() => AtClientJsSession(client, namespace: 'a.b'),
-          throwsArgumentError);
+          throwsA(isA<InvalidArgumentException>()));
+    });
+  });
+
+  group('session errors', () {
+    test('a closed session refuses each call with SessionClosedException',
+        () async {
+      await session.close();
+
+      final calls = <String, Future<Object?> Function()>{
+        'notify': () =>
+            session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
+        'subscribe': () async =>
+            session.subscribe('.*', (_) {}, onError: (_) {}),
+        'onStatus': () async => session.onStatus((_) {}),
+        'collection': () => session.collection('todos', type: 'Todo'),
+        'otp': session.otp,
+        'pendingEnrollments': session.pendingEnrollments,
+        'approve': () => session.approve('e1'),
+        'deny': () => session.deny('e1'),
+      };
+      for (final MapEntry(:key, :value) in calls.entries) {
+        await expectLater(value, throwsA(isA<SessionClosedException>()),
+            reason: key);
+      }
+    });
+
+    test(
+        'the session and the adapter report caller mistakes with a typed exception',
+        () async {
+      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+          throwsA(isA<InvalidArgumentException>()));
+      expect(() => session.subscribe('(', (_) {}, onError: (_) {}),
+          throwsA(isA<InvalidArgumentException>()));
+      await expectLater(
+          session.collection('a b', type: 'Todo'),
+          throwsA(isA<CollectionException>().having(
+              (e) => e.kind, 'kind', CollectionFailure.invalidArgument)));
+      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+          isNot(throwsArgumentError));
     });
   });
 
@@ -731,6 +873,16 @@ void main() {
       ]) {
         await expectLater(call(), throwsA(isA<SessionClosedException>()));
       }
+    });
+
+    test('a close whose stop failed can be tried again', () async {
+      client.stopFailure = StateError('boom');
+      await expectLater(session.close(), throwsA(isA<StateError>()));
+
+      await session.close();
+      await session.close();
+
+      expect(client.stops, 2);
     });
 
     test('cancels every active watch, none twice once cancelled', () async {

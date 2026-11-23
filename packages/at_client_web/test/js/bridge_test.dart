@@ -12,10 +12,11 @@ import 'package:at_client/at_client.dart'
         AtEnrollmentException,
         AtNoCredentialException,
         AtOpenRefusedException,
-        Atsign;
-import 'package:at_client_web/at_client_web.dart'
-    show PortalSessionOfflineException;
+        Atsign,
+        StoppedException;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/exceptions.dart';
+import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/js/js_session.dart';
 import 'package:test/test.dart';
@@ -38,7 +39,7 @@ class _FakeAdapter implements JsCollection {
   };
   JsListing listing = (items: const [], unreadable: const []);
   void Function(JsEvent)? onEvent;
-  void Function(JsCollectionsError)? onError;
+  void Function(CollectionException)? onError;
   Object? last;
   var cancelled = 0;
 
@@ -79,7 +80,7 @@ class _FakeAdapter implements JsCollection {
 
   @override
   Future<void> Function() watch(void Function(JsEvent event) onEvent,
-      {required void Function(JsCollectionsError error) onError}) {
+      {required void Function(CollectionException error) onError}) {
     if (failure case final error?) throw error;
     this.onEvent = onEvent;
     this.onError = onError;
@@ -346,9 +347,13 @@ void main() {
       ]);
     });
 
-    test('a bad rootDomain rejects naming the parameter, never its value',
+    test(
+        'an unusable rootDomain rejects with invalid_argument naming rootDomain',
         () async {
       for (final bad in [
+        '',
+        'sentinel.example.org:0',
+        'sentinel.example.org:65536',
         'a:b:c:d-sentinel-9',
         'evil.com/path?sentinel=1:443',
         'bad host sentinel',
@@ -357,9 +362,22 @@ void main() {
           _obj(opts({'rootDomain': bad}))
         ]));
 
-        expect(r.code, 'internal');
+        expect(r.code, 'invalid_argument');
         expect(r.message, contains('rootDomain'));
         expect(r.message, isNot(contains('sentinel')));
+      }
+      expect(opened, isEmpty);
+    });
+
+    test('a caller mistake at create opens no connection', () async {
+      for (final bad in <Map<String, Object?>>[
+        opts({'atSign': 'not an atsign'}),
+        opts({'namespace': 5}),
+        opts({'rootDomain': 'a:b:c'}),
+        opts({'keys': 5}),
+      ]) {
+        final r = await _rejected(_call(api, 'create', [_obj(bad)]));
+        expect(r.code, 'invalid_argument');
       }
       expect(opened, isEmpty);
     });
@@ -369,7 +387,7 @@ void main() {
         final r = await _rejected(_call(api, 'create', [
           _obj(opts({'atSign': bad}))
         ]));
-        expect(r.code, 'internal');
+        expect(r.code, 'invalid_argument');
         expect(r.message, contains('atSign'));
         expect(r.message, isNot(contains('sentinel')));
       }
@@ -381,7 +399,7 @@ void main() {
         final r = await _rejected(_call(api, 'create', [
           _obj(opts({'namespace': bad}))
         ]));
-        expect(r.code, 'internal');
+        expect(r.code, 'invalid_argument');
         expect(r.message, contains('namespace'));
         expect(r.message, isNot(contains('sentinel')));
       }
@@ -405,7 +423,9 @@ void main() {
       expect(r.message, isNot(contains('sentinel')));
     });
 
-    test('missing options reject naming the parameter', () async {
+    test(
+        'create with missing or mistyped options rejects with invalid_argument naming the option',
+        () async {
       for (final (name, drop) in [
         ('atSign', 'atSign'),
         ('namespace', 'namespace'),
@@ -413,9 +433,24 @@ void main() {
       ]) {
         final o = opts()..remove(drop);
         final r = await _rejected(_call(api, 'create', [_obj(o)]));
-        expect(r.code, 'internal');
+        expect(r.code, 'invalid_argument');
         expect(r.message, contains(name));
       }
+      for (final name in ['atSign', 'namespace', 'rootDomain', 'keys']) {
+        for (final bad in <Object?>[5, true, <Object?>[]]) {
+          final r = await _rejected(_call(api, 'create', [
+            _obj(opts({name: bad}))
+          ]));
+          expect(r.code, 'invalid_argument', reason: name);
+          expect(r.message, contains(name));
+        }
+      }
+      for (final bad in [null, 'x'.toJS, <JSAny?>[].toJS, (() {}).toJS]) {
+        final r = await _rejected(_call(api, 'create', [bad]));
+        expect(r.code, 'invalid_argument');
+        expect(r.message, contains('opts'));
+      }
+      expect(opened, isEmpty);
     });
 
     test('create rejects with unsupported outside a secure context', () async {
@@ -495,7 +530,7 @@ void main() {
           ..['toString'] = (() => sentinel.toJS).toJS;
 
     Future<void> expectNamed(JSAny? promise, String parameter,
-        {String code = 'internal'}) async {
+        {String code = 'invalid_argument'}) async {
       final r = await _rejected(promise);
       expect(r.code, code);
       expect(r.message, contains(parameter));
@@ -611,7 +646,7 @@ void main() {
         5.toJS
       ]));
 
-      expect(r.code, 'internal');
+      expect(r.code, 'invalid_argument');
       expect(session.calls, isNot(contains('notify')));
     });
 
@@ -729,26 +764,27 @@ void main() {
         expect(e['message'].dartify(), isA<String>());
       });
 
-      test('a bad argument answers {code: internal, message} naming it', () {
+      test('a bad argument answers {code: invalid_argument, message} naming it',
+          () {
         final e = failed(5.toJS);
 
-        expect(e['code'].dartify(), 'internal');
+        expect(e['code'].dartify(), 'invalid_argument');
         expect(e['message'].dartify() as String, contains('regex'));
       });
 
       test('subscribe with invalid regex rejects naming regex', () {
         final e = failed('['.toJS);
 
-        expect(e['code'].dartify(), 'internal');
+        expect(e['code'].dartify(), 'invalid_argument');
         expect(e['message'].dartify() as String, contains('regex'));
       });
 
       test(
-          'subscribe with non-function callback returns {code: internal} without throwing',
+          'subscribe with non-function callback returns {code: invalid_argument} without throwing',
           () {
         for (final bad in [null, 5.toJS, _obj({})]) {
           final r = _call(s, 'subscribe', ['x'.toJS, bad])! as JSObject;
-          expect(r['code'].dartify(), 'internal');
+          expect(r['code'].dartify(), 'invalid_argument');
           expect(r['message'].dartify() as String, contains('callback'));
         }
       });
@@ -849,11 +885,11 @@ void main() {
       });
 
       test(
-          'onStatus with non-function callback returns {code: internal} without throwing',
+          'onStatus with non-function callback returns {code: invalid_argument} without throwing',
           () {
         for (final bad in [null, 5.toJS, _obj({})]) {
           final r = _call(s, 'onStatus', [bad])! as JSObject;
-          expect(r['code'].dartify(), 'internal');
+          expect(r['code'].dartify(), 'invalid_argument');
           expect(r['message'].dartify() as String, contains('callback'));
         }
       });
@@ -989,7 +1025,7 @@ void main() {
             (
               id: 'u1',
               owner: Atsign('@bob'),
-              code: CollectionErrorCodes.unreadable
+              kind: CollectionFailure.unreadable
             )
           ]
         );
@@ -1006,7 +1042,7 @@ void main() {
         expect((listed['unreadable'].dartify() as List).single, {
           'id': 'u1',
           'owner': '@bob',
-          'code': CollectionErrorCodes.unreadable
+          'code': collectionErrorCode(CollectionFailure.unreadable)
         });
         expect((queried['items']! as JSArray).length, 1);
         expect((queried['unreadable'].dartify() as List).single,
@@ -1023,7 +1059,7 @@ void main() {
           _obj({'id': 'i1'})
         ]));
 
-        expect(r.code, CollectionErrorCodes.tooDeep);
+        expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
         expect(r.message, isNot(contains('internal')));
       });
 
@@ -1034,7 +1070,7 @@ void main() {
           _obj({'id': 'i1'})
         ]));
 
-        expect(r.code, CollectionErrorCodes.tooDeep);
+        expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
         expect(r.field('id'), 'i1');
         expect(r.field('owner'), '@alice');
       });
@@ -1068,7 +1104,7 @@ void main() {
           _obj({'id': 'i1'})
         ]));
 
-        expect(r.code, CollectionErrorCodes.tooDeep);
+        expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
       });
 
       test('collection update, share and remove map their arguments', () async {
@@ -1099,11 +1135,11 @@ void main() {
 
       test('a collection failure rejects with its code and fields (T6.4)',
           () async {
-        adapter.failure = JsCollectionsError(
-            CollectionErrorCodes.partialFailure, 'some writes failed',
+        adapter.failure = CollectionException(
+            CollectionFailure.partialFailure, 'some writes failed',
             id: 'i1',
             owner: '@alice',
-            kind: 'AtKeyException',
+            causeType: 'AtKeyException',
             failures: [
               {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
             ]);
@@ -1113,7 +1149,7 @@ void main() {
           ['@bob'].jsify()
         ]));
 
-        expect(r.code, CollectionErrorCodes.partialFailure);
+        expect(r.code, collectionErrorCode(CollectionFailure.partialFailure));
         expect(r.message, 'some writes failed');
         expect((r.field('id'), r.field('owner'), r.field('kind')),
             ('i1', '@alice', 'AtKeyException'));
@@ -1122,18 +1158,110 @@ void main() {
         ]);
       });
 
-      test('every collection code reaches JS unchanged', () async {
-        for (final code in [
-          CollectionErrorCodes.notFound,
-          CollectionErrorCodes.alreadyExists,
-          CollectionErrorCodes.wrongType,
-          CollectionErrorCodes.hasSubItems,
-          CollectionErrorCodes.invalidArgument,
-          CollectionErrorCodes.failed,
-          CollectionErrorCodes.tooDeep,
+      test(
+          'a collection rejection keeps code, message, id, owner, kind and failures',
+          () async {
+        final cases = <(CollectionException, String, String, Object?)>[
+          (
+            CollectionException(CollectionFailure.notFound, 'item not found',
+                id: 'i1', owner: '@alice', causeType: 'StateError'),
+            'item not found',
+            'StateError',
+            null
+          ),
+          (
+            CollectionException(
+                CollectionFailure.notOwner, 'i1 belongs to @bob, not @alice',
+                id: 'i1', owner: '@bob'),
+            'i1 belongs to @bob, not @alice',
+            '',
+            null
+          ),
+          (
+            CollectionException(CollectionFailure.failed, 'operation failed',
+                id: 'i1', owner: '@alice', causeType: 'StateError'),
+            'operation failed',
+            'StateError',
+            null
+          ),
+          (
+            CollectionException(
+                CollectionFailure.partialFailure, 'some writes failed',
+                id: 'i1',
+                owner: '@alice',
+                causeType: 'CollectionOpException',
+                failures: [
+                  {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
+                ]),
+            'some writes failed',
+            'CollectionOpException',
+            [
+              {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
+            ]
+          ),
+        ];
+        for (final (failure, message, kind, failures) in cases) {
+          adapter.failure = failure;
+          final r = await _rejected(_call(c, 'list'));
+          expect(r.code, collectionErrorCode(failure.kind));
+          expect(r.message, message);
+          expect(r.field('id'), failure.id);
+          expect(r.field('owner'), failure.owner);
+          expect(r.field('kind'), kind.isEmpty ? isNull : kind);
+          expect(r.field('failures'), failures);
+        }
+      });
+
+      test(
+          'list and query report each unreadable record with the same code as before',
+          () async {
+        adapter.listing = (
+          items: const [],
+          unreadable: [
+            (
+              id: 'u1',
+              owner: Atsign('@bob'),
+              kind: CollectionFailure.unreadable
+            ),
+            (id: 'u2', owner: Atsign('@bob'), kind: CollectionFailure.tooDeep),
+          ]
+        );
+        for (final result in [
+          await _resolved(_call(c, 'list')),
+          await _resolved(_call(c, 'query', [
+            [
+              {'path': 'a', 'op': 'isNull'}
+            ].jsify()
+          ])),
         ]) {
-          adapter.failure = JsCollectionsError(code, 'm');
-          expect((await _rejected(_call(c, 'list'))).code, code);
+          expect(((result! as JSObject)['unreadable'].dartify() as List), [
+            {
+              'id': 'u1',
+              'owner': '@bob',
+              'code': collectionErrorCode(CollectionFailure.unreadable)
+            },
+            {
+              'id': 'u2',
+              'owner': '@bob',
+              'code': collectionErrorCode(CollectionFailure.tooDeep)
+            },
+          ]);
+        }
+      });
+
+      test('every collection code reaches JS unchanged', () async {
+        for (final kind in [
+          CollectionFailure.notFound,
+          CollectionFailure.alreadyExists,
+          CollectionFailure.wrongType,
+          CollectionFailure.hasSubItems,
+          CollectionFailure.invalidArgument,
+          CollectionFailure.failed,
+          CollectionFailure.tooDeep,
+        ]) {
+          adapter.failure = CollectionException(kind, 'm');
+          expect((await _rejected(_call(c, 'list'))).code,
+              collectionErrorCode(kind));
         }
       });
 
@@ -1151,7 +1279,7 @@ void main() {
           ),
         ]) {
           final r = await _rejected(promise);
-          expect(r.code, 'internal');
+          expect(r.code, 'invalid_argument');
           expect(r.message, contains(name));
         }
       });
@@ -1186,7 +1314,7 @@ void main() {
           (_call(c, 'create', [cyclic]), 'levels deep'),
         ]) {
           final r = await _rejected(promise);
-          expect(r.code, 'internal');
+          expect(r.code, 'invalid_argument');
           expect(r.message, contains('data'));
           expect(r.message, contains(message));
         }
@@ -1204,8 +1332,7 @@ void main() {
 
         adapter.onEvent!({'type': 'updated', 'id': 'i1', 'owner': '@alice'});
         adapter.onEvent!({'type': 'unknown', 'id': 'i2', 'owner': '@bob'});
-        adapter
-            .onError!(JsCollectionsError(CollectionErrorCodes.failed, 'boom'));
+        adapter.onError!(CollectionException(CollectionFailure.failed, 'boom'));
         off.callAsFunction();
 
         expect(events, [
@@ -1213,7 +1340,10 @@ void main() {
           {'type': 'unknown', 'id': 'i2', 'owner': '@bob'}
         ]);
         expect(errors, [
-          {'code': CollectionErrorCodes.failed, 'message': 'boom'}
+          {
+            'code': collectionErrorCode(CollectionFailure.failed),
+            'message': 'boom'
+          }
         ]);
         expect(adapter.cancelled, 1);
       });
@@ -1221,7 +1351,7 @@ void main() {
       test('collection watch needs a function and never throws', () {
         final r = _call(c, 'watch', [5.toJS])! as JSObject;
 
-        expect(r['code'].dartify(), 'internal');
+        expect(r['code'].dartify(), 'invalid_argument');
         expect(r['message'].dartify() as String, contains('onEvent'));
       });
 
@@ -1274,8 +1404,7 @@ void main() {
         expect(watchRes['code'].dartify(), 'closed');
       });
 
-      test(
-          'invalid address owner rejects with COLLECTION_INVALID_ARGUMENT naming owner',
+      test('invalid address owner rejects with invalid_argument naming owner',
           () async {
         for (final (method, args) in [
           (
@@ -1306,7 +1435,7 @@ void main() {
           ),
         ]) {
           final r = await _rejected(_call(c, method, args));
-          expect(r.code, CollectionErrorCodes.invalidArgument, reason: method);
+          expect(r.code, 'invalid_argument', reason: method);
           expect(r.message, contains('owner'));
           expect(r.message, isNot(contains('sentinel')));
           expect(r.field('id'), 'i1');
@@ -1331,20 +1460,20 @@ void main() {
             _obj({'a': 1}),
             bad
           ]));
-          expect(optRes.code, 'internal');
+          expect(optRes.code, 'invalid_argument');
           expect(optRes.message, contains('opts'));
 
           final dataRes = await _rejected(_call(c, 'create', [
             _obj({'nested': bad})
           ]));
-          expect(dataRes.code, 'internal');
+          expect(dataRes.code, 'invalid_argument');
           expect(dataRes.message, contains('data'));
         }
         final arrOpts = await _rejected(_call(c, 'create', [
           _obj({'a': 1}),
           <JSAny?>[].toJS
         ]));
-        expect(arrOpts.code, 'internal');
+        expect(arrOpts.code, 'invalid_argument');
         expect(arrOpts.message, contains('opts'));
       });
 
@@ -1482,10 +1611,10 @@ void main() {
 
       test('approve and deny reject a non-string id', () async {
         for (final method in ['approve', 'deny']) {
-          expect(
-              (await _rejected(_call(s, method, [_obj({})]))).code, 'internal');
-          expect(
-              (await _rejected(_call(s, method, [5.toJS]))).code, 'internal');
+          expect((await _rejected(_call(s, method, [_obj({})]))).code,
+              'invalid_argument');
+          expect((await _rejected(_call(s, method, [5.toJS]))).code,
+              'invalid_argument');
         }
         expect(session.decided, isEmpty);
       });

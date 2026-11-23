@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart';
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/at_error_code.dart';
 import 'package:at_client_web/src/js/js_session.dart';
 import 'package:test/test.dart';
@@ -289,6 +291,34 @@ void main() {
         expect(approvals.single, isNot(contains('namespace')));
       });
 
+      test('a decision reads this session\'s grants from the atServer once',
+          () async {
+        var approved = false;
+        wire.answer = (command) {
+          if (command.startsWith('enroll:list')) {
+            final filtered =
+                command.contains('pending') || command.contains('approved');
+            if (!filtered) return 'data:{${own(managing)}}';
+            return approved
+                ? 'data:{${record('e1', 'approved', wrapped: wrapped)}}'
+                : 'data:{${pendingRecord()}}';
+          }
+          if (command.startsWith('enroll:approve')) {
+            approved = true;
+            return 'data:{"enrollmentId":"e1","status":"approved"}';
+          }
+          throw KeyNotFoundException('absent');
+        };
+
+        await session.approve('e1');
+
+        final grantsReads = wire.commands.where((c) =>
+            c.startsWith('enroll:list') &&
+            !c.contains('pending') &&
+            !c.contains('approved'));
+        expect(grantsReads, hasLength(1));
+      });
+
       test('approve of an id that is not pending is enrollment_denied',
           () async {
         serve(pending: pendingRecord());
@@ -344,11 +374,120 @@ void main() {
         final secondError = await thrownBy(() => session.deny('e1'));
         await first;
 
-        expect(atErrorCode(secondError), 'enrollment_denied');
+        expect(atErrorCode(secondError), 'enrollment_in_flight');
         expect(wire.commands.where((c) => c.startsWith('enroll:approve')),
             hasLength(1));
         expect(
             wire.commands.where((c) => c.startsWith('enroll:deny')), isEmpty);
+      });
+
+      /// Serves each id in [pending] as a pending request; an approve moves
+      /// its id out, after [hold] for that id completes. The ids in
+      /// [failing] have their first approve refused.
+      void serveDecisions(Set<String> pending,
+          {Future<void> Function(String id)? hold, Set<String>? failing}) {
+        final approved = <String>{};
+        wire.answer = (command) async {
+          if (command.startsWith('enroll:list')) {
+            final filtered =
+                command.contains('pending') || command.contains('approved');
+            if (!filtered) return 'data:{${own(managing)}}';
+            return 'data:{${[
+              for (final id in pending) record(id, 'pending', wrapped: wrapped),
+              if (!command.contains('pending'))
+                for (final id in approved)
+                  record(id, 'approved', wrapped: wrapped),
+            ].join(',')}}';
+          }
+          if (command.startsWith('enroll:approve')) {
+            final id = RegExp(r'"enrollmentId":"(\w+)"')
+                .firstMatch(command)!
+                .group(1)!;
+            await hold?.call(id);
+            if (failing?.remove(id) ?? false) {
+              throw StateError('refused');
+            }
+            pending.remove(id);
+            approved.add(id);
+            return 'data:{"enrollmentId":"$id","status":"approved"}';
+          }
+          throw KeyNotFoundException('absent');
+        };
+      }
+
+      int approvals() =>
+          wire.commands.where((c) => c.startsWith('enroll:approve')).length;
+
+      test(
+          'a decision repeated after the first settled is enrollment_denied, not enrollment_in_flight',
+          () async {
+        serveDecisions({'e1'});
+        await session.approve('e1');
+        final before = wire.commands.length;
+
+        for (final decide in [session.approve, session.deny]) {
+          final error = await thrownBy(() => decide('e1'));
+          expect(atErrorCode(error), 'enrollment_denied');
+        }
+
+        expect(
+            wire.commands.skip(before).where((c) =>
+                c.startsWith('enroll:approve') || c.startsWith('enroll:deny')),
+            isEmpty);
+      });
+
+      test('a decision in flight on one id does not hold up another id',
+          () async {
+        final gate = Completer<void>();
+        serveDecisions({'e1', 'e2'},
+            hold: (id) => id == 'e1' ? gate.future : Future.value());
+
+        final first = session.approve('e1');
+        await session.approve('e2');
+
+        expect(approvals(), 2);
+        gate.complete();
+        await first;
+      });
+
+      test('a failed decision releases the id for another attempt', () async {
+        serveDecisions({'e1'}, failing: {'e1'});
+
+        final failure = await thrownBy(() => session.approve('e1'));
+        expect(atErrorCode(failure), isNot('enrollment_in_flight'));
+        await session.approve('e1');
+
+        expect(approvals(), 2);
+      });
+
+      test(
+          'the in-flight failure is still an enrollment failure to a Dart caller',
+          () async {
+        final gate = Completer<void>();
+        final reached = Completer<void>();
+        serveDecisions({'e1'}, hold: (_) {
+          reached.complete();
+          return gate.future;
+        });
+
+        final first = session.approve('e1');
+        await reached.future;
+        final lists =
+            wire.commands.where((c) => c.startsWith('enroll:list')).length;
+        Object? caught;
+        try {
+          await session.approve('e1');
+        } on AtEnrollmentException catch (e) {
+          caught = e;
+        }
+        final listsAfter =
+            wire.commands.where((c) => c.startsWith('enroll:list')).length;
+        gate.complete();
+        await first;
+
+        expect(caught, isA<EnrollmentInFlightException>());
+        expect(atErrorCode(caught!), 'enrollment_in_flight');
+        expect(listsAfter, lists);
       });
 
       test('key conveyance failure rejects with enrollment_conveyance_failed',

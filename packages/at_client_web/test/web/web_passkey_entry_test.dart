@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:typed_data';
 
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_commons/at_commons.dart' show InvalidAtSignException;
 import 'package:at_client_web/src/session/web_passkey_entry.dart';
