@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:at_client_cli/src/commands/auth_cli.dart'
     show approvalPollInterval;
 import 'package:at_utils/at_utils.dart';
@@ -302,12 +303,26 @@ class CLIBase {
   /// does, asking every [approvalRetryInterval], then opens on the keys the
   /// approval completes.
   ///
-  /// Throws [AtNoCredentialException] at once when the keyfile holds no
-  /// credential, as a denial, a cancel or an expiry leaves it,
+  /// Throws [AtKeysUnusableException] at once, saying why on stderr, when
+  /// the keys cannot be used: the keyfile is absent or cannot be read, names
+  /// another atSign, holds no authentication keypair this device can use, or
+  /// holds no credential, as a denial, a cancel or an expiry leaves it
+  /// ([AtNoCredentialException]);
   /// [AtStorageInUseException] when another process holds the store open,
   /// [AtCredentialRefusedException] when the atServer refuses the
   /// keys, [AtEnrollmentDeniedException] when the request is denied,
-  /// [AtEnrollmentExpiredException] when it expires, both removing its keys,
+  /// [AtEnrollmentExpiredException] when it expires, both removing its keys
+  /// or, when the keyfile cannot be written, saying in their message that the
+  /// keys stay, so the next [init] resumes the request again,
+  /// a plain [AtEnrollmentException], keeping them, when the atServer keeps
+  /// answering the wait with neither a decision nor "not yet", whatever
+  /// fetching or decrypting the keys threw when the request was approved but
+  /// they could not be collected, keeping them: an [AtException] such as
+  /// `AtLookUpException` for an error reply or none, errors such as
+  /// [FormatException] or [ArgumentError] for a reply that does not parse or
+  /// decrypt, and a plain [AtEnrollmentException] only when no conveyed key
+  /// decrypts them (the request may already be approved; run again rather
+  /// than cancel it),
   /// [SecondaryNotFoundException] when the atDirectory has no atServer for the
   /// atSign, and the failure when the
   /// atServer is not reached, within [maxConnectAttempts] tries to open or
@@ -330,17 +345,6 @@ class CLIBase {
       ..rootDomain = atRootDomain.rootDomain
       ..rootPort = atRootDomain.rootPort;
 
-    if (!File(atKeysFilePathToUse).existsSync()) {
-      // no atKeys file
-      var msg = 'No atKeys file found at $atKeysFilePathToUse';
-      stderr.writeln(chalk.brightRed(msg));
-      stderr.writeln(''
-          '    => If you do not have an atKeys file,'
-          ' this package will help you get started:'
-          ' https://pub.dev/packages/at_client_cli');
-      throw ArgumentError(msg);
-    }
-
     const retryDuration = Duration(seconds: 3);
     stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
     final keys = CliKeys.fileFor(atSign,
@@ -358,8 +362,15 @@ class CLIBase {
             serviceFactory: atServiceFactory);
       } on AtOpenRefusedException catch (e) {
         throw _reported(_openFailure(e.state));
-      } on AtNoCredentialException catch (e) {
-        throw _reported(e);
+      } on AtEnrollmentPendingException {
+        rethrow;
+      } on AtKeysUnusableException catch (e) {
+        reportKeysProblem(e,
+            absentHint: eitherKeysHint(
+                atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'),
+            keyfile: atKeysFilePathToUse,
+            passphraseGiven: _passphraseGiven);
+        rethrow;
       }
     }
 
@@ -403,6 +414,10 @@ class CLIBase {
     stderr.writeln();
     stderr.writeln(chalk.brightBlue('Waiting for approval of enrollment '
         '${request.enrollmentId} of $atSign'));
+    final cancel = cancelCommand(atSign,
+        keyfile: atKeysFilePathToUse, passphraseGiven: _passphraseGiven);
+    stderr.writeln('To give the request up instead, stop this program and '
+        'run $cancel');
     try {
       await request.awaitApproval(
           retryInterval: approvalRetryInterval,
@@ -411,6 +426,9 @@ class CLIBase {
       throw _reported(e);
     }
   }
+
+  /// Whether the keyfile is opened with a passphrase.
+  bool get _passphraseGiven => passPhrase?.isNotEmpty ?? false;
 
   SecondaryAddressFinder _atDirectory() => CacheableSecondaryAddressFinder(
       atRootDomain.rootDomain, atRootDomain.rootPort);

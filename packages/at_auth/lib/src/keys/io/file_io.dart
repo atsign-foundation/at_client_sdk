@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/default_keyfile_path.dart';
 import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/io/owner_only_mode_stub.dart'
     if (dart.library.ffi) 'package:at_auth/src/keys/io/owner_only_mode_ffi.dart';
@@ -16,15 +18,19 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 final _logger = AtSignLogger('FileAtKeysIo');
+final _random = Random.secure();
 
 /// File-backed `.atKeys` storage.
 class FileAtKeysIo extends WrittenAtKeysIo {
   String Function(String)? filePath;
   String? passPhrase;
 
+  /// Keys kept in the keyfile [filePath] names for each atSign, by default
+  /// the one under the home directory; where there is no home directory,
+  /// every read and write of the default throws [AtException] saying so.
   FileAtKeysIo({this.filePath, this.passPhrase}) {
     filePath ??=
-        (atsign) => getDefaultAtKeysFilePath(getHomeDirectory()!, atsign);
+        (atsign) => defaultAtKeysFilePathUnder(getHomeDirectory(), atsign);
   }
 
   @override
@@ -45,6 +51,61 @@ class FileAtKeysIo extends WrittenAtKeysIo {
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
   }
+
+  /// The keyfile's path, or, when [filePath] cannot resolve it, such as the
+  /// default path on a platform with no home directory, a description that
+  /// says so.
+  @override
+  String describeSource(String atsign) {
+    try {
+      return filePath!(atsign);
+    } catch (_) {
+      // NOTE: a fallback name only; this must not throw.
+      return 'the atKeys file at an unresolved path';
+    }
+  }
+
+  /// Throws [FileSystemException] naming the keyfile's path when anything,
+  /// such as a directory, is already at that path, or when a new file cannot
+  /// be created beside it.
+  ///
+  /// It creates the keyfile's directory when missing, which the write needs
+  /// and which stays, and deletes the file it creates to find out before it
+  /// returns, leaving no file behind.
+  @override
+  Future<void> checkWritable(String atsign) async {
+    final path = filePath!(atsign);
+    final existing = await FileSystemEntity.type(path);
+    if (existing != FileSystemEntityType.notFound) {
+      throw FileSystemException(
+          'Cannot write the atKeys file: a $existing is already at its path',
+          path);
+    }
+    final probe = File(
+        '$path.writable.$pid.${_random.nextInt(1 << 32).toRadixString(16)}');
+    var created = false;
+    try {
+      await probe.parent.create(recursive: true);
+      await probe.create();
+      created = true;
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    } finally {
+      if (created) await _deleteProbe(probe, path);
+    }
+  }
+
+  Future<void> _deleteProbe(File probe, String path) async {
+    try {
+      await probe.delete();
+    } on FileSystemException catch (e) {
+      throw _notWritable(path, e);
+    }
+  }
+
+  FileSystemException _notWritable(String path, FileSystemException cause) =>
+      FileSystemException('Cannot write the atKeys file: ${cause.message}',
+          path, cause.osError);
 
   @override
   Future write(String atsign, AtKeys atKeys) async {

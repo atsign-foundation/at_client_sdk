@@ -84,7 +84,8 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 | Command                                            | What it does                                                                                                             |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `status -a @alice`                                 | asks where the atSign stands; the exit code says: 0 activated, 1 atServer up but not yet activated, 2 atServer unreachable, 3 no such atSign, 4 atDirectory unreachable |
-| `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run again for the same app and device, it resumes the wait rather than submitting a second request |
+| `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run on a keyfile already waiting on a request, it resumes that wait rather than submitting another, whatever app or device the request was filed under, and says which when they differ; a request the manager denies, or that expires, is cleared from the keyfile by the next run |
+| `cancel -a @alice -k <keyfile>`                    | gives up the pending enrollment request the keyfile holds and removes its keys from it, sending nothing: the request stays on the atServer, for the Atsign's manager to deny, or to revoke if they approved it meanwhile; a keyfile holding live keys is refused, and left as it is |
 | `otp` / `spp`                                      | issues a one-time passcode, or sets a semi-permanent one, that a new enrollment quotes                                    |
 | `list`, `fetch`                                    | the enrollment roster, or one enrollment's record                                                                        |
 | `approve`, `deny`, `revoke`, `unrevoke`, `delete`  | decides an enrollment by its id; `auto` listens and approves the requests that match its app and device patterns        |
@@ -151,7 +152,11 @@ Future<void> main(List<String> args) async {
 
 `-a` names the atSign, `-k` its keyfile (`~/.atsign/keys/<atSign>_key.atKeys`
 by default), `-r` the atDirectory, `-s` the local store and `-P` the keyfile's
-pass-phrase; `--help` lists the rest. `fromCommandLineArgs` waits up to
+pass-phrase; `--help` lists the rest. Keys it cannot use (a keyfile that is
+missing or cannot be read, names another atSign, or holds no credential or no
+keypair it can sign with)
+throw `AtKeysUnusableException` before anything connects, once it has said on
+stderr what is wrong and what to do next. `fromCommandLineArgs` waits up to
 `--max-connect-attempts` tries, 3 seconds apart, for the client to come
 online. Otherwise it stops the client and throws:
 
@@ -159,14 +164,27 @@ online. Otherwise it stops the client and throws:
   the cause, and saying when the enrollment awaits approval or was denied;
 - `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`, both
   `AtEnrollmentException`s, when the enrollment request the keyfile holds is
-  denied or expires;
+  denied or expires, removing its keys or, when the keyfile cannot be
+  written, saying in their message that the keys stay;
+- a plain `AtEnrollmentException` when the atServer keeps answering the wait
+  for approval with neither a decision nor "not yet", keeping the request for
+  the next run;
+- whatever fetching or decrypting the keys threw when the request was
+  approved but its keys could not be collected, keeping the request: an
+  `AtException` such as `AtLookUpException` for an error reply or none,
+  errors such as `FormatException` or `ArgumentError` for a reply that does
+  not parse or decrypt, and a plain `AtEnrollmentException` only when no
+  conveyed key decrypts them. The request may already be approved, so run
+  again rather than cancel it;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
-  atSign;
-- `SecondaryServerConnectivityException` when the atServer is not reached in
-  time, the one a retry loop should catch.
+  Atsign;
+- `SecondaryServerConnectivityException` when no atServer accepted or refused
+  the keys in time (an outage, or a server error such as AT0011), the one a
+  retry loop should catch.
 
 A keyfile still holding only its enrollment request is resumed: the program
-says it is waiting for approval of that enrollment, waits as at_activate
+says it is waiting for approval of that enrollment, naming the
+`at_activate cancel` command that gives the request up, waits as at_activate
 does, and runs once it is approved. Ctrl-C while it waits keeps the request
 for the next run.
 
@@ -282,7 +300,7 @@ at_onboarding_cli 1.x wrote is read unchanged.
 | `package:at_onboarding_cli/at_onboarding_cli.dart`, `package:at_cli_commons/at_cli_commons.dart` | `package:at_client_cli/at_client_cli.dart`                                                                                                                              |
 | `dart pub global activate at_onboarding_cli`                                                     | `dart pub global activate at_client_cli`; the old command still installs the same tools                                                                                 |
 | `CLIBase(..., preference: AtOnboardingPreference())`                                             | unchanged, except that `preference:` takes an `AtClientPreference`                                                                                                      |
-| `CLIBase` on a refused first open, `AtOpenRefusedException`                                      | `AtCredentialRefusedException` for every refusal; `SecondaryNotFoundException` for an atSign the atDirectory does not know; `SecondaryServerConnectivityException` only for an outage |
+| `CLIBase` on a refused first open, `AtOpenRefusedException`                                      | `AtCredentialRefusedException` for every refusal; `SecondaryNotFoundException` for an atSign the atDirectory does not know; `SecondaryServerConnectivityException` only when no atServer accepted or refused the keys (an outage, or, with at_client 4.1.0, a server error such as AT0011) |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, then `.atClient`                         | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`                                                                                        |
 | `.onboard()`                                                                                     | `Atsign(atSign).activate(...)`, or `at_activate onboard`                                                                                                                |
 | `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)`       | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; `Atsign.resumeEnrollment` picks a pending request up after a restart                                  |

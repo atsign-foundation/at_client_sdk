@@ -179,8 +179,8 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     secondaryAddressFinder: atDirectory);
 final enrolled = await pending.client(preference,
     storage: storage());                                 // waits for approval
-final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
-    device: 'phone', keys: keys, preference: preference, lookUps: lookUps,
+final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
+    preference: preference, lookUps: lookUps,
     secondaryAddressFinder: atDirectory);
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.

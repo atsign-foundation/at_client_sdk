@@ -13,6 +13,15 @@ void main() {
   group('AtKeysAssurance', () {
     const assurance = AtKeysAssurance();
 
+    test('an enum value it does not know is named by its field, not quoted',
+        () {
+      const token = 'Zq7Yw4Lp9Xk2Rm6TbN3vQ8sD';
+      expect(
+          () => assurance.expectEnum(token, _Known.values, 'keys[0].role'),
+          throwsA(isA<AtKeysValidationException>().having((e) => e.message,
+              'message', equals('Unsupported value at keys[0].role'))));
+    });
+
     test('rejects map update when any legacy field value changes', () {
       final existing = _fixtureLegacyJson();
 
@@ -1170,3 +1179,5 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
     ],
   };
 }
+
+enum _Known { known }

@@ -122,7 +122,7 @@ class UnsupportedKeyMaterialException extends AtException {
 
   UnsupportedKeyMaterialException(this.atSign)
       : super('the keys for $atSign carry ML-DSA-65 signing or namespace key '
-            'material, which a session with an in-memory key store cannot '
+            'material, which a session with an in-memory AtKeys store cannot '
             'hold');
 
   @override

@@ -103,11 +103,18 @@ class PendingEnrollment {
   /// [keys] and moves them to active.
   ///
   /// The wait for a decision has no bound: somebody decides on their own
-  /// schedule. [maxRetries] budgets consecutive failures to reach the
-  /// atServer, and [retryInterval] is the pause between polls. A denial, or
-  /// the request's expiry, removes this enrollment from [keys] and throws
+  /// schedule. [maxRetries] budgets consecutive failures to reach the atServer,
+  /// and [retryInterval] is the pause between polls. A denial, or the request's
+  /// expiry, removes this enrollment from [keys] and throws
   /// [AtEnrollmentDeniedException] or [AtEnrollmentExpiredException], both
-  /// [AtEnrollmentException]s. Any other end of the wait keeps the request.
+  /// [AtEnrollmentException]s; when [keys] cannot remove it, the same type is
+  /// thrown, its message saying the pending keys stay and why, and the next
+  /// resume finds the request again. When the approval lands after another wait
+  /// or process has filed it, this wait ends approved as well; when another has
+  /// removed the pending keys instead, the approval files nothing and this
+  /// throws [AtEnrollmentCancelledException]. A wait begun once the request is
+  /// no longer pending throws [AtEnrollmentException] at once. Any other
+  /// refusal or failure keeps the request, and [cancel] removes it.
   Future<void> awaitApproval({
     Duration retryInterval = AtEnrollment.defaultRetryInterval,
     int maxRetries = AtEnrollment.defaultMaxRetries,
@@ -157,7 +164,7 @@ class PendingEnrollment {
           maxRetries: maxRetries,
           atLookup: handshake,
           cancelled: _ended.future);
-    } on Exception catch (e) {
+    } on Exception catch (e, stackTrace) {
       if (_ended.isCompleted) throw await _endedOnceCancelled();
       final decided = e is AtEnrollmentExpiredException
           ? 'expired'
@@ -170,6 +177,15 @@ class PendingEnrollment {
         } catch (failure) {
           _logger.warning('enrollment $enrollmentId of $atSign was $decided, '
               'and its pending keys could not be removed: $failure');
+          final kept = '${(e as AtException).message}; its pending keys could '
+              'not be removed and stay in '
+              '${theAtKeysStore(keys.describeSource(atSign))}, where the next '
+              'resume finds the request again: ${clipForMessage('$failure')}';
+          Error.throwWithStackTrace(
+              e is AtEnrollmentExpiredException
+                  ? AtEnrollmentExpiredException(kept)
+                  : AtEnrollmentDeniedException(kept),
+              stackTrace);
         }
       }
       rethrow;
@@ -181,25 +197,36 @@ class PendingEnrollment {
     // NOTE: the check that the wait has not ended and the write are one
     // update, so a stop or cancel lands either before the approval is written
     // or after it.
-    var written = false;
+    var found = _Filing.ended;
     await keys.update(atSign, (stored) {
       // NOTE: update may run this again on a fresh read; only the last run
       // counts.
-      written = false;
-      if (_ended.isCompleted) return false;
+      found = _filingIn(stored);
+      if (found != _Filing.pending) return false;
       _completeFrom(stored, handshakeKeys);
       if (signingAlgo == SigningAlgoType.rsa2048) {
         _fileFlat(stored);
       } else {
         stored.activatePending(enrollmentId);
       }
-      written = true;
       return true;
     });
-    if (!written) throw await _endedOnceCancelled();
+    if (found == _Filing.removed) {
+      // NOTE: the instruction comes first, so a message clipped at 180
+      // characters still says what to do.
+      throw AtEnrollmentCancelledException("the atSign's manager can revoke "
+          'enrollment "${clipForMessage(enrollmentId, quote: '"')}" of '
+          '$atSign: it was approved after its pending keys left '
+          '${theAtKeysStore(keys.describeSource(atSign))}, so nothing is '
+          'filed');
+    }
+    if (found == _Filing.ended) throw await _endedOnceCancelled();
     _approved = true;
-    _logger.info('enrollment $enrollmentId of $atSign is approved and its '
-        'keys are complete');
+    _logger.info(found == _Filing.filedElsewhere
+        ? 'enrollment $enrollmentId of $atSign is approved, and another wait '
+            'for it had already completed its keys'
+        : 'enrollment $enrollmentId of $atSign is approved and its keys are '
+            'complete');
   }
 
   /// Waits for the decision, then opens a client on the completed keys.
@@ -244,8 +271,11 @@ class PendingEnrollment {
   /// have left [keys], as a denial's do. When [keys] cannot remove them, this
   /// throws what it threw, and a later call tries again.
   ///
-  /// An approval already written to [keys] stays there. A [client] call in
-  /// flight has ended before this returns, having stopped any client it
+  /// An approval already written to [keys], by this wait or another, stays
+  /// there, and [approved] says so only of one this wait saw: a caller that
+  /// must know whether an approval was filed first reads [keys] afterwards,
+  /// which then hold live keys. A [client] call in flight has ended before
+  /// this returns, having stopped any client it
   /// opened, so the atSign can be opened again at once; a call made inside
   /// the work that [client] awaits, such as a key store or connection it was
   /// given, does not wait for it. A connection the caller supplied is left
@@ -336,9 +366,10 @@ class PendingEnrollment {
   /// What a wait that [cancel] or [stop] ended throws.
   Exception _endedException() {
     final wait = 'the wait for enrollment $enrollmentId of $atSign';
+    final store = theAtKeysStore(keys.describeSource(atSign));
     if (_approved) {
       final after = 'after its approval was written; the approved keys stay '
-          'in its key store';
+          'in $store';
       return _abandoned
           ? AtEnrollmentCancelledException('$wait was cancelled $after')
           : StoppedException('$wait was stopped $after, to open the atSign '
@@ -346,8 +377,8 @@ class PendingEnrollment {
     }
     return _abandoned
         ? AtEnrollmentCancelledException('$wait was cancelled')
-        : StoppedException('$wait was stopped; the request stays in its key '
-            'store, for resumeEnrollment');
+        : StoppedException('$wait was stopped; the request stays in $store, '
+            'for resumeEnrollment');
   }
 
   /// Copies onto [stored] what the approval released into [completed]: the
@@ -426,6 +457,18 @@ class PendingEnrollment {
   static String? _unlessFiled(AtBytes? filed, AtBytes? value) =>
       filed == null ? value?.toString() : null;
 
+  /// What [stored] holds for this enrollment as its approval is filed.
+  _Filing _filingIn(AtKeys stored) {
+    if (_ended.isCompleted) return _Filing.ended;
+    if (stored.pendingEnrollmentIds.contains(enrollmentId)) {
+      return _Filing.pending;
+    }
+    return stored.holdsAuthenticationMaterial &&
+            stored.enrollmentToAuthenticateAs() == enrollmentId
+        ? _Filing.filedElsewhere
+        : _Filing.removed;
+  }
+
   /// Removes this enrollment's pending keys from [keys], after the request
   /// was [why]: denied or cancelled. Throws what [keys] throws.
   Future<void> _discard(String why) async {
@@ -448,8 +491,14 @@ class PendingEnrollment {
   }
 }
 
+/// What an approval finds in the AtKeys store as
+/// [PendingEnrollment.awaitApproval] files it.
+enum _Filing { ended, pending, filedElsewhere, removed }
+
 /// The wait [PendingEnrollment.awaitApproval] or [PendingEnrollment.client]
-/// was in was ended by [PendingEnrollment.cancel].
+/// was in ended because its request was cancelled: by
+/// [PendingEnrollment.cancel], or by another [PendingEnrollment] for the same
+/// request, in this process or another, before the approval was filed.
 class AtEnrollmentCancelledException extends AtEnrollmentException {
   AtEnrollmentCancelledException(super.message);
 }
@@ -457,34 +506,48 @@ class AtEnrollmentCancelledException extends AtEnrollmentException {
 /// `open` was asked to open a keyfile that holds no credential and no
 /// pending enrollment, as a denial, a cancel or an expiry leaves it, so there
 /// is nothing to authenticate with: the device has to enroll again.
-class AtNoCredentialException extends AtException {
-  final String atSign;
-
-  AtNoCredentialException(this.atSign)
-      : super('$atSign holds no credential in this keyfile: its enrollment '
-            'was denied, cancelled or expired, or never completed, so there '
-            'is nothing to authenticate with; enroll again');
+///
+/// Its cause is [AtKeysUnusableCause.noCredential].
+class AtNoCredentialException extends AtKeysUnusableException {
+  AtNoCredentialException(String atSign, {super.source})
+      : super(
+            '$atSign holds no credential in ${theAtKeysStore(source)}: its '
+            'enrollment was denied, cancelled or expired, or never completed, '
+            'so there is nothing to authenticate with; enroll again',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.noCredential);
 }
 
 /// `open` was asked to open a keyfile that holds nothing but an enrollment
 /// awaiting approval, so there is no credential to authenticate with yet.
-/// `Atsign.resumeEnrollment` is the way to pick it up, and throws this too,
-/// from [AtEnrollmentPendingException.several], when more than one pending
-/// enrollment matches what it was given.
-class AtEnrollmentPendingException extends AtException {
-  final String atSign;
+/// `Atsign.resumeEnrollment` is the way to pick it up.
+///
+/// Its cause is [AtKeysUnusableCause.pendingEnrollment].
+class AtEnrollmentPendingException extends AtKeysUnusableException {
   final List<String> pendingEnrollmentIds;
 
-  AtEnrollmentPendingException(this.atSign, this.pendingEnrollmentIds)
-      : super('$atSign holds no live credential, only the pending enrollment'
+  AtEnrollmentPendingException(String atSign, this.pendingEnrollmentIds,
+      {super.source})
+      : super(
+            '$atSign holds no live credential in ${theAtKeysStore(source)}, '
+            'only the pending enrollment'
             '${pendingEnrollmentIds.length == 1 ? '' : 's'} '
-            '${pendingEnrollmentIds.join(', ')}: resume it with '
-            'resumeEnrollment rather than opening it');
+            '${_quoted(pendingEnrollmentIds)}: resume it with '
+            'resumeEnrollment rather than opening it',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.pendingEnrollment);
 
-  /// `Atsign.resumeEnrollment` found [pendingEnrollmentIds], several pending
-  /// enrollments of [atSign] matching what it was given.
-  AtEnrollmentPendingException.several(this.atSign, this.pendingEnrollmentIds)
-      : super('$atSign holds several pending enrollments that match: '
-            '${pendingEnrollmentIds.join(', ')}. To resume one, name both the '
-            'app and the device');
+  /// [atSign] holds the several pending enrollments [pendingEnrollmentIds].
+  @Deprecated('Nothing throws this: an AtKeys store holds at most one pending '
+      'enrollment, and Atsign.resumeEnrollment returns it')
+  AtEnrollmentPendingException.several(String atSign, this.pendingEnrollmentIds,
+      {super.source})
+      : super(
+            '$atSign holds several pending enrollments: '
+            '${_quoted(pendingEnrollmentIds)}',
+            atSign: atSign,
+            cause: AtKeysUnusableCause.pendingEnrollment);
+
+  static String _quoted(List<String> ids) =>
+      ids.map((id) => '"${clipForMessage(id, quote: '"')}"').join(', ');
 }

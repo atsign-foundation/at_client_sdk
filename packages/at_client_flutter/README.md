@@ -44,8 +44,9 @@ example app. Read these rather than copying snippets from here:
   `AtClient` in hand. If you only read one file, read this one.
 - [`example/lib/apkam_example.dart`](example/lib/apkam_example.dart) —
   the approve/deny side of APKAM (e.g. a "manager" device approving a
-  new phone's enrollment request), with a simulated requester built on
-  `client.enrollments.otp()` and `Atsign.enroll`.
+  new phone's enrollment request), with a passcode from
+  `client.enrollments.otp()` that the new device quotes to request
+  enrollment.
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 
@@ -149,6 +150,7 @@ What a Flutter app should do:
    either way. An offline client still serves what it holds locally and reports
    on `client.connection.changes` when the atServer is reached; a refused one
    (revoked, an unapproved enrollment) is the state an app asks the user about.
+   Keys it cannot use fail at once, and the dialog says why.
 
 > **Note:** the activation has no cancellation token, so the 5-minute poll runs
 > to completion or timeout even if the user navigates away — a "Cancel" button

@@ -4,9 +4,8 @@ import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_auth/passkey.dart' show clipForMessage;
 import 'package:at_client/src/client/server_mutex.dart';
-import 'package:at_commons/at_commons.dart' show AtException;
+import 'package:at_commons/at_commons.dart' show AtException, clipForMessage;
 import 'package:at_commons/atsign.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 

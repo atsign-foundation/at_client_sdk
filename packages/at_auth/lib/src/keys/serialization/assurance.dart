@@ -103,7 +103,7 @@ class AtKeysAssurance {
         return candidate;
       }
     }
-    throw AtKeysValidationException('Unsupported value "$token" at $fieldName');
+    throw AtKeysValidationException('Unsupported value at $fieldName');
   }
 
   DateTime expectDateTime(Object? value, String fieldName) {
@@ -111,7 +111,7 @@ class AtKeysAssurance {
     try {
       return DateTime.parse(token);
     } on FormatException catch (e) {
-      throw AtKeysParseException('Malformed date at $fieldName: $e');
+      throw AtKeysParseException('Malformed date at $fieldName: ${e.message}');
     }
   }
 
@@ -171,10 +171,8 @@ class AtKeysAssurance {
       // open tokens and may contain '/' themselves, so concatenating them
       // aliases `x/y` + `z` with `x` + `y/z`.
       if (!types.add((material.role, material.algorithm))) {
-        throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one active '
-            '${material.role} key material for '
-            '${material.algorithm}');
+        throw AtKeysEnrollmentException('an enrollment holds more than one '
+            'active key material of one role and algorithm');
       }
     }
   }

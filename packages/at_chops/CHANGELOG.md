@@ -1,9 +1,11 @@
-## 3.8.0
+## 3.8.0-rc.1
 
 - feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
   derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
   (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's
-  "Persisting an ML-DSA-65 key".
+  "Persisting an ML-DSA-65 key". `MlDsa65Sizes.newSeed()` draws a fresh
+  seed and `MlDsa65Sizes.validateSeed` throws `ArgumentError` for one of the
+  wrong length.
 - feat: `AtSeededSignatureAlgorithm`, an `AtSignatureAlgorithm` that also has
   `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
   `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can

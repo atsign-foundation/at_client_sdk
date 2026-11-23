@@ -80,6 +80,11 @@ Onboarding happens **exactly once per atSign** and consists of:
 4. Writing the private halves to a local `.atKeys` file (for CLI apps)
    or to the device **keychain** (for Flutter apps).
 
+Before step 1 sends anything, activation reads the AtKeys store and, for a
+keyfile, checks that it can write there. Keys already in the store, keys it
+cannot read, or a keyfile it cannot write stop it with an exception that
+names the store.
+
 The result is a **master AtKeys** set. These keys:
 
 - Are the **root of trust** for the atSign — losing them is
@@ -405,7 +410,7 @@ final pending = await Atsign(atSign).enroll(
     namespaces: {'my_app': 'rw'}, keys: keys, preference: preference,
     lookUps: lookUps, secondaryAddressFinder: atDirectory);
 final client = await pending.client(preference,
-    storage: storage);                             // throws AtEnrollmentException on a denial
+    storage: storage);                             // throws AtEnrollmentDeniedException on a denial (4.1.0)
 ```
 
 **Approve, deny, revoke; passcodes**

@@ -419,7 +419,7 @@ final client = await Atsign('@alice').open(
 //         — onboard a new atSign
 //       Atsign(a).enroll(otp:, app:, device:, namespaces:, keys:, preference:, lookUps:,
 //         secondaryAddressFinder:) → PendingEnrollment; pending.client(preference, storage:)
-//       Atsign(a).resumeEnrollment(app:, device:, keys:, preference:, lookUps:,
+//       Atsign(a).resumeEnrollment(keys:, preference:, lookUps:,
 //         secondaryAddressFinder:) — after a restart
 ```
 
@@ -517,10 +517,13 @@ await client.connection.attempt();                  // try again now
   sent through `getRemoteSecondary()` that meets one throws it.
   The one refusal that **throws** (`AtOpenRefusedException`) is the first open
   of these keys on a device: nothing is held locally, so there is nothing to
-  serve. Keys holding only a pending enrollment throw
-  `AtEnrollmentPendingException` — call `resumeEnrollment`. Keys holding
-  neither, as a denial, a cancel or an expiry leaves them, throw
-  `AtNoCredentialException` at once — enroll again.
+  serve. Keys `open` cannot use throw `AtKeysUnusableException` before it
+  connects, on any device, its `cause` saying why: absent, unreadable,
+  holding no authentication keypair it can use, or for another atSign. Keys
+  holding only a pending enrollment throw its subclass
+  `AtEnrollmentPendingException` — call `resumeEnrollment`. Keys
+  holding neither, as a denial, a cancel or an expiry leaves them, throw its
+  subclass `AtNoCredentialException` — enroll again.
 - **`stopped`**: what `current` reads after `stop()`; `changes` is done.
 
 **Services — both belong to the client, start with it and stop with it:**
@@ -711,17 +714,20 @@ final AtClient atClient =
 - **`CLIBase` tells a refusal from an outage.** Opening the client, it
   throws `AtCredentialRefusedException` when the atServer refuses the keys,
   `SecondaryNotFoundException` when the atDirectory has no atServer for the
-  atSign, and `SecondaryServerConnectivityException` only when no atServer
+  Atsign, and `SecondaryServerConnectivityException` only when no atServer
   accepted or refused the keys: an outage, or an atServer that answers with
   a server error such as AT0011 or no challenge to sign. That is the one
   exception a retry loop around opening should catch. A keyfile holding only
   an enrollment request is resumed: `CLIBase` waits for its approval, as
-  at_activate does, and throws `AtEnrollmentDeniedException` when it is denied and
-  `AtEnrollmentExpiredException` when it expires, each an
-  `AtEnrollmentException`; both remove the request. A wait the atServer keeps answering with anything else, a server
-  error included, also ends in `AtEnrollmentException` and keeps the
-  request, and an atServer not reached ends it with the connection's own
-  failure.
+  at_activate does, saying that `at_activate cancel` gives the request up,
+  and throws `AtEnrollmentDeniedException` when it is denied and
+  `AtEnrollmentExpiredException` when it expires (both at_client 4.1.0; 4.0
+  throws a plain `AtEnrollmentException` for each), each an
+  `AtEnrollmentException`; both remove the request, unless the message says
+  its pending keys stay because the AtKeys store could not remove them. A
+  wait the atServer keeps answering with anything else, a server error
+  included, also ends in `AtEnrollmentException` and keeps the request, and
+  an atServer not reached ends it with the connection's own failure.
 - **Every process needs its own storage** (`CliKeys.storageFor(atSign,
   program:, path:)`, a `HiveAtClientStorage(atSign:, storagePath:)`, or
   `CLIBase`'s `-s` flag) — one store is held by one live client and a second

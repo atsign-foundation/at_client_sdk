@@ -381,7 +381,8 @@ List<CryptographicMaterial> parseAtKeysDocument(
     final keyId = assurance.expectNonEmptyString(
         entryJson['keyId'], '$entryPrefix.keyId');
     if (!seenKeyIds.add(keyId)) {
-      throw AtKeysValidationException('Duplicate atKeys keyId "$keyId"');
+      throw AtKeysValidationException(
+          'Duplicate atKeys keyId at $entryPrefix.keyId');
     }
     if (entryJson.containsKey('enrollmentId')) {
       throw AtKeysValidationException(
@@ -404,7 +405,7 @@ List<CryptographicMaterial> parseAtKeysDocument(
       );
       if (!seenRoles.add(material.role)) {
         throw AtKeysValidationException(
-            'Duplicate role "${material.role}" for keyId "$keyId"');
+            'Duplicate role at $entryPrefix.material[${part.key}].role');
       }
       materials.add(material);
     }

@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart' show NamespacePermission;
+import 'package:at_client/at_client.dart'
+    show NamespacePermission, clipForMessage;
 import 'package:flutter/material.dart';
 
 class NamespaceChip extends StatelessWidget {
@@ -24,7 +25,7 @@ class NamespaceChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           SelectableText(
-            permission.namespace,
+            clipForMessage(permission.namespace),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
