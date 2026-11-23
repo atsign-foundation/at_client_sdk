@@ -21,13 +21,13 @@ Feature: Each bridge release publishes one target's files and the manifest
     And the dart2js release also keeps at_client_web.js.sha256
 
   Scenario: Attestation covers the same files as the checksum file
-    Given the workflow attest steps
-    When each target's subject-path is read
-    Then there is one attest step per target
-    And each lists that target's assets, bridge-manifest.json and SHA256SUMS
+    Given the workflow attest step
+    When its subject-path is read
+    Then there is exactly one attest step, with subject-path bridge/*
+    And it runs after the step that proves bridge/ holds exactly the target's assets, bridge-manifest.json and SHA256SUMS
 
   Scenario: The release build compares its manifest with the committed one
     Given the workflow build step
     When the bridge is built for the target
     Then cmp compares build/bridge-manifest.json with the committed file after the build
-    And bridge-manifest.json is uploaded, attested and attached for both targets
+    And bridge-manifest.json is bundled, attested and attached for both targets
