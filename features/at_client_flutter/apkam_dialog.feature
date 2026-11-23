@@ -18,7 +18,8 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   request another wait cancels ends with its failure shown, since only the
   user's own confirmed Cancel ends a wait silently; and a dialog closes
   once, whichever of its wait's failure, a confirmed Cancel and the user's
-  leaving comes first.
+  leaving comes first; and a check of its AtKeys store that fails after the
+  user has left is logged, not shown.
   Replay: none arises; leaving and Cancel send nothing.
   DoS: no poll runs once the user has left.
   Forgery and impersonation: the dialogs resume only what the store they are
@@ -26,7 +27,9 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
   dialog adopts only a request in the store it is given, which only programs
   on this device write; the names it shows are the ones the request was
   filed under, with their control characters escaped and each clipped at
-  180 characters.
+  180 characters; a store it cannot use, one holding another Atsign's keys
+  included, is shown by its refusal's first line, and the passcode form
+  stays.
 
   Scenario: Leaving the waiting screen keeps the request
     Given the dialog waiting for approval
@@ -124,6 +127,27 @@ Feature: The SDK's activation dialogs keep a pending enrollment until the user a
     Given a dialog waiting on an enrollment whose id holds an ESC character
     When the user confirms Cancel and the pending keys are removed
     Then the message saying the request was abandoned shows the ESC escaped as \u001b
+
+  Scenario Outline: The enrollment dialog says so when it cannot use its AtKeys store
+    Given an AtKeys store for @alice that <holds>
+    When ApkamActivationDialog opens @alice
+    Then it shows "<message>", logs it at warning naming @alice, and keeps the passcode form
+
+    Examples:
+      | holds                        | message                                                                         |
+      | cannot be read               | The keys for @alice in the AtKeys store (<source>) could not be read: <reason>. |
+      | holds keys recorded for @bob | The keys in the AtKeys store (<source>) are for @bob, not @alice.               |
+
+  @race
+  Scenario: A check of the AtKeys store that fails after the user has left is logged, not shown
+    Given ApkamActivationDialog for @alice still checking its AtKeys store for a pending enrollment
+    When the user leaves the dialog and the check then fails
+    Then the failure is logged at warning naming @alice, and nothing is shown
+
+  Scenario: A defect in the enrollment dialog's check of its AtKeys store is logged and rethrown
+    Given AtsignFlows whose resumeEnrollment for @alice fails with a StateError
+    When ApkamActivationDialog opens @alice
+    Then the StateError is logged at severe naming @alice and reaches the app's uncaught-error handler, and the passcode form stays
 
   Scenario: PkamDialog resumes a pending keychain entry
     Given a keychain entry for an atSign holding only an enrollment awaiting approval
