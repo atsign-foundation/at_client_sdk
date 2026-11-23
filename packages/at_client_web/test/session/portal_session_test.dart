@@ -166,7 +166,7 @@ void main() {
       prefs.rootDomain = 'other.example';
       held.complete(false);
 
-      expect(await first, isA<PortalSessionOfflineException>());
+      expect(await first, isA<SessionOfflineException>());
       await expectLater(second, refusedNamingPrefs(),
           reason: 'prefs is checked when its open runs, not when it queues');
       final roots = {for (final r in wire.roots) r.rootDomain};
@@ -233,7 +233,7 @@ void main() {
       final proxy = Wire();
       wire.connectFails = true;
 
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(), throwsA(isA<SessionOfflineException>()));
 
       expect(wire.dials, greaterThan(0));
       expect(proxy.dials, 0, reason: 'there is no fallback transport to dial');
@@ -253,7 +253,7 @@ void main() {
     test('a refused PKAM rejects, registers no client, and a retry succeeds',
         () async {
       wire.pkamAccepted = false;
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(), throwsA(isA<SessionOfflineException>()));
       expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
 
       wire.pkamAccepted = true;
@@ -306,7 +306,7 @@ void main() {
       });
       final second = open();
 
-      expect(await first, isA<PortalSessionOfflineException>());
+      expect(await first, isA<SessionOfflineException>());
       final client = await second;
       expect(AtClientImpl.liveClientsFor(_atSign), [same(client)]);
     });
@@ -345,7 +345,7 @@ void main() {
 
       final outcomes = await Future.wait([first, second, third, fourth.future]);
 
-      expect(outcomes.first, isA<PortalSessionOfflineException>());
+      expect(outcomes.first, isA<SessionOfflineException>());
       expect(outcomes.whereType<AtClient>(), hasLength(1), reason: '$outcomes');
       expect(outcomes.whereType<StateError>(), hasLength(2));
       expect(AtClientImpl.liveClientsFor(_atSign), hasLength(1));
@@ -366,7 +366,7 @@ void main() {
         ..pkamAccepted = false
         ..stopThrows = true;
 
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(), throwsA(isA<SessionOfflineException>()));
     });
 
     test('a stop that throws is logged as a warning', () async {
@@ -378,7 +378,7 @@ void main() {
         ..pkamAccepted = false
         ..stopThrows = true;
 
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(), throwsA(isA<SessionOfflineException>()));
 
       expect(records.where((r) => r.startsWith('WARNING|portalSession|')),
           isNotEmpty);

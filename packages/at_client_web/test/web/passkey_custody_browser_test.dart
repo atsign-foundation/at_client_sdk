@@ -184,7 +184,7 @@ class _Session implements EnrollmentSession {
     if (server.clientsOffline) {
       // As the session opener does: stop the client, then throw.
       await client.stop();
-      throw PortalSessionOfflineException(
+      throw SessionOfflineException(
           _atSign, AtConnectionState.offline(AtConnectionCause.unreachable));
     }
     return client;
@@ -599,8 +599,8 @@ void main() {
     server.clientsOffline = true;
     await expectLater(
         device.onboard(),
-        throwsA(isA<PasskeyOnboardingIncompleteException>().having(
-            (e) => e.cause, 'cause', isA<PortalSessionOfflineException>())));
+        throwsA(isA<PasskeyOnboardingIncompleteException>()
+            .having((e) => e.cause, 'cause', isA<SessionOfflineException>())));
     final failed = device.gateway.lastSession!;
     expect(failed.closeCalls, 2,
         reason: 'the client the opener stopped closed the session once, and '

@@ -2,7 +2,7 @@ import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/at_error_code.dart';
+import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -12,8 +12,8 @@ void main() {
           '@alice', AtConnectionState.refused(AtConnectionCause.revoked)),
       'pkam_refused'
     ),
-    'PortalSessionOfflineException': (
-      PortalSessionOfflineException(
+    'SessionOfflineException': (
+      SessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       'offline'
     ),
@@ -49,8 +49,11 @@ void main() {
       'unsupported'
     ),
     'UnsupportedError': (UnsupportedError('no locks'), 'unsupported'),
-    'ManageAccessException': (ManageAccessException(), 'unsupported'),
-    'BadKeyException': (BadKeyException('sharedWith'), 'bad_key'),
+    'ManageAccessRequiredException': (
+      ManageAccessRequiredException(),
+      'unsupported'
+    ),
+    'InvalidKeyException': (InvalidKeyException('sharedWith'), 'bad_key'),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
     'CollectionException carries its own code': (
@@ -104,7 +107,7 @@ void main() {
   };
 
   for (final MapEntry(key: name, value: (error, code)) in cases.entries) {
-    test('$name maps to $code', () => expect(atErrorCode(error), code));
+    test('$name maps to $code', () => expect(errorCodeOf(error), code));
   }
 
   test('every code the bridge can reject with is produced by one mapping', () {
@@ -138,7 +141,7 @@ void main() {
       StoppedException('the session is closed'),
       StoppedException('wait cancelled on client 0x7f'),
     ]) {
-      expect(atErrorCode(error), 'closed');
+      expect(errorCodeOf(error), 'closed');
       expect(atErrorMessage(error), 'the session is closed');
     }
     expect(atErrorMessage(StoppedException('x')), isNot(contains('Exception')));
@@ -157,7 +160,7 @@ void main() {
         ArgumentError(text),
         text
       ]) {
-        expect(atErrorCode(error), 'internal', reason: text);
+        expect(errorCodeOf(error), 'internal', reason: text);
         expect(atErrorMessage(error), 'internal error', reason: text);
       }
     }
@@ -170,7 +173,7 @@ void main() {
       ArgumentError('namespace must be non-empty'),
       IllegalArgumentException('namespace must be non-empty'),
     ]) {
-      expect(atErrorCode(error), 'internal');
+      expect(errorCodeOf(error), 'internal');
       expect(atErrorMessage(error), 'internal error');
     }
   });
@@ -190,7 +193,7 @@ void main() {
 
   test('the in-flight rejection names no atSign and no enrollment id', () {
     final error = EnrollmentInFlightException();
-    expect(atErrorCode(error), 'enrollment_in_flight');
+    expect(errorCodeOf(error), 'enrollment_in_flight');
     expect(atErrorMessage(error),
         'a decision for this request is already in flight');
     expect(error.toString(), isNot(contains('@')));
@@ -205,7 +208,7 @@ void main() {
       caught = e;
     }
     expect(caught, isA<EnrollmentInFlightException>());
-    expect(atErrorCode(caught), 'enrollment_in_flight');
+    expect(errorCodeOf(caught), 'enrollment_in_flight');
   });
 
   test(
@@ -226,7 +229,7 @@ void main() {
     };
     expect(expected.keys.toSet(), CollectionFailure.values.toSet());
     for (final MapEntry(:key, :value) in expected.entries) {
-      expect(atErrorCode(CollectionException(key, 'm')), value);
+      expect(errorCodeOf(CollectionException(key, 'm')), value);
       expect(collectionErrorCode(key), value);
     }
     expect(expected.values.toSet(), hasLength(11));

@@ -17,7 +17,7 @@ import 'session_queue.dart';
 /// The client has in-memory storage, reads and writes go to the atServer
 /// ([RemoteLocalPref.remoteOnly]), the monitor is off, and every other
 /// connection runs over [transport]. It throws as `Atsign.open` does, and
-/// throws a [PortalSessionOfflineException], after stopping the client, when
+/// throws a [SessionOfflineException], after stopping the client, when
 /// it did not come online. Opens for one atSign as one enrollment run one at
 /// a time, with those of `portalSession`.
 Future<AtClient> openSession({
@@ -74,7 +74,7 @@ Future<AtClient> openOnline({
   try {
     final state = client.connection.current;
     if (!state.isOnline) {
-      throw PortalSessionOfflineException(atSign, state);
+      throw SessionOfflineException(atSign, state);
     }
     return client;
   } catch (_) {

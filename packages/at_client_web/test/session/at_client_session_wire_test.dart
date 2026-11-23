@@ -5,16 +5,16 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart';
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/at_error_code.dart';
-import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/js/error_codes.dart';
+import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:test/test.dart';
 
-import '../session/wire_fakes.dart';
+import 'wire_fakes.dart';
 import '../test_utils.dart';
 
 void main() {
   late Wire wire;
-  late AtClientJsSession session;
+  late AtClientSession session;
 
   setUp(() async {
     wire = Wire();
@@ -27,7 +27,7 @@ void main() {
           finder: FixedSecondaryAddressFinder('atserver.test', 1),
           root: AtRootDomain.atsignDomain
         ));
-    session = AtClientJsSession(client, namespace: 'wavi');
+    session = AtClientSession(client, namespace: 'wavi');
   });
 
   tearDown(() async {
@@ -111,7 +111,7 @@ void main() {
 
           final error = await thrownBy(session.otp);
 
-          expect(atErrorCode(error), 'unsupported');
+          expect(errorCodeOf(error), 'unsupported');
           expect(sent('otp:get'), isFalse);
         });
       }
@@ -123,7 +123,7 @@ void main() {
 
         final error = await thrownBy(session.otp);
 
-        expect(atErrorCode(error), 'unsupported');
+        expect(errorCodeOf(error), 'unsupported');
       });
     });
 
@@ -162,7 +162,7 @@ void main() {
 
           final error = await thrownBy(session.pendingEnrollments);
 
-          expect(atErrorCode(error), 'unsupported');
+          expect(errorCodeOf(error), 'unsupported');
           expect(
               wire.commands.any(
                   (c) => c.startsWith('enroll:list') && c.contains('pending')),
@@ -177,7 +177,7 @@ void main() {
 
         final error = await thrownBy(session.pendingEnrollments);
 
-        expect(atErrorCode(error), 'unsupported');
+        expect(errorCodeOf(error), 'unsupported');
       });
     });
 
@@ -199,7 +199,7 @@ void main() {
         wire.commands.clear();
         final error = await thrownBy(() => session.deny('gone'));
 
-        expect(atErrorCode(error), 'enrollment_denied');
+        expect(errorCodeOf(error), 'enrollment_denied');
         expect(sent('enroll:deny'), isFalse);
       });
 
@@ -209,7 +209,7 @@ void main() {
 
           final error = await thrownBy(() => session.deny('e1'));
 
-          expect(atErrorCode(error), 'unsupported');
+          expect(errorCodeOf(error), 'unsupported');
           expect(sent('enroll:deny'), isFalse);
         });
       }
@@ -221,7 +221,7 @@ void main() {
 
         final error = await thrownBy(() => session.deny('e1'));
 
-        expect(atErrorCode(error), 'unsupported');
+        expect(errorCodeOf(error), 'unsupported');
       });
     });
 
@@ -248,7 +248,7 @@ void main() {
         AtClientImpl.atClientInstanceMap.clear();
         AtClientManager.getInstance().reset();
         wire = Wire();
-        session = AtClientJsSession(
+        session = AtClientSession(
             await portalSession(
                 atSign: '@alice',
                 app: 'wavi',
@@ -325,7 +325,7 @@ void main() {
 
         final error = await thrownBy(() => session.approve('gone'));
 
-        expect(atErrorCode(error), 'enrollment_denied');
+        expect(errorCodeOf(error), 'enrollment_denied');
         expect(sent('enroll:approve'), isFalse);
       });
 
@@ -335,7 +335,7 @@ void main() {
 
           final error = await thrownBy(() => session.approve('e1'));
 
-          expect(atErrorCode(error), 'unsupported');
+          expect(errorCodeOf(error), 'unsupported');
           expect(sent('enroll:approve'), isFalse);
         });
       }
@@ -347,7 +347,7 @@ void main() {
 
         final error = await thrownBy(() => session.approve('e1'));
 
-        expect(atErrorCode(error), 'unsupported');
+        expect(errorCodeOf(error), 'unsupported');
       });
 
       test(
@@ -374,7 +374,7 @@ void main() {
         final secondError = await thrownBy(() => session.deny('e1'));
         await first;
 
-        expect(atErrorCode(secondError), 'enrollment_in_flight');
+        expect(errorCodeOf(secondError), 'enrollment_in_flight');
         expect(wire.commands.where((c) => c.startsWith('enroll:approve')),
             hasLength(1));
         expect(
@@ -427,7 +427,7 @@ void main() {
 
         for (final decide in [session.approve, session.deny]) {
           final error = await thrownBy(() => decide('e1'));
-          expect(atErrorCode(error), 'enrollment_denied');
+          expect(errorCodeOf(error), 'enrollment_denied');
         }
 
         expect(
@@ -454,7 +454,7 @@ void main() {
         serveDecisions({'e1'}, failing: {'e1'});
 
         final failure = await thrownBy(() => session.approve('e1'));
-        expect(atErrorCode(failure), isNot('enrollment_in_flight'));
+        expect(errorCodeOf(failure), isNot('enrollment_in_flight'));
         await session.approve('e1');
 
         expect(approvals(), 2);
@@ -486,7 +486,7 @@ void main() {
         await first;
 
         expect(caught, isA<EnrollmentInFlightException>());
-        expect(atErrorCode(caught!), 'enrollment_in_flight');
+        expect(errorCodeOf(caught!), 'enrollment_in_flight');
         expect(listsAfter, lists);
       });
 
@@ -521,7 +521,7 @@ void main() {
         final error = await thrownBy(() => session.approve('e1'));
 
         expect(error, isA<EnrollmentConveyanceException>());
-        expect(atErrorCode(error), 'enrollment_conveyance_failed');
+        expect(errorCodeOf(error), 'enrollment_conveyance_failed');
       });
     });
   });

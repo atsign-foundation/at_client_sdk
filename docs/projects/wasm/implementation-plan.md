@@ -1179,7 +1179,7 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 (`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
 
 - **J1 — The Dart-side collections adapter.**
-  `packages/at_client_web/lib/src/collections/js_collections_adapter.dart` (pure Dart,
+  `packages/at_client_web/lib/src/collections/at_collection_adapter.dart` (pure Dart,
   zero interop imports, exported from no library under `lib/`), specified in
   `js-api.md` §5.5. It only translates plain values onto `AtCollection` and back: items
   addressed by `{id, owner}`; writes re-read first and share add-only through

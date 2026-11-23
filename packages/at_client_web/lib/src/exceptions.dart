@@ -3,7 +3,7 @@ import 'package:at_client/at_client.dart';
 // Every exception this package throws is declared here and is an
 // [AtException], so a Dart caller can catch the family with one `on`. The
 // file reaches no web-only API. Only the JS bridge turns one into an error
-// code or a message for JS (lib/src/js/at_error_code.dart).
+// code or a message for JS (lib/src/js/error_codes.dart).
 
 /// Thrown when the caller passed something the call cannot use: a missing or
 /// mistyped option, a value that does not parse, a callback that is not a
@@ -31,25 +31,26 @@ class SessionClosedException extends AtException {
   String toString() => 'SessionClosedException: $message';
 }
 
-/// Thrown when a `JsKey` cannot do what was asked of it, such as a notify
+/// Thrown when a `NotifyKey` cannot do what was asked of it, such as a notify
 /// with no `sharedWith`.
-class BadKeyException extends AtException {
-  BadKeyException(this.reason) : super(reason);
+class InvalidKeyException extends AtException {
+  InvalidKeyException(this.reason) : super(reason);
 
   final String reason;
 
   @override
-  String toString() => 'BadKeyException: $reason';
+  String toString() => 'InvalidKeyException: $reason';
 }
 
 /// Thrown by the pairing calls of a session that holds no `__manage`, which
 /// only the atServer's roster-managing enrollments do.
-class ManageAccessException extends AtException {
-  ManageAccessException() : super('this session cannot manage enrollments');
+class ManageAccessRequiredException extends AtException {
+  ManageAccessRequiredException()
+      : super('this session cannot manage enrollments');
 
   @override
   String toString() =>
-      'ManageAccessException: this session cannot manage enrollments';
+      'ManageAccessRequiredException: this session cannot manage enrollments';
 }
 
 /// Thrown by an approve or deny of an enrollment whose first decision has
@@ -64,17 +65,17 @@ class EnrollmentInFlightException extends AtEnrollmentException {
 }
 
 /// Thrown by `portalSession` when the client did not come online.
-class PortalSessionOfflineException extends AtException {
+class SessionOfflineException extends AtException {
   final String atSign;
 
   /// The connection state the open ended in.
   final AtConnectionState state;
 
-  PortalSessionOfflineException(this.atSign, this.state)
+  SessionOfflineException(this.atSign, this.state)
       : super('$atSign did not come online (${state.cause?.name})');
 
   @override
-  String toString() => 'PortalSessionOfflineException: $message';
+  String toString() => 'SessionOfflineException: $message';
 }
 
 /// Thrown by `portalSession` for keys that carry ML-DSA-65 signing or

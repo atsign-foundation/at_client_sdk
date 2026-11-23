@@ -5,9 +5,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/collections/at_collection_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/at_error_code.dart';
+import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -51,7 +51,7 @@ final class _Collect implements LoggingHandler {
 Matcher _rejectsWith(CollectionFailure kind,
         {String? id, String? owner, String? causeType}) =>
     throwsA(isA<CollectionException>()
-        .having(atErrorCode, 'code', collectionErrorCode(kind))
+        .having(errorCodeOf, 'code', collectionErrorCode(kind))
         .having((e) => e.id, 'id', id ?? anything)
         .having((e) => e.owner, 'owner', owner ?? anything)
         .having((e) => e.causeType, 'kind', causeType ?? anything));
@@ -71,7 +71,7 @@ void main() {
         ]);
     expect(error, isA<AtException>());
     expect(error.kind, CollectionFailure.partialFailure);
-    expect(atErrorCode(error), 'COLLECTION_PARTIAL_FAILURE');
+    expect(errorCodeOf(error), 'COLLECTION_PARTIAL_FAILURE');
     expect(error.message, 'boom');
     expect(error.id, 'i');
     expect(error.owner, '@alice');
@@ -100,20 +100,21 @@ void main() {
     await alice.dispose();
   });
 
-  Future<JsCollectionsAdapter> open({String type = 'Todo'}) =>
-      JsCollectionsAdapter.open(alice.mock,
+  Future<AtCollectionAdapter> open({String type = 'Todo'}) =>
+      AtCollectionAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
-  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
+  ItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  ItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
-  List<String> ids(List<JsItem> items) =>
+  List<String> ids(List<Item> items) =>
       [for (final item in items) item['id'] as String];
 
-  Future<List<JsItem>> itemsOf(Future<JsListing> listing) async =>
+  Future<List<Item>> itemsOf(Future<ItemListing> listing) async =>
       (await listing).items;
 
-  Future<List<JsUnreadable>> unreadableOf(Future<JsListing> listing) async =>
+  Future<List<UnreadableItem>> unreadableOf(
+          Future<ItemListing> listing) async =>
       (await listing).unreadable;
 
   /// @bob writes [id], shared with @alice, and makes @alice's copy of it
@@ -178,7 +179,7 @@ void main() {
       await expectLater(
           todos.get(mine('a:b')),
           throwsA(isA<CollectionException>()
-              .having(atErrorCode, 'code', 'COLLECTION_INVALID_ARGUMENT')
+              .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
               .having((e) => e.causeType, 'kind', 'ArgumentError')
               .having((e) => e.message, 'message', isNot('invalid argument'))
               .having((e) => e.message.length, 'bounded', lessThan(200))));
@@ -302,13 +303,13 @@ void main() {
         () async {
       const hours5 = Duration(hours: 5);
       for (final source in ['data', 'notifs', 'both']) {
-        await JsCollectionsAdapter.open(alice.mock,
+        await AtCollectionAdapter.open(alice.mock,
             namespace: _ns,
             type: 'Todo',
             expirationMs: hours5.inMilliseconds,
             eventSource: source);
       }
-      await JsCollectionsAdapter.open(alice.mock,
+      await AtCollectionAdapter.open(alice.mock,
           namespace: 'notes.demo',
           type: 'Note',
           expirationMs: _day.inMilliseconds);
@@ -338,7 +339,7 @@ void main() {
     test('An unknown eventSource rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       await expectLater(
-        JsCollectionsAdapter.open(alice.mock,
+        AtCollectionAdapter.open(alice.mock,
             namespace: _ns,
             type: 'Todo',
             expirationMs: _day.inMilliseconds,
@@ -356,7 +357,7 @@ void main() {
         () async {
       for (final ms in [0, -1]) {
         await expectLater(
-          JsCollectionsAdapter.open(alice.mock,
+          AtCollectionAdapter.open(alice.mock,
               namespace: _ns, type: 'Todo', expirationMs: ms),
           _rejectsWith(CollectionFailure.invalidArgument),
         );
@@ -501,7 +502,7 @@ void main() {
       await expectLater(
         todos.get(bobs('b1')),
         throwsA(isA<CollectionException>()
-            .having(atErrorCode, 'code',
+            .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.unreadable))
             .having((e) => e.id, 'id', 'b1')
             .having((e) => e.owner, 'owner', '@bob')
@@ -917,7 +918,7 @@ void main() {
       await expectLater(
         todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
         throwsA(isA<CollectionException>()
-            .having(atErrorCode, 'code',
+            .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.partialFailure))
             .having((e) => e.failures, 'failures', [
           {'op': 'put', 'recipient': '@bob', 'kind': 'AtClientException'}
@@ -937,7 +938,7 @@ void main() {
           .catchError((Object e) => e as CollectionException);
 
       expect(error, isNotNull);
-      expect(atErrorCode(error!), 'COLLECTION_PARTIAL_FAILURE');
+      expect(errorCodeOf(error!), 'COLLECTION_PARTIAL_FAILURE');
       expect(error.id, isNotNull);
       expect(error.owner, '@alice');
       expect(await todos.get(mine(error.id!)), isNotNull);
@@ -1072,7 +1073,7 @@ void main() {
       when(() => mockCollection.atSign).thenReturn('@alice'.toAtsign());
       when(() => mockCollection.getOrNull(any(), any()))
           .thenThrow(StateError('secret internal details'));
-      final wrapped = JsCollectionsAdapter(mockCollection);
+      final wrapped = AtCollectionAdapter(mockCollection);
       await expectLater(
           wrapped.get(mine('I1')),
           _rejectsWith(CollectionFailure.failed,
@@ -1117,7 +1118,7 @@ void main() {
         return controller.stream;
       });
 
-      final listing = await JsCollectionsAdapter(mockCollection).list();
+      final listing = await AtCollectionAdapter(mockCollection).list();
       expect(listing.items, isEmpty);
       expect(listing.unreadable, isEmpty);
       expect(records.where((r) => r.startsWith('WARNING|')), hasLength(2));
@@ -1130,7 +1131,7 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('query', () {
-    Future<JsCollectionsAdapter> seeded() async {
+    Future<AtCollectionAdapter> seeded() async {
       final todos = await open();
       await todos.create({
         'done': false,
@@ -1146,8 +1147,8 @@ void main() {
       return todos;
     }
 
-    Future<Set<String>> where(JsCollectionsAdapter todos, String path,
-            String op, Object? value) async =>
+    Future<Set<String>> where(AtCollectionAdapter todos, String path, String op,
+            Object? value) async =>
         ids(await itemsOf(todos.query([(path: path, op: op, value: value)])))
             .toSet();
 
@@ -1201,7 +1202,7 @@ void main() {
         () async {
       final todos = await seeded();
       Matcher naming(String text) => throwsA(isA<CollectionException>()
-          .having(atErrorCode, 'code',
+          .having(errorCodeOf, 'code',
               collectionErrorCode(CollectionFailure.invalidArgument))
           .having((e) => e.message, 'message', contains(text)));
 
@@ -1224,7 +1225,7 @@ void main() {
       await expectLater(
         todos.query([(path: 'x', op: longToken, value: 1)]),
         throwsA(isA<CollectionException>()
-            .having(atErrorCode, 'code',
+            .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.invalidArgument))
             .having((e) => e.message.length, 'bounded length', lessThan(120))
             .having((e) => e.message, 'truncated', contains('...'))),
@@ -1278,7 +1279,7 @@ void main() {
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 't1');
-      final events = <JsEvent>[];
+      final events = <CollectionEvent>[];
       final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1304,7 +1305,7 @@ void main() {
         () async {
       await bobSharesUnreadable('b1');
       final todos = await open();
-      final events = <JsEvent>[];
+      final events = <CollectionEvent>[];
       final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1328,7 +1329,7 @@ void main() {
         () async {
       await bobShares('deep', _nested(65));
       final todos = await open();
-      final events = <JsEvent>[];
+      final events = <CollectionEvent>[];
       final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1348,7 +1349,7 @@ void main() {
       final todos = await open();
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
-      final events = <JsEvent>[];
+      final events = <CollectionEvent>[];
       final errors = <CollectionException>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1372,13 +1373,13 @@ void main() {
 
     group('with test-controlled events', () {
       late StreamController<CEvent> upstream;
-      late JsCollectionsAdapter todos;
+      late AtCollectionAdapter todos;
 
       setUp(() {
         upstream = StreamController<CEvent>.broadcast();
         final collection = MockAtCollection();
         when(collection.watch).thenAnswer((_) => upstream.stream);
-        todos = JsCollectionsAdapter(collection);
+        todos = AtCollectionAdapter(collection);
       });
 
       tearDown(() => upstream.close());
@@ -1390,7 +1391,7 @@ void main() {
         final bob = '@bob'.toAtsign();
         final at = DateTime.utc(2030, 1, 2);
         final ancestry = [CAncestor(id: 'p1', subName: 'notes', owner: bob)];
-        final events = <JsEvent>[];
+        final events = <CollectionEvent>[];
         final errors = <CollectionException>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
@@ -1465,7 +1466,7 @@ void main() {
       test(
           'A stream error reaches onError as a collection error and later events still arrive',
           () async {
-        final events = <JsEvent>[];
+        final events = <CollectionEvent>[];
         final errors = <CollectionException>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);

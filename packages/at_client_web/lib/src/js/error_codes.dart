@@ -16,11 +16,11 @@ const _maxMessageLength = 128;
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
 /// `internal` for anything else.
-String atErrorCode(Object error) => switch (error) {
+String errorCodeOf(Object error) => switch (error) {
       InvalidArgumentException() => 'invalid_argument',
       CollectionException(:final kind) => collectionErrorCode(kind),
       AtOpenRefusedException() => 'pkam_refused',
-      PortalSessionOfflineException() => 'offline',
+      SessionOfflineException() => 'offline',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       EnrollmentInFlightException() => 'enrollment_in_flight',
@@ -28,9 +28,9 @@ String atErrorCode(Object error) => switch (error) {
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
       UnsupportedError() ||
-      ManageAccessException() =>
+      ManageAccessRequiredException() =>
         'unsupported',
-      BadKeyException() ||
+      InvalidKeyException() ||
       AtNoCredentialException() ||
       InvalidAtSignException() =>
         'bad_key',
@@ -60,7 +60,7 @@ String atErrorMessage(Object error) => switch (error) {
       CollectionException(:final message) => message,
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
-      PortalSessionOfflineException(:final state) =>
+      SessionOfflineException(:final state) =>
         'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
       AtEnrollmentPendingException() =>
         'onboarding is incomplete: no usable credential',
@@ -73,10 +73,11 @@ String atErrorMessage(Object error) => switch (error) {
       SessionClosedException() || StoppedException() => _closedMessage,
       UnsupportedKeyMaterialException() =>
         'the keys carry unsupported cryptographic material',
-      ManageAccessException() => 'this session cannot manage enrollments',
+      ManageAccessRequiredException() =>
+        'this session cannot manage enrollments',
       UnsupportedError(:final message) =>
         singleLine(message ?? 'unsupported operation'),
-      BadKeyException(:final reason) => reason,
+      InvalidKeyException(:final reason) => reason,
       AtNoCredentialException() => 'keys hold no usable credential',
       InvalidAtSignException() => 'atSign is not valid',
       _ => 'internal error',

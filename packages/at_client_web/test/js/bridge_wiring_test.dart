@@ -10,9 +10,9 @@ import 'package:at_chops/at_chops.dart' show AESKey, RsaKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart';
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/at_error_code.dart';
+import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
-import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_opener.dart';
 import 'package:test/test.dart';
 
@@ -89,7 +89,7 @@ void main() {
         }
         return null;
       };
-    bridge = createJSInteropWrapper(AtClientWebBridge(
+    bridge = createJSInteropWrapper(BridgeEntry(
       isSecureContext: () => true,
       open: (o) async {
         final keys = (o as KeysSessionOptions).keys;
@@ -109,7 +109,7 @@ void main() {
             ..rootPort = root.rootPort
             ..monitorAutoStart = false,
         );
-        return AtClientJsSession(client, namespace: o.namespace);
+        return AtClientSession(client, namespace: o.namespace);
       },
     ));
   });
@@ -123,8 +123,7 @@ void main() {
     AtClientManager.getInstance().reset();
   });
 
-  test(
-      'AtClientWebBridge -> AtClientJsSession -> JsCollectionsAdapter end-to-end',
+  test('BridgeEntry -> AtClientSession -> AtCollectionAdapter end-to-end',
       () async {
     // 1. Credential-less keys fail with bad_key.
     final badKeys = await _rejected(_call(bridge, 'create', [

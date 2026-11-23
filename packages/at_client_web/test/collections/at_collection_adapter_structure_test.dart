@@ -55,7 +55,7 @@ void main() {
   group('structure', () {
     test('The adapter is not exported and reaches no web-only API', () async {
       final adapter = await Isolate.resolvePackageUri(Uri.parse(
-          'package:at_client_web/src/collections/js_collections_adapter.dart'));
+          'package:at_client_web/src/collections/at_collection_adapter.dart'));
       expect(adapter, isNotNull);
       final libDir = Directory.fromUri(adapter!.resolve('../../'));
 
@@ -146,7 +146,7 @@ void main() {
 
     test('The adapter names error kinds without runtimeType', () async {
       final adapter = await Isolate.resolvePackageUri(Uri.parse(
-          'package:at_client_web/src/collections/js_collections_adapter.dart'));
+          'package:at_client_web/src/collections/at_collection_adapter.dart'));
       expect(File.fromUri(adapter!).readAsStringSync(),
           isNot(contains('runtimeType')));
     });

@@ -11,10 +11,7 @@ import 'package:at_client_web/src/exceptions.dart';
 import 'package:test/test.dart';
 
 const _exceptionsFile = 'lib/src/exceptions.dart';
-const _mappingFiles = {
-  'lib/src/js/bridge.dart',
-  'lib/src/js/at_error_code.dart'
-};
+const _mappingFiles = {'lib/src/js/bridge.dart', 'lib/src/js/error_codes.dart'};
 
 List<File> _libFiles() => [
       for (final e in Directory('lib').listSync(recursive: true))
@@ -70,11 +67,11 @@ void main() {
   test('every exception the package declares is an AtException', () {
     final declared = <Object>[
       InvalidArgumentException('x'),
-      BadKeyException('sharedWith'),
-      ManageAccessException(),
+      InvalidKeyException('sharedWith'),
+      ManageAccessRequiredException(),
       EnrollmentInFlightException(),
       SessionClosedException(),
-      PortalSessionOfflineException(
+      SessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       UnsupportedKeyMaterialException('@alice'),
       SetupLockTimeoutException('lock'),
@@ -126,7 +123,7 @@ void main() {
   test('the barrels export every exception they exported before', () {
     final base = File('lib/at_client_web.dart').readAsStringSync();
     for (final name in [
-      'PortalSessionOfflineException',
+      'SessionOfflineException',
       'UnsupportedKeyMaterialException'
     ]) {
       expect(base, contains(name));
@@ -150,7 +147,7 @@ void main() {
       expect(browser, contains(name));
     }
     // Both names resolve through the base barrel alone.
-    expect(web.PortalSessionOfflineException, isNotNull);
+    expect(web.SessionOfflineException, isNotNull);
     expect(web.UnsupportedKeyMaterialException, isNotNull);
   });
 
@@ -168,7 +165,7 @@ void main() {
       if (path.startsWith('lib/src/collections/') ||
           path.startsWith('lib/src/session/')) {
         expect(source, isNot(contains('js/bridge.dart')), reason: path);
-        expect(source, isNot(contains('at_error_code.dart')), reason: path);
+        expect(source, isNot(contains('error_codes.dart')), reason: path);
       }
     }
   });

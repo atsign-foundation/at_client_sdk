@@ -7,8 +7,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/passkey/at_server_at_keys_io.dart';
 import 'package:at_client/src/passkey/enrollment_document_store.dart';
 import 'package:at_client/src/passkey/enrollment_gateway.dart';
-import 'package:at_client_web/at_client_web.dart'
-    show PortalSessionOfflineException;
+import 'package:at_client_web/at_client_web.dart' show SessionOfflineException;
 import 'package:at_client_web/src/session/session_open.dart';
 import 'package:test/test.dart';
 
@@ -180,8 +179,7 @@ void main() {
         ..pkamAccepted = false;
       final store = newStore();
 
-      await expectLater(
-          open(store), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(store), throwsA(isA<SessionOfflineException>()));
 
       expect(AtClientImpl.holdsLiveClient(_atSign), isFalse);
       await expectStillOpen(store);

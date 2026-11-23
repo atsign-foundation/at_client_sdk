@@ -7,30 +7,29 @@ import 'package:at_client/at_client.dart'
     show AtRootDomain, AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
-import '../collections/js_collections_adapter.dart';
+import '../collections/at_collection_adapter.dart';
 import '../exceptions.dart';
 import '../session/session_opener.dart';
 import '../session/web_session_openers.dart';
-import 'at_error_code.dart';
-import 'js_session.dart';
+import 'error_codes.dart';
+import '../session/at_client_session.dart';
 
 /// Opens the session of a caller's [SessionOptions].
-typedef OpenJsSession = Future<JsSession> Function(SessionOptions options);
+typedef OpenJsSession = Future<Session> Function(SessionOptions options);
 
-final _logger = AtSignLogger('AtClientWebBridge');
+final _logger = AtSignLogger('BridgeEntry');
 
 /// The browser's [OpenJsSession]: opens through [webSessionOpener] and wraps
 /// the client; a failure to wrap stops what was opened.
-Future<JsSession> _openSession(SessionOptions options) =>
-    openWrapped<JsSession>(
-        _opener,
-        options,
-        (opened) => AtClientJsSession(opened.client,
-            namespace: options.namespace,
-            isNavigatorOnline: () => web.window.navigator.onLine,
-            networkChanges: _networkChanges(),
-            warn: _logger.warning,
-            stop: opened.stop));
+Future<Session> _openSession(SessionOptions options) => openWrapped<Session>(
+    _opener,
+    options,
+    (opened) => AtClientSession(opened.client,
+        namespace: options.namespace,
+        isNavigatorOnline: () => web.window.navigator.onLine,
+        networkChanges: _networkChanges(),
+        warn: _logger.warning,
+        stop: opened.stop));
 
 final SessionOpener _opener = webSessionOpener();
 
@@ -60,15 +59,15 @@ AtRootDomain parseRootDomain(String value) {
   try {
     return AtRootDomain.parse(value);
   } on Object {
-    throw _expected('rootDomain', 'host or host:port');
+    throw _invalidArgument('rootDomain', 'host or host:port');
   }
 }
 
 /// A rejection reason: a plain object with `code` and `message`, never an
 /// `Error`; a collection failure adds `id`, `owner`, `kind` and `failures`
 /// where it has them, and the rejection of a bad address owner adds `id`.
-JSObject _rejection(Object error) {
-  final code = atErrorCode(error);
+JSObject _toRejection(Object error) {
+  final code = errorCodeOf(error);
   final reason = JSObject()..['code'] = code.toJS;
   reason['message'] = atErrorMessage(error).toJS;
   switch (error) {
@@ -77,7 +76,7 @@ JSObject _rejection(Object error) {
       if (error.owner case final owner?) reason['owner'] = owner.toJS;
       if (error.causeType case final kind?) reason['kind'] = kind.toJS;
       if (error.failures.isNotEmpty) {
-        reason['failures'] = _jsValue(error.failures);
+        reason['failures'] = _toJs(error.failures);
       }
     case InvalidArgumentException(:final id?):
       reason['id'] = id.toJS;
@@ -86,21 +85,21 @@ JSObject _rejection(Object error) {
   return reason;
 }
 
-/// A promise of [body]'s result that rejects with a [_rejection] of whatever
+/// A promise of [body]'s result that rejects with a [_toRejection] of whatever
 /// [body] throws.
 JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
     JSPromise<T>((JSFunction resolve, JSFunction reject) {
       Future<T>.sync(body).then((value) => resolve.callAsFunction(null, value),
           onError: (Object error) =>
-              reject.callAsFunction(null, _rejection(error)));
+              reject.callAsFunction(null, _toRejection(error)));
     }.toJS);
 
 /// An argument error that names the parameter and the type it expects, never
 /// the value received.
-InvalidArgumentException _expected(String name, String type) =>
+InvalidArgumentException _invalidArgument(String name, String type) =>
     InvalidArgumentException('$name must be $type');
 
-InvalidArgumentException _required(String name) =>
+InvalidArgumentException _missingArgument(String name) =>
     InvalidArgumentException('$name must not be null');
 
 final JSObject _objectClass = globalContext['Object']! as JSObject;
@@ -128,12 +127,12 @@ bool _isPlainObject(JSObject object) {
 
 String? _optionalString(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return null;
-  if (!value.isA<JSString>()) throw _expected(name, 'a string');
+  if (!value.isA<JSString>()) throw _invalidArgument(name, 'a string');
   return (value as JSString).toDart;
 }
 
 String _string(JSAny? value, String name) =>
-    _optionalString(value, name) ?? (throw _required(name));
+    _optionalString(value, name) ?? (throw _missingArgument(name));
 
 String? _field(JSObject object, String name) =>
     _optionalString(_own(object, name), name);
@@ -141,7 +140,7 @@ String? _field(JSObject object, String name) =>
 bool _flag(JSObject object, String name) {
   final value = _own(object, name);
   if (value == null || value.isUndefinedOrNull) return false;
-  if (!value.isA<JSBoolean>()) throw _expected(name, 'a boolean');
+  if (!value.isA<JSBoolean>()) throw _invalidArgument(name, 'a boolean');
   return (value as JSBoolean).toDart;
 }
 
@@ -151,7 +150,7 @@ JSObject _object(JSAny? value, String name) {
       !value.isA<JSObject>() ||
       value.isA<JSFunction>() ||
       !_isPlainObject(value as JSObject)) {
-    throw _expected(name, 'an object');
+    throw _invalidArgument(name, 'an object');
   }
   return value;
 }
@@ -162,22 +161,24 @@ JSObject? _optionalObject(JSAny? value, String name) =>
 
 JSFunction? _optionalFunction(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return null;
-  if (!value.isA<JSFunction>()) throw _expected(name, 'a function');
+  if (!value.isA<JSFunction>()) throw _invalidArgument(name, 'a function');
   return value as JSFunction;
 }
 
 JSFunction _function(JSAny? value, String name) =>
-    _optionalFunction(value, name) ?? (throw _required(name));
+    _optionalFunction(value, name) ?? (throw _missingArgument(name));
 
 List<String> _strings(JSAny? value, String name) {
   if (value == null || value.isUndefinedOrNull) return const [];
-  if (!value.isA<JSArray>()) throw _expected(name, 'an array of strings');
+  if (!value.isA<JSArray>()) {
+    throw _invalidArgument(name, 'an array of strings');
+  }
   return [
     for (final item in (value as JSArray<JSAny?>).toDart) _string(item, name)
   ];
 }
 
-/// The deepest nesting [_fromJs] accepts and [_jsValue] returns. A cyclic
+/// The deepest nesting [_toDart] accepts and [_toJs] returns. A cyclic
 /// page object reaches it instead of recursing until the stack overflows.
 const _maxJsDepth = maxItemDataDepth;
 
@@ -185,7 +186,7 @@ const _maxJsDepth = maxItemDataDepth;
 /// (integral ones as `int`), lists and string-keyed maps. Anything else —
 /// a function, bigint, Date, Map, Set, RegExp, or typed array — is refused
 /// naming [name].
-Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
+Object? _toDart(JSAny? value, String name, [int depth = 0]) {
   if (value == null || value.isUndefinedOrNull) return null;
   if (value.isA<JSString>()) return (value as JSString).toDart;
   if (value.isA<JSBoolean>()) return (value as JSBoolean).toDart;
@@ -196,43 +197,43 @@ Object? _fromJs(JSAny? value, String name, [int depth = 0]) {
         number.abs() <= 9007199254740991) {
       return number.toInt();
     }
-    if (!number.isFinite) throw _expected(name, 'finite numbers only');
+    if (!number.isFinite) throw _invalidArgument(name, 'finite numbers only');
     return number;
   }
   if (value.isA<JSArray>()) {
     if (depth >= _maxJsDepth) {
-      throw _expected(name, 'at most $_maxJsDepth levels deep');
+      throw _invalidArgument(name, 'at most $_maxJsDepth levels deep');
     }
     return [
       for (final item in (value as JSArray<JSAny?>).toDart)
-        _fromJs(item, name, depth + 1)
+        _toDart(item, name, depth + 1)
     ];
   }
   if (value.isA<JSObject>() && !value.isA<JSFunction>()) {
     final object = value as JSObject;
     if (!_isPlainObject(object)) {
-      throw _expected(name, 'plain JSON values');
+      throw _invalidArgument(name, 'plain JSON values');
     }
     if (depth >= _maxJsDepth) {
-      throw _expected(name, 'at most $_maxJsDepth levels deep');
+      throw _invalidArgument(name, 'at most $_maxJsDepth levels deep');
     }
     final keys =
         (_objectClass.callMethod('keys'.toJS, object)! as JSArray<JSString>)
             .toDart;
     return <String, dynamic>{
       for (final key in keys)
-        key.toDart: _fromJs(_own(object, key.toDart), name, depth + 1)
+        key.toDart: _toDart(_own(object, key.toDart), name, depth + 1)
     };
   }
-  throw _expected(name, 'plain JSON values');
+  throw _invalidArgument(name, 'plain JSON values');
 }
 
-/// [value] (Dart values, as [_fromJs] makes them) as JS values. A map
+/// [value] (Dart values, as [_toDart] makes them) as JS values. A map
 /// becomes an object with no prototype, so a key such as `__proto__` or
 /// `toString` is data and never reaches `Object.prototype`. Nesting past
-/// [_maxJsDepth] containers, counted as in [_fromJs], throws
+/// [_maxJsDepth] containers, counted as in [_toDart], throws
 /// [itemTooDeep] before any recursion goes deeper.
-JSAny? _jsValue(Object? value, [int depth = 0]) {
+JSAny? _toJs(Object? value, [int depth = 0]) {
   final isContainer = value is Map<Object?, Object?> || value is Iterable;
   if (isContainer && depth >= _maxJsDepth) throw itemTooDeep();
   return switch (value) {
@@ -241,8 +242,7 @@ JSAny? _jsValue(Object? value, [int depth = 0]) {
     bool b => b.toJS,
     num n => n.toDouble().toJS,
     Map<Object?, Object?> m => _bareObject(m, depth + 1),
-    Iterable<Object?> l =>
-      [for (final item in l) _jsValue(item, depth + 1)].toJS,
+    Iterable<Object?> l => [for (final item in l) _toJs(item, depth + 1)].toJS,
     _ => throw StateError('not a plain value: ${value.runtimeType}'),
   };
 }
@@ -250,33 +250,33 @@ JSAny? _jsValue(Object? value, [int depth = 0]) {
 JSObject _bareObject(Map<Object?, Object?> map, int depth) {
   final object =
       _objectClass.callMethodVarArgs('create'.toJS, [null])! as JSObject;
-  map.forEach((k, v) => object[k! as String] = _jsValue(v, depth));
+  map.forEach((k, v) => object[k! as String] = _toJs(v, depth));
   return object;
 }
 
-/// [map] as a plain object whose values are [_jsValue]s.
+/// [map] as a plain object whose values are [_toJs]s.
 JSObject _envelope(Map<String, Object?> map) {
   final object = JSObject();
-  map.forEach((k, v) => object[k] = _jsValue(v));
+  map.forEach((k, v) => object[k] = _toJs(v));
   return object;
 }
 
 void _reportStreamError(JSFunction? report, Object error, String source) {
   if (report != null) {
-    report.callAsFunction(null, _rejection(error));
+    report.callAsFunction(null, _toRejection(error));
   } else {
     web.console.warn(
-        'at_client_web: a $source error was dropped (${atErrorCode(error)})'
+        'at_client_web: a $source error was dropped (${errorCodeOf(error)})'
             .toJS);
   }
 }
 
-/// The [JsKey] [value] names. A malformed key is a [BadKeyException] naming
+/// The [NotifyKey] [value] names. A malformed key is a [InvalidKeyException] naming
 /// the offending field, never the value received.
-JsKey _jsKey(JSAny? value) {
+NotifyKey _jsKey(JSAny? value) {
   try {
     final object = _object(value, 'key');
-    return JsKey(_string(_own(object, 'key'), 'key'),
+    return NotifyKey(_string(_own(object, 'key'), 'key'),
         namespace: _field(object, 'namespace'),
         sharedWith: _field(object, 'sharedWith'),
         sharedBy: _field(object, 'sharedBy'),
@@ -284,7 +284,7 @@ JsKey _jsKey(JSAny? value) {
         isCached: _flag(object, 'cached'),
         noNamespace: _flag(object, 'noNamespace'));
   } on InvalidArgumentException catch (e) {
-    throw BadKeyException(e.message);
+    throw InvalidKeyException(e.message);
   }
 }
 
@@ -294,7 +294,7 @@ JsKey _jsKey(JSAny? value) {
 class BridgeSession {
   BridgeSession(this._session);
 
-  final JsSession _session;
+  final Session _session;
 
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
@@ -312,7 +312,7 @@ class BridgeSession {
       try {
         RegExp(pattern);
       } on FormatException {
-        throw _expected('regex', 'a valid regular expression');
+        throw _invalidArgument('regex', 'a valid regular expression');
       }
       final deliver = _function(callback, 'callback');
       final report = _optionalFunction(onError, 'onError');
@@ -336,7 +336,7 @@ class BridgeSession {
       );
       return unsubscribe.toJS;
     } on Object catch (error) {
-      return _rejection(error);
+      return _toRejection(error);
     }
   }
 
@@ -353,7 +353,7 @@ class BridgeSession {
           _session.onStatus((s) => deliver.callAsFunction(null, s.toJS));
       return stop.toJS;
     } on Object catch (error) {
-      return _rejection(error);
+      return _toRejection(error);
     }
   }
 
@@ -408,8 +408,8 @@ class BridgeSession {
 }
 
 int _wholeNumber(JSAny? value, String name) {
-  final n = _fromJs(value, name);
-  if (n is! int) throw _expected(name, 'a whole number');
+  final n = _toDart(value, name);
+  if (n is! int) throw _invalidArgument(name, 'a whole number');
   return n;
 }
 
@@ -420,10 +420,10 @@ int _wholeNumber(JSAny? value, String name) {
 class BridgeCollection {
   BridgeCollection(this._adapter, this._self);
 
-  final JsCollection _adapter;
+  final ItemCollection _adapter;
   final String _self;
 
-  JsItemAddress _address(JSAny? value) {
+  ItemAddress _address(JSAny? value) {
     final object = _object(value, 'address');
     final id = _string(_own(object, 'id'), 'id');
     final rawOwner = _field(object, 'owner');
@@ -437,12 +437,12 @@ class BridgeCollection {
 
   Map<String, dynamic> _data(JSAny? value) {
     _object(value, 'data');
-    return _fromJs(value, 'data')! as Map<String, dynamic>;
+    return _toDart(value, 'data')! as Map<String, dynamic>;
   }
 
   /// The item as an object whose `data` is converted from depth 0, so the
   /// cap counts the data's own levels and not the envelope around it.
-  JSObject _item(JsItem item) {
+  JSObject _item(Item item) {
     try {
       return _envelope(item);
     } on CollectionException catch (e) {
@@ -457,9 +457,9 @@ class BridgeCollection {
     }
   }
 
-  JSObject _listing(JsListing listing) => JSObject()
+  JSObject _listing(ItemListing listing) => JSObject()
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
-    ..['unreadable'] = _jsValue([
+    ..['unreadable'] = _toJs([
       for (final u in listing.unreadable)
         {
           'id': u.id,
@@ -494,7 +494,7 @@ class BridgeCollection {
   /// `where`.
   JSPromise<JSObject> query(JSAny? where) => _promise(() async {
         if (where == null || !where.isA<JSArray>()) {
-          throw _expected('where', 'an array');
+          throw _invalidArgument('where', 'an array');
         }
         final clauses = [
           for (final raw in (where as JSArray<JSAny?>).toDart)
@@ -503,7 +503,7 @@ class BridgeCollection {
               return (
                 path: _string(_own(clause, 'path'), 'path'),
                 op: _string(_own(clause, 'op'), 'op'),
-                value: _fromJs(_own(clause, 'value'), 'value'),
+                value: _toDart(_own(clause, 'value'), 'value'),
               );
             }()
         ];
@@ -552,7 +552,7 @@ class BridgeCollection {
         }));
       }).toJS;
     } on Object catch (error) {
-      return _rejection(error);
+      return _toRejection(error);
     }
   }
 }
@@ -562,8 +562,8 @@ class BridgeCollection {
 /// The opener and the secure-context check are injectable; they default to
 /// this browser's.
 @JSExport()
-class AtClientWebBridge {
-  AtClientWebBridge({OpenJsSession? open, bool Function()? isSecureContext})
+class BridgeEntry {
+  BridgeEntry({OpenJsSession? open, bool Function()? isSecureContext})
       : _open = open ?? _openSession,
         _isSecureContext = isSecureContext ?? _pageIsSecure;
 
@@ -597,10 +597,11 @@ class AtClientWebBridge {
           atSign: atSign, namespace: namespace, keys: keys, rootDomain: root);
     } on ArgumentError catch (e) {
       throw switch (e.name) {
-        'atSign' => _expected('atSign', 'a valid atSign'),
-        'namespace' => _expected('namespace', 'a non-empty namespace segment'),
-        'rootDomain' => _expected('rootDomain', 'host or host:port'),
-        'keys' => BadKeyException('keys is not a usable .atKeys document'),
+        'atSign' => _invalidArgument('atSign', 'a valid atSign'),
+        'namespace' =>
+          _invalidArgument('namespace', 'a non-empty namespace segment'),
+        'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
+        'keys' => InvalidKeyException('keys is not a usable .atKeys document'),
         _ => e,
       };
     }
@@ -612,13 +613,13 @@ class AtClientWebBridge {
       try {
         document = jsonDecode((value as JSString).toDart);
       } on FormatException {
-        throw BadKeyException('keys is not valid JSON');
+        throw InvalidKeyException('keys is not valid JSON');
       }
     } else {
-      document = _fromJs(_object(value, 'keys'), 'keys');
+      document = _toDart(_object(value, 'keys'), 'keys');
     }
     if (document is! Map<String, dynamic>) {
-      throw _expected('keys', 'an .atKeys JSON object or its text');
+      throw _invalidArgument('keys', 'an .atKeys JSON object or its text');
     }
     return document;
   }

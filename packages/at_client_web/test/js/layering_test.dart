@@ -30,8 +30,8 @@ void main() {
 
   test('the session, adapter and shared text layers take typed Dart', () {
     for (final path in [
-      'lib/src/js/js_session.dart',
-      'lib/src/collections/js_collections_adapter.dart',
+      'lib/src/session/at_client_session.dart',
+      'lib/src/collections/at_collection_adapter.dart',
       'lib/src/log_text.dart',
       'lib/src/session/session_opener.dart',
       'lib/src/session/keys_session_opener.dart',

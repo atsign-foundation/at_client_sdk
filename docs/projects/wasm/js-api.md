@@ -231,7 +231,7 @@ product; the compiler is a packaging decision.*
 packages/at_client_web/
   lib/at_client_web.dart         # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
-  lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
+  lib/src/collections/          # at_collection_adapter.dart: Dart-side translation onto
                                 #   AtCollection, unexported, VM-tested (§5.5)
   web/at_client_bridge_entry.dart  # main() that installs __atsignAtClientWeb ← dart compile js
 ```
@@ -259,7 +259,7 @@ workflow pins the Dart version (`dart-channel`), so the same lock builds the sam
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
 also serving Node. Now that the JS surface exposes the collection API via `BridgeCollection`
-and `JsCollectionsAdapter` ([§5.5](#55-the-dart-side-collections-adapter)), splitting is
+and `AtCollectionAdapter` ([§5.5](#55-the-dart-side-collections-adapter)), splitting is
 still straightforward — the facade is self-contained under `lib/src/js/`.
 
 ---
@@ -436,7 +436,7 @@ paragraph as the code above, not buried in §10:**
 
 ### 5.5 The Dart-side collections adapter
 
-`packages/at_client_web/lib/src/collections/js_collections_adapter.dart` is the layer the
+`packages/at_client_web/lib/src/collections/at_collection_adapter.dart` is the layer the
 `@JSExport` facade calls. No library directly under `lib/` exports it. It is plain Dart with no
 interop imports, so it runs under `dart test` on the VM, and `web/at_client_web_entry.dart`
 reaches every operation so both dart2js and dart2wasm compile it.
@@ -592,7 +592,7 @@ exception or a batch of `OpFailure`s — never a tuple, never a second thrown ty
 ### 6.1 Collection error codes
 
 Every collections adapter operation (§5.5) returns a Future that rejects with one
-`JsCollectionsError {code, message, id?, owner?, kind?, failures}`, which the facade turns
+`CollectionException {code, message, id?, owner?, kind?, failures}`, which the facade turns
 into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` names
 the underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
 `CItemReadException`, `AtClientException`, `AtException`, `StateError`, `ArgumentError`,
@@ -602,7 +602,7 @@ same shape. The codes are a registry of their own, not the at_commons `AT00xx` c
 name the atServer and client failures of key operations, and none of them says "the item is
 owned by another atSign" or "some of the key writes landed". Codes that describe one item are
 `COLLECTION_ITEM_*`; the rest are `COLLECTION_*`. `COLLECTION_NOT_FOUND` would read as a missing
-collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
+collection, which is why the item codes carry `ITEM`. On the Dart side `CollectionException` is an `AtException`, so callers that catch
 `AtException` also catch it; the JS shape is unchanged.
 
 | Code | Raised for | Upstream source |
@@ -624,21 +624,21 @@ land. Until then no adapter operation validates data against a schema.
 
 ### 6.2 Session error codes (alpha)
 
-`atErrorCode` (`at_error_code.dart`) maps every error the bridge rejects with to one code. A
+`errorCodeOf` (`error_codes.dart`) maps every error the bridge rejects with to one code. A
 `COLLECTION_*` code comes from `CollectionException` (§6.1); the other codes are:
 
 | Code | Raised when |
 |---|---|
 | `pkam_refused` | `AtOpenRefusedException`: the atServer refuses the open (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
-| `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
+| `offline` | `SessionOfflineException`: the open did not come online and was not classed as a refusal |
 | `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
 | `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, or an invalid `address.owner`; the message names the parameter and never its value, at most 128 characters on one line |
-| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
-| `bad_key` | `BadKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
+| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
+| `bad_key` | `InvalidKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
 | `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
 
 When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation.
@@ -920,7 +920,7 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   subtypes can ship in a minor version. The JS discriminated union's encoder and every
   documented consumer pattern must include a default/unknown branch, or a future
   upstream minor silently breaks JS consumers that pattern-matched exhaustively.
-- **Write-compatibility with typed Dart peers is wired through Route A** (§5.2). `AtClient.collection` supports `writeTypeTag`, `JsCollectionsAdapter` passes `type` through it, and `BridgeCollection` exposes the adapter so JS writes carry the declared `type` tag on the wire (see [§11](#11-open-questions) JS-7).
+- **Write-compatibility with typed Dart peers is wired through Route A** (§5.2). `AtClient.collection` supports `writeTypeTag`, `AtCollectionAdapter` passes `type` through it, and `BridgeCollection` exposes the adapter so JS writes carry the declared `type` tag on the wire (see [§11](#11-open-questions) JS-7).
 
 ---
 

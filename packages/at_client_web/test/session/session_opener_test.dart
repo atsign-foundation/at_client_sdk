@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/keys_session_opener.dart';
 import 'package:at_client_web/src/session/passkey_session_opener.dart';
 import 'package:at_client_web/src/session/portal_session.dart';
@@ -287,7 +287,7 @@ void main() {
         stopped = true;
       });
       final session =
-          AtClientJsSession(client, namespace: 'app', stop: opened.stop);
+          AtClientSession(client, namespace: 'app', stop: opened.stop);
       var closed = false;
       final closing = session.close().then((_) => closed = true);
       await Future<void>.delayed(Duration.zero);

@@ -2,20 +2,20 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 
-import '../collections/js_collections_adapter.dart';
+import '../collections/at_collection_adapter.dart';
 import '../exceptions.dart';
 import '../log_text.dart';
-import '../session/session_namespace.dart';
+import 'session_namespace.dart';
 
-export '../session/session_namespace.dart' show normalizeSessionNamespace;
+export 'session_namespace.dart' show normalizeSessionNamespace;
 
 /// A key as the JS bridge names it: [key] under [namespace] (the session's
 /// own when null), shared with [sharedWith] when that is set, by [sharedBy]
 /// (the session's own atSign when null). [isPublic] and [isCached] make it
 /// the `public:` and `cached:` form of that key; [noNamespace] keeps the
 /// session's namespace off a key that has none.
-class JsKey {
-  const JsKey(this.key,
+class NotifyKey {
+  const NotifyKey(this.key,
       {this.namespace,
       this.sharedWith,
       this.sharedBy,
@@ -34,7 +34,7 @@ class JsKey {
 
 /// A decrypted notification as a subscriber receives it; [operation] is
 /// `update` or `delete`.
-typedef JsNotification = ({
+typedef ReceivedNotification = ({
   String id,
   String from,
   String key,
@@ -54,7 +54,7 @@ typedef JsEnrollment = ({
 });
 
 /// What the JS bridge exposes of one open client.
-abstract interface class JsSession {
+abstract interface class Session {
   /// The atSign this session acts as.
   String get atSign;
 
@@ -62,8 +62,8 @@ abstract interface class JsSession {
   bool get isClosed;
 
   /// Notifies [key]'s `sharedWith` of [value]; true only once the atServer
-  /// reports it delivered. Throws a [BadKeyException] without `sharedWith`.
-  Future<bool> notify(JsKey key, String value);
+  /// reports it delivered. Throws a [InvalidKeyException] without `sharedWith`.
+  Future<bool> notify(NotifyKey key, String value);
 
   /// Calls [onEvent] with each decrypted notification whose key matches
   /// [regex], except the echoes of those this session sent (a sent id coming
@@ -71,7 +71,8 @@ abstract interface class JsSession {
   /// An error on the notification stream goes to [onError] and the
   /// subscription carries on. A notification dropped because its sender is
   /// not the owner of its key is logged, never delivered.
-  void Function() subscribe(String regex, void Function(JsNotification) onEvent,
+  void Function() subscribe(
+      String regex, void Function(ReceivedNotification) onEvent,
       {required void Function(Object error) onError});
 
   /// Where the connection to the atServer is: `connecting`, `connected`,
@@ -88,19 +89,19 @@ abstract interface class JsSession {
   /// [type]. [expirationMs] defaults to seven days; [eventSource] is
   /// `data`, `notifs` or `both`. Throws a [SessionClosedException] after
   /// [close] and rejects with a [CollectionException] for a bad argument.
-  Future<JsCollection> collection(String name,
+  Future<ItemCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs});
 
   /// A one-time passcode a new device quotes to request enrollment.
-  /// Throws a [ManageAccessException] without `__manage`.
+  /// Throws a [ManageAccessRequiredException] without `__manage`.
   Future<String> otp();
 
-  /// The requests awaiting a decision. Throws a [ManageAccessException]
+  /// The requests awaiting a decision. Throws a [ManageAccessRequiredException]
   /// without `__manage`.
   Future<List<JsEnrollment>> pendingEnrollments();
 
   /// Approves the pending request [id] for the namespaces it asked for.
-  /// Throws a [ManageAccessException] without `__manage` and an
+  /// Throws a [ManageAccessRequiredException] without `__manage` and an
   /// [AtEnrollmentException] when no request [id] is pending.
   Future<void> approve(String id);
 
@@ -112,16 +113,16 @@ abstract interface class JsSession {
   Future<void> close();
 }
 
-/// A [JsSession] on an [AtClient], keying each value as
+/// A [Session] on an [AtClient], keying each value as
 /// `<key>.<namespace>@<sharedBy>` with the namespace folded to lower case.
-class AtClientJsSession implements JsSession {
+class AtClientSession implements Session {
   /// [stop] ends what opened the client, by default the client's own stop;
   /// [close] awaits it. [warn] receives the warnings the session raises, by
   /// default through the atSign logger; [isNavigatorOnline] tells a
-  /// [JsSession.status] of `waiting:network` from `waiting:server`, by
+  /// [Session.status] of `waiting:network` from `waiting:server`, by
   /// default always online, and [networkChanges] says when it may have
   /// changed (each event re-reads it; by default there are none).
-  AtClientJsSession(this._client,
+  AtClientSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
@@ -138,7 +139,7 @@ class AtClientJsSession implements JsSession {
         ?.listen((_) => _reportStatusOf(_client.connection.current));
   }
 
-  static final _logger = AtSignLogger('AtClientJsSession');
+  static final _logger = AtSignLogger('AtClientSession');
 
   /// How long a collection keeps an item when the caller names no expiration.
   static const defaultExpirationMs = 7 * 24 * 3600 * 1000;
@@ -159,7 +160,7 @@ class AtClientJsSession implements JsSession {
   final _subscriptions = <StreamSubscription<Object?>>{};
   final _watchCancels = <Future<void> Function()>{};
   final _deciding = <String>{};
-  final _adapters = <String, Future<JsCollectionsAdapter>>{};
+  final _adapters = <String, Future<AtCollectionAdapter>>{};
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
   final Future<void> Function() _stop;
@@ -187,7 +188,7 @@ class AtClientJsSession implements JsSession {
     }
   }
 
-  /// The [JsSession.status] [state] is, or null for the connection having
+  /// The [Session.status] [state] is, or null for the connection having
   /// stopped, which says nothing about the atServer.
   String? _statusOf(AtConnectionState state) {
     if (state.isOnline) return 'connected';
@@ -218,7 +219,7 @@ class AtClientJsSession implements JsSession {
 
   /// [name] qualified with [namespace] unless it already ends in it, folded to
   /// lower case.
-  static String qualified(String name, String namespace) {
+  static String qualifiedCollectionName(String name, String namespace) {
     final ns = namespace.toLowerCase();
     final lower = name.toLowerCase();
     return lower.endsWith('.$ns') ? lower : '$lower.$ns';
@@ -238,22 +239,22 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  Future<JsCollection> collection(String name,
+  Future<ItemCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs}) async {
     _open();
     final validName = _validateCollectionName(name);
-    final namespace = qualified(validName, _namespace);
+    final namespace = qualifiedCollectionName(validName, _namespace);
     final expiration = expirationMs ?? defaultExpirationMs;
     // One adapter per collection and options, so a repeated call reuses the
     // one open and its grants instead of fetching them again; a failed open
     // is dropped so the next call tries again.
     final cacheKey = '$namespace\u0000$type\u0000$expiration\u0000$eventSource';
-    final opened = _adapters[cacheKey] ??= JsCollectionsAdapter.open(_client,
+    final opened = _adapters[cacheKey] ??= AtCollectionAdapter.open(_client,
         namespace: namespace,
         type: type,
         expirationMs: expiration,
         eventSource: eventSource);
-    final JsCollectionsAdapter adapter;
+    final AtCollectionAdapter adapter;
     try {
       adapter = await opened;
     } on Object {
@@ -264,29 +265,29 @@ class AtClientJsSession implements JsSession {
     if (eventSource != 'data') {
       _client.notificationService.startListening();
     }
-    return _SessionCollection(this, adapter);
+    return SessionBoundCollection(this, adapter);
   }
 
   void _open() {
     if (_closed) throw SessionClosedException();
   }
 
-  AtKey _atKey(JsKey key) {
+  AtKey _atKey(NotifyKey key) {
     if (key.isPublic) {
-      throw BadKeyException('public keys cannot be sent with notify');
+      throw InvalidKeyException('public keys cannot be sent with notify');
     }
     if (key.isCached) {
-      throw BadKeyException('cached keys cannot be sent with notify');
+      throw InvalidKeyException('cached keys cannot be sent with notify');
     }
     final rawSharedWith = key.sharedWith;
     if (rawSharedWith == null) {
-      throw BadKeyException('notify needs sharedWith');
+      throw InvalidKeyException('notify needs sharedWith');
     }
     final Atsign sharedWith;
     try {
       sharedWith = rawSharedWith.toAtsign();
     } on InvalidAtSignException {
-      throw BadKeyException('sharedWith must be a valid atSign');
+      throw InvalidKeyException('sharedWith must be a valid atSign');
     }
     final own = _canonical(_client.getCurrentAtSign()!)!;
     final Atsign sharedBy;
@@ -294,10 +295,10 @@ class AtClientJsSession implements JsSession {
       try {
         sharedBy = key.sharedBy!.toAtsign();
       } on InvalidAtSignException {
-        throw BadKeyException('sharedBy must be a valid atSign');
+        throw InvalidKeyException('sharedBy must be a valid atSign');
       }
       if (sharedBy != own) {
-        throw BadKeyException('sharedBy must match the session atSign');
+        throw InvalidKeyException('sharedBy must match the session atSign');
       }
     } else {
       sharedBy = own.toAtsign();
@@ -307,7 +308,7 @@ class AtClientJsSession implements JsSession {
         key.key.endsWith('.') ||
         key.key.contains('..') ||
         _keySegmentInvalidChars.hasMatch(key.key)) {
-      throw BadKeyException('key is not a valid key name');
+      throw InvalidKeyException('key is not a valid key name');
     }
     String? namespace;
     if (!key.noNamespace) {
@@ -318,7 +319,7 @@ class AtClientJsSession implements JsSession {
           rawNs.contains('..') ||
           _keySegmentInvalidChars.hasMatch(rawNs) ||
           !_notifyNamespacePattern.hasMatch(rawNs)) {
-        throw BadKeyException('namespace is not valid');
+        throw InvalidKeyException('namespace is not valid');
       }
       namespace = rawNs.toLowerCase();
     }
@@ -333,7 +334,7 @@ class AtClientJsSession implements JsSession {
       atKey = builder.build()..metadata.namespaceAware = false;
       serialized = atKey.toString();
     } on AtException {
-      throw BadKeyException('key is not a valid atKey');
+      throw InvalidKeyException('key is not a valid atKey');
     }
     final validation = AtKeyValidators.get().validate(
       serialized,
@@ -343,13 +344,13 @@ class AtClientJsSession implements JsSession {
         ..enforceNamespace = false,
     );
     if (!validation.isValid) {
-      throw BadKeyException('key is not a valid atKey');
+      throw InvalidKeyException('key is not a valid atKey');
     }
     return atKey;
   }
 
   @override
-  Future<bool> notify(JsKey key, String value) async {
+  Future<bool> notify(NotifyKey key, String value) async {
     _open();
     final atKey = _atKey(key);
     var remembered = false;
@@ -378,7 +379,7 @@ class AtClientJsSession implements JsSession {
 
   /// The canonical atSign that sent [n], or null when [n.key] is malformed,
   /// targets another recipient, or its owner does not match [n.from].
-  static String? _sender(AtNotification n, {required String own}) {
+  static String? _verifiedSender(AtNotification n, {required String own}) {
     final from = _canonical(n.from);
     if (from == null) return null;
     if (n.key.isEmpty || _notifInvalidChars.hasMatch(n.key)) return null;
@@ -444,7 +445,8 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  void Function() subscribe(String regex, void Function(JsNotification) onEvent,
+  void Function() subscribe(
+      String regex, void Function(ReceivedNotification) onEvent,
       {required void Function(Object error) onError}) {
     _open();
     try {
@@ -456,11 +458,11 @@ class AtClientJsSession implements JsSession {
     final service = _client.notificationService;
     final own = _canonical(_client.getCurrentAtSign()!)!;
     var done = false;
-    late final StreamSubscription<JsNotification?> subscription;
+    late final StreamSubscription<ReceivedNotification?> subscription;
     subscription = service
         .subscribe(regex: regex, shouldDecrypt: true)
         .map((n) {
-          final from = _sender(n, own: own);
+          final from = _verifiedSender(n, own: own);
           if (from == null) {
             // Never the value: it is the sender's, decrypted for this client.
             _warn('Dropped notification ${sanitizeLogText(n.id)}: its sender '
@@ -479,7 +481,7 @@ class AtClientJsSession implements JsSession {
           );
         })
         .where((e) => e != null)
-        .cast<JsNotification>()
+        .cast<ReceivedNotification>()
         .listen(
           (event) {
             if (_closed) return;
@@ -537,14 +539,15 @@ class AtClientJsSession implements JsSession {
   }
 
   @override
-  Future<void> approve(String id) =>
-      _decide(id, () => _managed(() => _client.enrollments.approve(id)));
+  Future<void> approve(String id) => _decideExclusively(
+      id, () => _managed(() => _client.enrollments.approve(id)));
 
   @override
-  Future<void> deny(String id) =>
-      _decide(id, () => _managed(() => _client.enrollments.deny(id)));
+  Future<void> deny(String id) => _decideExclusively(
+      id, () => _managed(() => _client.enrollments.deny(id)));
 
-  Future<void> _decide(String id, Future<void> Function() action) async {
+  Future<void> _decideExclusively(
+      String id, Future<void> Function() action) async {
     _open();
     if (!_deciding.add(id)) {
       throw EnrollmentInFlightException();
@@ -559,16 +562,16 @@ class AtClientJsSession implements JsSession {
   }
 
   /// The result of [call], with the atServer's refusal of a session that
-  /// holds no `__manage` as a [ManageAccessException].
+  /// holds no `__manage` as a [ManageAccessRequiredException].
   Future<T> _managed<T>(Future<T> Function() call) async {
     try {
       return await call();
     } on UnAuthorizedException {
-      throw ManageAccessException();
+      throw ManageAccessRequiredException();
     }
   }
 
-  /// Throws a [ManageAccessException] unless this session's enrollment
+  /// Throws a [ManageAccessRequiredException] unless this session's enrollment
   /// holds `__manage` read-write. The primary enrollment, which has no
   /// grants to read, holds it.
   Future<void> _requireManage() async {
@@ -576,7 +579,7 @@ class AtClientJsSession implements JsSession {
     final grants = await _managed(() => ownGrantsOf(_client));
     if (grants != null &&
         grants[EnrollmentConstants.enrollManageNamespace] != 'rw') {
-      throw ManageAccessException();
+      throw ManageAccessRequiredException();
     }
   }
 
@@ -627,59 +630,58 @@ class AtClientJsSession implements JsSession {
   }
 }
 
-class _SessionCollection implements JsCollection {
-  _SessionCollection(this._session, this._inner);
+class SessionBoundCollection implements ItemCollection {
+  SessionBoundCollection(this._session, this._inner);
 
-  final AtClientJsSession _session;
-  final JsCollection _inner;
+  final AtClientSession _session;
+  final ItemCollection _inner;
 
   @override
-  Future<JsItem> create(Map<String, dynamic> data,
+  Future<Item> create(Map<String, dynamic> data,
       {String? id, List<String> sharedWith = const []}) async {
     _session._open();
     return _inner.create(data, id: id, sharedWith: sharedWith);
   }
 
   @override
-  Future<JsItem?> get(JsItemAddress address) async {
+  Future<Item?> get(ItemAddress address) async {
     _session._open();
     return _inner.get(address);
   }
 
   @override
-  Future<JsListing> list() async {
+  Future<ItemListing> list() async {
     _session._open();
     return _inner.list();
   }
 
   @override
-  Future<JsListing> query(List<JsWhereClause> clauses) async {
+  Future<ItemListing> query(List<WhereClause> clauses) async {
     _session._open();
     return _inner.query(clauses);
   }
 
   @override
-  Future<JsItem> update(
-      JsItemAddress address, Map<String, dynamic> data) async {
+  Future<Item> update(ItemAddress address, Map<String, dynamic> data) async {
     _session._open();
     return _inner.update(address, data);
   }
 
   @override
-  Future<JsItem> share(JsItemAddress address, List<String> atSigns) async {
+  Future<Item> share(ItemAddress address, List<String> atSigns) async {
     _session._open();
     return _inner.share(address, atSigns);
   }
 
   @override
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) async {
+  Future<void> remove(ItemAddress address, {bool cascade = false}) async {
     _session._open();
     return _inner.remove(address, cascade: cascade);
   }
 
   @override
   Future<void> Function() watch(
-    void Function(JsEvent event) onEvent, {
+    void Function(CollectionEvent event) onEvent, {
     required void Function(CollectionException error) onError,
   }) {
     _session._open();

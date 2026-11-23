@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
 
@@ -153,7 +153,7 @@ AtNotification _echo(String id) =>
 
 void main() {
   late _FakeClient client;
-  late AtClientJsSession session;
+  late AtClientSession session;
   late _FakeNotifications service;
   late List<String> warnings;
   late bool navigatorOnline;
@@ -163,7 +163,7 @@ void main() {
     service = client.notificationService;
     warnings = [];
     navigatorOnline = true;
-    session = AtClientJsSession(client,
+    session = AtClientSession(client,
         namespace: 'wavi',
         warn: warnings.add,
         isNavigatorOnline: () => navigatorOnline);
@@ -172,13 +172,13 @@ void main() {
   group('keys', () {
     // notify is the only call that takes a key until the collections surface
     // lands, so these go through it; each key is shared, as notify requires.
-    Future<String> sentKey(JsKey key) async {
+    Future<String> sentKey(NotifyKey key) async {
       await session.notify(key, 'v');
       return service.params.last.atKey.toString();
     }
 
     test('a shared key is <key>.<namespace> by the own atSign', () async {
-      expect(await sentKey(const JsKey('k', sharedWith: '@bob')),
+      expect(await sentKey(const NotifyKey('k', sharedWith: '@bob')),
           '@bob:k.wavi@alice');
       expect(service.params.last.atKey.metadata.namespaceAware, isFalse);
     });
@@ -186,13 +186,13 @@ void main() {
     test('a given namespace replaces the default', () async {
       expect(
           await sentKey(
-              const JsKey('k', namespace: 'other', sharedWith: '@bob')),
+              const NotifyKey('k', namespace: 'other', sharedWith: '@bob')),
           '@bob:k.other@alice');
     });
 
     test('a canonical own sharedBy is kept', () async {
       await session.notify(
-          const JsKey('k', sharedWith: '@bob', sharedBy: 'A.LICE'), 'v');
+          const NotifyKey('k', sharedWith: '@bob', sharedBy: 'A.LICE'), 'v');
 
       expect(service.params.last.atKey.sharedBy, '@alice');
     });
@@ -200,12 +200,12 @@ void main() {
     test('noNamespace leaves the session namespace off', () async {
       expect(
           await sentKey(
-              const JsKey('k', sharedWith: '@bob', noNamespace: true)),
+              const NotifyKey('k', sharedWith: '@bob', noNamespace: true)),
           '@bob:k@alice');
     });
 
     test('an atSign without @ is put in @name form', () async {
-      await session.notify(const JsKey('k', sharedWith: 'bob'), 'v');
+      await session.notify(const NotifyKey('k', sharedWith: 'bob'), 'v');
 
       expect(service.params.last.atKey.sharedWith, '@bob');
     });
@@ -213,15 +213,15 @@ void main() {
 
   group('notify', () {
     test('without sharedWith it is a bad key and sends nothing', () async {
-      await expectLater(session.notify(const JsKey('k'), 'v'),
-          throwsA(isA<BadKeyException>()));
+      await expectLater(session.notify(const NotifyKey('k'), 'v'),
+          throwsA(isA<InvalidKeyException>()));
       expect(service.params, isEmpty);
     });
 
     test('sends an update on the shared key, outside the app namespace',
         () async {
       final sent = await session.notify(
-          const JsKey('rpc', namespace: 'tally', sharedWith: '@bob'), 'hi');
+          const NotifyKey('rpc', namespace: 'tally', sharedWith: '@bob'), 'hi');
 
       expect(sent, isTrue);
       final params = service.params.single;
@@ -234,7 +234,8 @@ void main() {
     test('resolves false when the notification is not delivered', () async {
       service.status = NotificationStatusEnum.undelivered;
 
-      expect(await session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
+      expect(
+          await session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
           isFalse);
     });
 
@@ -246,7 +247,7 @@ void main() {
         ..exception = cause;
 
       await expectLater(
-          session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
+          session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
           throwsA(same(cause)));
     });
 
@@ -255,8 +256,9 @@ void main() {
         () async {
       await expectLater(
           session.notify(
-              const JsKey('k', sharedWith: '@bob', sharedBy: '@carol'), 'v'),
-          throwsA(isA<BadKeyException>()));
+              const NotifyKey('k', sharedWith: '@bob', sharedBy: '@carol'),
+              'v'),
+          throwsA(isA<InvalidKeyException>()));
       expect(service.params, isEmpty);
     });
 
@@ -265,12 +267,12 @@ void main() {
         () async {
       await expectLater(
           session.notify(
-              const JsKey('k', sharedWith: '@bob', isPublic: true), 'v'),
-          throwsA(isA<BadKeyException>()));
+              const NotifyKey('k', sharedWith: '@bob', isPublic: true), 'v'),
+          throwsA(isA<InvalidKeyException>()));
       await expectLater(
           session.notify(
-              const JsKey('k', sharedWith: '@bob', isCached: true), 'v'),
-          throwsA(isA<BadKeyException>()));
+              const NotifyKey('k', sharedWith: '@bob', isCached: true), 'v'),
+          throwsA(isA<InvalidKeyException>()));
       expect(service.params, isEmpty);
     });
 
@@ -278,18 +280,18 @@ void main() {
         'notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing',
         () async {
       for (final bad in [
-        const JsKey('', sharedWith: '@bob'),
-        const JsKey('a:b', sharedWith: '@bob'),
-        const JsKey('a@b', sharedWith: '@bob'),
-        const JsKey('a b', sharedWith: '@bob'),
-        const JsKey('k', sharedWith: '@bob', namespace: ''),
-        const JsKey('k', sharedWith: '@bob', namespace: 'a b'),
-        const JsKey('k', sharedWith: '@a@b'),
-        const JsKey('k', sharedWith: '@bob '),
-        const JsKey('k', sharedWith: ''),
+        const NotifyKey('', sharedWith: '@bob'),
+        const NotifyKey('a:b', sharedWith: '@bob'),
+        const NotifyKey('a@b', sharedWith: '@bob'),
+        const NotifyKey('a b', sharedWith: '@bob'),
+        const NotifyKey('k', sharedWith: '@bob', namespace: ''),
+        const NotifyKey('k', sharedWith: '@bob', namespace: 'a b'),
+        const NotifyKey('k', sharedWith: '@a@b'),
+        const NotifyKey('k', sharedWith: '@bob '),
+        const NotifyKey('k', sharedWith: ''),
       ]) {
         await expectLater(
-            session.notify(bad, 'v'), throwsA(isA<BadKeyException>()),
+            session.notify(bad, 'v'), throwsA(isA<InvalidKeyException>()),
             reason: '${bad.key}/${bad.namespace}/${bad.sharedWith}');
       }
       expect(service.params, isEmpty);
@@ -300,7 +302,8 @@ void main() {
       service.exception = AtClientException('AT0001', 'stopped');
       service.hold = Completer<void>();
 
-      final future = session.notify(const JsKey('k', sharedWith: '@bob'), 'v');
+      final future =
+          session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v');
       await pumpEventQueue();
       await session.close();
       service.hold!.complete();
@@ -309,11 +312,11 @@ void main() {
     });
 
     test('failed notify does not evict sent echo ids', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       for (var i = 0; i < 1024; i++) {
-        await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       }
       // Failed pre-send calls (not sent to secondary) must not enter _sent.
       service
@@ -322,7 +325,7 @@ void main() {
         ..exception = AtClientException('AT0001', 'failed');
       for (var i = 0; i < 10; i++) {
         await expectLater(
-            session.notify(const JsKey('k', sharedWith: '@alice'), 'v'),
+            session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
             throwsA(isA<AtClientException>()));
       }
 
@@ -335,7 +338,7 @@ void main() {
   group('subscribe', () {
     test('subscribes decrypted, starts the monitor and delivers events',
         () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
 
       session.subscribe(r'attalk\.wavi@', received.add, onError: (_) {});
 
@@ -357,7 +360,7 @@ void main() {
 
     test('names a delete notification a delete, anything else an update',
         () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       service.events.add(_event('d1', operation: 'delete'));
@@ -369,7 +372,7 @@ void main() {
     });
 
     test('unsubscribe stops delivery', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       final unsubscribe =
           session.subscribe('.*', received.add, onError: (_) {});
 
@@ -381,7 +384,7 @@ void main() {
     });
 
     test('delivers only a notification sent by the key owner', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       service.events
@@ -393,7 +396,7 @@ void main() {
     });
 
     test('matches the sender and the key owner by canonical atSign', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       service.events
@@ -408,10 +411,10 @@ void main() {
     });
 
     test('drops the echo of a notification this session sent', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
-      await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       service.events
         ..add(_echo('n0'))
         ..add(_event('other'));
@@ -422,10 +425,10 @@ void main() {
 
     test('delivers a peer notification that reuses an id this session sent',
         () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
-      await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       service.events
         ..add(_event('n0', key: '@alice:attalk.wavi@bob', from: '@bob'))
         ..add(_echo('n0'));
@@ -435,11 +438,11 @@ void main() {
     });
 
     test('drops an echo that arrives before notify resolves', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
       service.hold = Completer<void>();
       final pending =
-          session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+          session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       await pumpEventQueue();
       service.events.add(_echo('n0'));
       await pumpEventQueue();
@@ -450,11 +453,11 @@ void main() {
     });
 
     test('remembers only the last 1024 sent ids', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       for (var i = 0; i < 1025; i++) {
-        await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       }
       service.events
         ..add(_echo('n0'))
@@ -468,7 +471,7 @@ void main() {
     test(
         'subscribe drops notifications with malformed keys or wrong sharedWith',
         () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       service.events
@@ -498,7 +501,7 @@ void main() {
   group('subscribe errors and drops', () {
     test('a stream error reaches onError and the subscription survives',
         () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       final errors = <Object>[];
       session.subscribe('.*', received.add, onError: errors.add);
 
@@ -513,7 +516,7 @@ void main() {
     test(
         'a notification whose sender is not the key owner is dropped with '
         'a warning naming its id, never its value', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       service.events.add(_event('spoofed', from: '@carol', value: 'secret-v'));
@@ -541,7 +544,7 @@ void main() {
     test('an echo of this session is dropped without a warning', () async {
       session.subscribe('.*', (_) {}, onError: (_) {});
 
-      await session.notify(const JsKey('k', sharedWith: '@alice'), 'v');
+      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
       service.events.add(_echo('n0'));
       await pumpEventQueue();
 
@@ -631,11 +634,11 @@ void main() {
 
     group('network changes', () {
       late StreamController<void> network;
-      late AtClientJsSession watching;
+      late AtClientSession watching;
 
       setUp(() async {
         network = StreamController<void>.broadcast();
-        watching = AtClientJsSession(client,
+        watching = AtClientSession(client,
             namespace: 'wavi',
             isNavigatorOnline: () => navigatorOnline,
             networkChanges: network.stream);
@@ -752,10 +755,12 @@ void main() {
     });
 
     test('a name already ending in the namespace is kept', () {
-      expect(AtClientJsSession.qualified('todos.wavi', 'wavi'), 'todos.wavi');
-      expect(AtClientJsSession.qualified('todos', 'wavi'), 'todos.wavi');
-      expect(
-          AtClientJsSession.qualified('todos.MyApp', 'MyApp'), 'todos.myapp');
+      expect(AtClientSession.qualifiedCollectionName('todos.wavi', 'wavi'),
+          'todos.wavi');
+      expect(AtClientSession.qualifiedCollectionName('todos', 'wavi'),
+          'todos.wavi');
+      expect(AtClientSession.qualifiedCollectionName('todos.MyApp', 'MyApp'),
+          'todos.myapp');
     });
 
     test(
@@ -803,7 +808,7 @@ void main() {
 
     test('rejects invalid collection names and folds mixed-case namespace',
         () async {
-      final mixed = AtClientJsSession(client, namespace: 'MyApp');
+      final mixed = AtClientSession(client, namespace: 'MyApp');
       await mixed.collection('Todos', type: 'Todo', eventSource: 'data');
       expect(client.openedCollections.last.$1, 'todos.myapp');
 
@@ -814,9 +819,9 @@ void main() {
                 (e) => e.kind, 'kind', CollectionFailure.invalidArgument)),
             reason: bad);
       }
-      expect(() => AtClientJsSession(client, namespace: ''),
+      expect(() => AtClientSession(client, namespace: ''),
           throwsA(isA<InvalidArgumentException>()));
-      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+      expect(() => AtClientSession(client, namespace: 'a.b'),
           throwsA(isA<InvalidArgumentException>()));
     });
   });
@@ -828,7 +833,7 @@ void main() {
 
       final calls = <String, Future<Object?> Function()>{
         'notify': () =>
-            session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
+            session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
         'subscribe': () async =>
             session.subscribe('.*', (_) {}, onError: (_) {}),
         'onStatus': () async => session.onStatus((_) {}),
@@ -847,7 +852,7 @@ void main() {
     test(
         'the session and the adapter report caller mistakes with a typed exception',
         () async {
-      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+      expect(() => AtClientSession(client, namespace: 'a.b'),
           throwsA(isA<InvalidArgumentException>()));
       expect(() => session.subscribe('(', (_) {}, onError: (_) {}),
           throwsA(isA<InvalidArgumentException>()));
@@ -855,7 +860,7 @@ void main() {
           session.collection('a b', type: 'Todo'),
           throwsA(isA<CollectionException>().having(
               (e) => e.kind, 'kind', CollectionFailure.invalidArgument)));
-      expect(() => AtClientJsSession(client, namespace: 'a.b'),
+      expect(() => AtClientSession(client, namespace: 'a.b'),
           isNot(throwsArgumentError));
     });
   });
@@ -892,7 +897,7 @@ void main() {
       await session.close();
 
       for (final call in <Future<Object?> Function()>[
-        () => session.notify(const JsKey('k', sharedWith: '@bob'), 'v'),
+        () => session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
         () async => session.subscribe('.*', (_) {}, onError: (_) {}),
       ]) {
         await expectLater(call(), throwsA(isA<SessionClosedException>()));
@@ -939,7 +944,7 @@ void main() {
     });
 
     test('stops delivering to subscribers', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
       await session.close();
@@ -952,7 +957,7 @@ void main() {
     test(
         'close stops delivering subscription events and errors even if the '
         'stream emits before cancel settles', () async {
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       final errors = <Object>[];
       Future<void>? closing;
       session.subscribe(
@@ -985,7 +990,7 @@ void main() {
       Future<void>? closing;
       service.onStartListening = () => closing = session.close();
 
-      final received = <JsNotification>[];
+      final received = <ReceivedNotification>[];
       final errors = <Object>[];
       session.subscribe('.*', received.add, onError: errors.add);
       await pumpEventQueue();

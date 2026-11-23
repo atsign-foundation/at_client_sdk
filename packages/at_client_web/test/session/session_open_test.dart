@@ -70,7 +70,7 @@ void main() {
       wire.stopThrows = true;
       addTearDown(() => wire.stopThrows = false);
 
-      await expectLater(open(), throwsA(isA<PortalSessionOfflineException>()));
+      await expectLater(open(), throwsA(isA<SessionOfflineException>()));
     });
   });
 

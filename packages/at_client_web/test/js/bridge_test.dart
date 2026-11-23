@@ -13,21 +13,21 @@ import 'package:at_client/at_client.dart'
         AtNoCredentialException,
         AtOpenRefusedException,
         Atsign;
-import 'package:at_client_web/src/collections/js_collections_adapter.dart';
+import 'package:at_client_web/src/collections/at_collection_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
-import 'package:at_client_web/src/js/at_error_code.dart';
+import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
-import 'package:at_client_web/src/js/js_session.dart';
+import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_opener.dart';
 import 'package:test/test.dart';
 
-/// A [JsCollection] that records each call and answers what it is
+/// A [ItemCollection] that records each call and answers what it is
 /// told to.
-class _FakeAdapter implements JsCollection {
+class _FakeAdapter implements ItemCollection {
   final calls = <String>[];
   Object? failure;
   var missing = false;
-  JsItem item = {
+  Item item = {
     'id': 'i1',
     'owner': '@alice',
     'type': 'note',
@@ -37,8 +37,8 @@ class _FakeAdapter implements JsCollection {
     'expiresAt': 2,
     'availableAt': null,
   };
-  JsListing listing = (items: const [], unreadable: const []);
-  void Function(JsEvent)? onEvent;
+  ItemListing listing = (items: const [], unreadable: const []);
+  void Function(CollectionEvent)? onEvent;
   void Function(CollectionException)? onError;
   Object? last;
   var cancelled = 0;
@@ -51,35 +51,35 @@ class _FakeAdapter implements JsCollection {
   }
 
   @override
-  Future<JsItem> create(Map<String, dynamic> data,
+  Future<Item> create(Map<String, dynamic> data,
           {String? id, List<String> sharedWith = const []}) =>
       _run('create', () => item, (data, id, sharedWith));
 
   @override
-  Future<JsItem?> get(JsItemAddress address) => _run('get',
+  Future<Item?> get(ItemAddress address) => _run('get',
       () => missing ? null : item, (address.id, address.owner.toString()));
 
   @override
-  Future<JsListing> list() => _run('list', () => listing);
+  Future<ItemListing> list() => _run('list', () => listing);
 
   @override
-  Future<JsListing> query(List<JsWhereClause> clauses) => _run('query',
+  Future<ItemListing> query(List<WhereClause> clauses) => _run('query',
       () => listing, [for (final c in clauses) (c.path, c.op, c.value)]);
 
   @override
-  Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
+  Future<Item> update(ItemAddress address, Map<String, dynamic> data) =>
       _run('update', () => item, (address.id, address.owner.toString(), data));
 
   @override
-  Future<JsItem> share(JsItemAddress address, List<String> atSigns) => _run(
+  Future<Item> share(ItemAddress address, List<String> atSigns) => _run(
       'share', () => item, (address.id, address.owner.toString(), atSigns));
 
   @override
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
+  Future<void> remove(ItemAddress address, {bool cascade = false}) =>
       _run('remove', () {}, (address.id, address.owner.toString(), cascade));
 
   @override
-  Future<void> Function() watch(void Function(JsEvent event) onEvent,
+  Future<void> Function() watch(void Function(CollectionEvent event) onEvent,
       {required void Function(CollectionException error) onError}) {
     if (failure case final error?) throw error;
     this.onEvent = onEvent;
@@ -88,12 +88,12 @@ class _FakeAdapter implements JsCollection {
   }
 }
 
-/// A [JsSession] that records each call.
-class _FakeSession implements JsSession {
+/// A [Session] that records each call.
+class _FakeSession implements Session {
   final calls = <String>[];
-  final keysSeen = <JsKey>[];
+  final keysSeen = <NotifyKey>[];
   final values = <Object>[];
-  final listeners = <void Function(JsNotification)>[];
+  final listeners = <void Function(ReceivedNotification)>[];
   var closed = false;
   var unsubscribed = 0;
   var delivered = true;
@@ -114,7 +114,7 @@ class _FakeSession implements JsSession {
   @override
   bool get isClosed => closed;
 
-  void _call(String name, [JsKey? key]) {
+  void _call(String name, [NotifyKey? key]) {
     if (closed) throw SessionClosedException();
     calls.add(name);
     if (key != null) keysSeen.add(key);
@@ -122,19 +122,20 @@ class _FakeSession implements JsSession {
   }
 
   @override
-  Future<bool> notify(JsKey key, String value) async {
+  Future<bool> notify(NotifyKey key, String value) async {
     _call('notify', key);
     values.add(value);
     return delivered;
   }
 
   @override
-  void Function() subscribe(String regex, void Function(JsNotification) onEvent,
+  void Function() subscribe(
+      String regex, void Function(ReceivedNotification) onEvent,
       {required void Function(Object error) onError}) {
     _call('subscribe');
     subscribedRegex = regex;
-    // Like AtClientJsSession, deliver nothing once the session is closed.
-    void deliver(JsNotification n) {
+    // Like AtClientSession, deliver nothing once the session is closed.
+    void deliver(ReceivedNotification n) {
       if (!closed) onEvent(n);
     }
 
@@ -159,7 +160,7 @@ class _FakeSession implements JsSession {
   }
 
   @override
-  Future<JsCollection> collection(String name,
+  Future<ItemCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs}) async {
     _call('collection');
     collectionArgs.add((name, type, eventSource, expirationMs));
@@ -276,7 +277,7 @@ void main() {
     opened = [];
     secure = true;
     openFailure = null;
-    api = createJSInteropWrapper(AtClientWebBridge(
+    api = createJSInteropWrapper(BridgeEntry(
         open: (o) async {
           opened.add(o);
           if (openFailure case final error?) throw error;
@@ -498,7 +499,7 @@ void main() {
     });
 
     test(
-        'external ArgumentError, AtOpenRefusedException, and PortalSessionOfflineException do not leak internal details',
+        'external ArgumentError, AtOpenRefusedException, and SessionOfflineException do not leak internal details',
         () async {
       openFailure =
           ArgumentError.value('sentinel-secret-arg', 'root', 'bad root');
@@ -515,7 +516,7 @@ void main() {
       expect(r.code, 'pkam_refused');
       expect(r.message, isNot(contains('sentinel')));
 
-      openFailure = PortalSessionOfflineException(
+      openFailure = SessionOfflineException(
           '@alice',
           AtConnectionState.offline(AtConnectionCause.unreachable,
               error: StateError('sentinel-socket-detail')));
@@ -668,7 +669,7 @@ void main() {
     });
 
     test('a failing call rejects with the code of its exception', () async {
-      session.failure = BadKeyException('notify needs sharedWith');
+      session.failure = InvalidKeyException('notify needs sharedWith');
 
       final r = await _rejected(_call(s, 'notify', [
         _obj({'key': 'rpc'}),
@@ -679,7 +680,7 @@ void main() {
     });
 
     test('a mapped exception keeps its message', () async {
-      session.failure = BadKeyException('notify needs sharedWith');
+      session.failure = InvalidKeyException('notify needs sharedWith');
 
       final r = await _rejected(_call(s, 'notify', [
         _obj({'key': 'rpc'}),
@@ -1624,7 +1625,7 @@ void main() {
       });
 
       test('each call rejects with unsupported without __manage', () async {
-        session.failure = ManageAccessException();
+        session.failure = ManageAccessRequiredException();
 
         for (final (method, args) in [
           ('otp', <JSAny?>[]),

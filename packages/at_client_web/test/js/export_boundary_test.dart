@@ -315,7 +315,7 @@ void main() {
     }, {
       'BridgeSession',
       'BridgeCollection',
-      'AtClientWebBridge'
+      'BridgeEntry'
     }, reason: 'every @JSExport class is scanned');
     expect(
         exported.where((m) => m.owner == 'BridgeSession').map((m) => m.name),
@@ -331,10 +331,7 @@ void main() {
           'deny',
           'close'
         ]));
-    expect(
-        exported
-            .where((m) => m.owner == 'AtClientWebBridge')
-            .map((m) => m.name),
+    expect(exported.where((m) => m.owner == 'BridgeEntry').map((m) => m.name),
         ['create']);
     expect(
         exported.where((m) => m.owner == 'BridgeCollection').map((m) => m.name),
