@@ -35,7 +35,7 @@ Feature: Collections store, read and share items through the session
   # Impersonation: items are addressed by validated (id, owner) with owner
   #   defaulting to the session atSign and invalid owner rejected ("collection
   #   get defaults the owner to the session and resolves null", "invalid address
-  #   owner rejects with COLLECTION_INVALID_ARGUMENT naming owner").
+  #   owner rejects with invalid_argument naming owner").
 
   Scenario: collection passes name, type, eventSource and expiration
     Given an open session
@@ -107,24 +107,27 @@ Feature: Collections store, read and share items through the session
     Then it rejects with that code and the failure's message, id, owner, kind and failures
 
   Scenario: every collection code reaches JS unchanged
-    Given a collection whose list fails with each of the collection codes in turn
+    Given a collection whose list fails with each of the collection kinds in turn
     When list is called
-    Then each call rejects with that code, unchanged
+    Then each call rejects with that kind's code from js-api.md 6.1
 
   Scenario: collection bad arguments reject naming the parameter
     Given an open collection
     When get is called with a string for the address, create with a number for the data, query with a number for where, or share with a string for atSigns
-    Then each rejects with code internal and a message naming that parameter
+    Then each rejects with code invalid_argument and a message naming that parameter
 
-  Scenario: invalid address owner rejects with COLLECTION_INVALID_ARGUMENT naming owner
+  @impersonation
+  Scenario: invalid address owner rejects with invalid_argument naming owner
     Given an open collection
-    When get, update, share or remove is called with an invalid address owner
-    Then each rejects with COLLECTION_INVALID_ARGUMENT naming owner without its value
+    When get, update, share or remove is called with an address whose owner is not a valid atSign
+    Then each rejects with code invalid_argument naming owner without its value
+    And the rejection carries code, message and the address id folded to lower case, and nothing else
+    And no call reaches the collection, for that owner or for the session's own atSign
 
   Scenario: non-plain JS objects in collection arguments reject naming the parameter
     Given an open collection
     When create is called with Date, Uint8Array, Map or array in opts or nested data
-    Then each rejects with code internal naming the parameter
+    Then each rejects with code invalid_argument naming the parameter
 
   Scenario: prototype-polluted Object.prototype fields are ignored across bridge calls
     Given extra properties defined on Object.prototype
@@ -134,7 +137,7 @@ Feature: Collections store, read and share items through the session
   Scenario: collection data that is an array or too deep rejects naming data
     Given an open collection
     When create or update is called with an array as the data, or create with data nested 100 levels deep or with a cyclic object
-    Then each rejects with code internal and a message naming data
+    Then each rejects with code invalid_argument and a message naming data
 
   Scenario: collection item data nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP
     Given a collection whose item data nests 65 levels, and one that nests 64
@@ -195,5 +198,19 @@ Feature: Collections store, read and share items through the session
   Scenario: collection watch needs a function and never throws
     Given an open collection
     When watch is called with a number in place of the event callback
-    Then it returns {code: internal} instead of the stop function
+    Then it returns {code: invalid_argument} instead of the stop function
     And nothing is thrown
+
+  Scenario: a collection rejection keeps code, message, id, owner, kind and failures
+    Given a collection whose calls fail as a missing item, another owner's item, a failed open with a StateError and a partial write failure
+    When each call rejects
+    Then the missing item rejects COLLECTION_ITEM_NOT_FOUND with message 'item not found' and kind "StateError"
+    And the other owner's item rejects COLLECTION_ITEM_NOT_OWNER with a message naming the id and both atSigns and no kind
+    And the failed open rejects COLLECTION_FAILED with message 'operation failed' and kind "StateError"
+    And the partial failure rejects COLLECTION_PARTIAL_FAILURE with kind "CollectionOpException" and one {op, recipient, kind} per failed write
+    And each carries the item's id and owner where it has them
+
+  Scenario: list and query report each unreadable record with the same code as before
+    Given a listing with one record that cannot be read and one whose data nests 65 levels
+    When list or query is called
+    Then unreadable holds {id, owner, code} with COLLECTION_ITEM_UNREADABLE for the first and COLLECTION_ITEM_TOO_DEEP for the second

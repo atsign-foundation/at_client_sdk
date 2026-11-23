@@ -59,13 +59,46 @@ Feature: An approving device enrolls another browser
     When deny is called with e1 and then with gone
     Then e1 sends one enroll:deny and gone rejects with enrollment_denied without sending
 
+  @race
   Scenario: concurrent approve or deny on the same id rejects without sending a second approval
     Given a pending enrollment e1 whose approval is still in flight
     When another approve or deny for e1 is called concurrently
-    Then the second call rejects with enrollment_denied
+    Then the second call rejects with code enrollment_in_flight
     And only one enroll:approve or enroll:deny is sent
+    And the second call sends no enroll:list
 
   Scenario: key conveyance failure rejects with enrollment_conveyance_failed
     Given a pending enrollment e1 whose key conveyance fails after server approval
     When approve is called with e1
     Then it rejects with code enrollment_conveyance_failed rather than enrollment_denied
+
+  Scenario: the in-flight rejection names no atSign and no enrollment id
+    Given a pending enrollment e1 whose approval is still in flight
+    When another approve for e1 is called concurrently
+    Then the rejection's message is fixed text that says a decision is already in flight
+    And neither the message nor the Dart exception's text holds the session's atSign or e1
+
+  @replay
+  Scenario: a decision repeated after the first settled is enrollment_denied, not enrollment_in_flight
+    Given an approve of e1 that has completed, so e1 is no longer pending
+    When approve or deny is called with e1 again
+    Then it rejects with code enrollment_denied
+    And no enroll:approve or enroll:deny is sent
+
+  @race
+  Scenario: a decision in flight on one id does not hold up another id
+    Given pending enrollments e1 and e2 and an approve of e1 still in flight
+    When approve is called with e2
+    Then e2 is approved without waiting for e1
+
+  @race
+  Scenario: a failed decision releases the id for another attempt
+    Given an approve of e1 that failed while e1 stayed pending
+    When approve is called with e1 again
+    Then one more enroll:approve is sent and it is not rejected with enrollment_in_flight
+
+  Scenario: the in-flight failure is still an enrollment failure to a Dart caller
+    Given a session whose approve of e1 is still in flight
+    When a Dart caller awaits a second approve of e1 and catches AtEnrollmentException
+    Then the failure is caught
+    And the bridge maps it to enrollment_in_flight ahead of enrollment_denied

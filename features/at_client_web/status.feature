@@ -19,7 +19,7 @@ Feature: The connection status is readable and observable
   #   and retains the last state after close without replaying stale transitions
   #   ("status() reads the latest value").
   # DoS: non-function callbacks are rejected synchronously without registering a
-  #   listener ("onStatus with non-function callback returns {code: internal}
+  #   listener ("onStatus with non-function callback returns {code: invalid_argument}
   #   without throwing").
   # Forgery: status values come from a fixed enum mapping of AtConnectionState
   #   in the session, never from network payload text.
@@ -42,10 +42,10 @@ Feature: The connection status is readable and observable
     When onStatus is called
     Then it returns {code: closed} instead of the off function
 
-  Scenario: onStatus with non-function callback returns {code: internal} without throwing
+  Scenario: onStatus with non-function callback returns {code: invalid_argument} without throwing
     Given an open session
     When onStatus is called with a non-function callback
-    Then it returns {code: internal} naming callback without throwing
+    Then it returns {code: invalid_argument} naming callback without throwing
 
   Scenario: onStatus listener error does not skip sibling listeners
     Given an open session with two status listeners where the first throws

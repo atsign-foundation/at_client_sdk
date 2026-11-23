@@ -27,7 +27,7 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   before sending or subscribing ("notify with empty or invalid key or
   #   invalid sharedWith rejects with bad_key and sends nothing", "subscribe
   #   with invalid regex rejects naming regex", "subscribe with non-function
-  #   callback returns {code: internal} without throwing").
+  #   callback returns {code: invalid_argument} without throwing").
   # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
   #   without recipient, wrong sharedWith, injected text keys) and mismatched
   #   sender/key owner are dropped ("delivers only a notification sent by the
@@ -122,12 +122,12 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   Scenario: subscribe with invalid regex rejects naming regex
     Given an open session
     When subscribe is called with an invalid regular expression
-    Then it returns {code: internal} naming regex without starting the monitor
+    Then it returns {code: invalid_argument} naming regex without starting the monitor
 
-  Scenario: subscribe with non-function callback returns {code: internal} without throwing
+  Scenario: subscribe with non-function callback returns {code: invalid_argument} without throwing
     Given an open session
-    When subscribe is called with a non-function callback
-    Then it returns {code: internal} naming callback without throwing
+    When subscribe is called with a non-function callback or a non-function onError
+    Then it returns {code: invalid_argument} naming that parameter without throwing
 
   Scenario: subscribe errors go to onError as {code, message}
     Given a subscription with an onError function

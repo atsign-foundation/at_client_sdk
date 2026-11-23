@@ -67,16 +67,40 @@ Feature: create opens a session and close ends it
   Scenario: invalid or empty atSign rejects naming atSign
     Given create options with an empty or malformed atSign
     When create is called
-    Then it rejects with code internal and a message naming atSign without its value
+    Then it rejects with code invalid_argument and a message naming atSign without its value
     And no session is opened
 
   Scenario: invalid or empty namespace rejects naming namespace
     Given create options with an empty or invalid namespace
     When create is called
-    Then it rejects with code internal and a message naming namespace without its value
+    Then it rejects with code invalid_argument and a message naming namespace without its value
     And no session is opened
 
   Scenario: credential-less keys reject with bad_key
     Given create options whose .atKeys document holds no usable credential
     When create is called
     Then it rejects with code bad_key
+
+  Scenario: create with missing or mistyped options rejects with invalid_argument naming the option
+    Given options that are null, a string, an array, a function or a class instance, and options whose atSign, namespace or keys is absent, whose atSign, namespace or rootDomain is not a string, or whose keys is a number or JSON text of something other than an object
+    When create is called with each
+    Then each rejects with code invalid_argument and a message naming opts or that option
+    And no session is opened
+
+  Scenario: an unusable rootDomain rejects with invalid_argument naming rootDomain
+    Given create options whose rootDomain is empty, has a port outside 1-65535 or is not host or host:port
+    When create is called
+    Then it rejects with code invalid_argument and a message naming rootDomain without its value
+    And no session is opened
+
+  @dos
+  Scenario: a caller mistake at create opens no connection
+    Given create options with one invalid option and otherwise valid keys
+    When create is called
+    Then it rejects with code invalid_argument before the opener is called
+    And no connection to the atDirectory or an atServer is attempted
+
+  Scenario: a closed session refuses each call with SessionClosedException
+    Given a session that has been closed
+    When notify, subscribe, onStatus, collection, otp, pendingEnrollments, approve or deny is called on the session, or any operation on a collection it opened
+    Then each throws SessionClosedException, an AtException; at_client's StoppedException never reaches the caller
