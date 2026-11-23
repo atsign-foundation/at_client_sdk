@@ -224,7 +224,8 @@ jobs:
           if [ "$TARGET" = "dart2wasm" ]; then
             notes="$notes This dart2wasm bundle is advisory only, per OQ-16: dart2js remains the primary JS/TS target."
           fi
-          gh release create "$TAG" $ASSETS SHA256SUMS \
+          read -r -a assets <<< "$ASSETS"
+          gh release create "$TAG" "${assets[@]}" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" \
             --prerelease --latest=false \
             --target "$GITHUB_SHA" \

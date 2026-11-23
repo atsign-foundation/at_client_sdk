@@ -129,8 +129,9 @@ void main() {
         reason: 'the generator is invoked exactly once');
     final mkdir = source.indexOf('mkdir -p "\$out"');
     final call = source.indexOf(invocation);
-    final branch = source.indexOf('case "\${1:-}"');
+    final branch = source.indexOf('if [[ -z "\$entry" ]]; then\n  build_entry');
     expect(mkdir, isNonNegative);
+    expect(branch, isNonNegative, reason: 'the entry branches are found');
     expect(call, greaterThan(mkdir),
         reason: 'the output directory exists first');
     expect(call, lessThan(branch),
