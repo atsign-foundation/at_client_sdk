@@ -14,6 +14,8 @@ import 'package:at_auth/at_auth.dart'
     show AtEnrollmentResponse, EnrollmentRequestDecision;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
+import 'package:flutter/foundation.dart'
+    show FlutterMemoryAllocations, ObjectCreated, ObjectDisposed, ObjectEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -1192,6 +1194,35 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 4));
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Given the feedback overlay showing, when a tap removes it, '
+        'then its OverlayEntry is disposed', (tester) async {
+      approves();
+      await pumpList(tester);
+      final created = <Object>[];
+      final disposed = <Object>[];
+      void record(ObjectEvent event) {
+        if (event.object is! OverlayEntry) return;
+        if (event is ObjectCreated) created.add(event.object);
+        if (event is ObjectDisposed) disposed.add(event.object);
+      }
+
+      FlutterMemoryAllocations.instance.addListener(record);
+      addTearDown(
+        () => FlutterMemoryAllocations.instance.removeListener(record),
+      );
+      await showFeedback(tester, 'Approve');
+      expect(
+        created,
+        hasLength(1),
+        reason: 'the control: the feedback overlay made one entry',
+      );
+
+      await tester.tap(overlay());
+      await tester.pump();
+
+      expect(disposed, [same(created.single)]);
     });
 
     testWidgets('The feedback overlay goes when the request list goes', (
