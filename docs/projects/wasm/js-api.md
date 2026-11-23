@@ -248,15 +248,24 @@ the `alpha` dist-tag in [atsign-foundation/at_js](https://github.com/atsign-foun
 `at_client_web_bridge_release.yaml` (`workflow_dispatch`, with a `target` input defaulting
 to `dart2js`) from `trunk`. It builds one declared target from
 `packages/at_client_web/dart-workspace.lock` and attaches that target's files to a
-prerelease of this repository: `at_client_web.js` under
+prerelease of this repository: `at_client_web.js` and `at_client_web.js.sha256` under
 `at_client_web-bridge-<first 12 characters of the commit SHA>` for `dart2js` (the tag is
 unchanged), or `at_client_web.wasm` and `at_client_web.mjs` under
-`at_client_web-bridge-wasm-<sha12>` for `dart2wasm` (advisory, OQ-16). One `SHA256SUMS`
-covers exactly the published files, and each published file plus `SHA256SUMS` carries a
-build provenance attestation. The bundle is built in a read-only job and a separate job
+`at_client_web-bridge-wasm-<sha12>` for `dart2wasm` (advisory, OQ-16). Both targets also attach
+`bridge-manifest.json`. One `SHA256SUMS` covers the target's files plus the manifest, and each
+published file plus `SHA256SUMS` carries a build provenance attestation. The bundle is built in a read-only job and a separate job
 attests it and creates the prerelease. The npm package pins one tag and verifies its files
 against `SHA256SUMS`; at_js's `fetch-bridge.mjs` must download and parse `SHA256SUMS` in
 the same change as the next `bridge.ref` bump.
+
+**The bridge manifest.** `packages/at_client_web/bridge-manifest.json` lists every exported
+bridge method (`surface`), the closed `errorCodes` and `collectionErrorCodes`, and a
+`schemaVersion` (1). `tool/manifest.dart` generates it from Dart constants
+(`bridgeSurface`, `atErrorCodes`, `collectionErrorCodes`); the file is committed, and
+`test/js/manifest_test.dart` fails when it differs from the generator's output or when
+`bridgeSurface` disagrees with the `@JSExport` classes. The bytes do not depend on the compile
+target. The release build compares the manifest it builds with the committed one. Additive
+changes keep `schemaVersion` 1; a rename or removal is a bridge-contract major.
 
 The build runs `dart pub get --enforce-lockfile`, so it fails when the lock no longer
 matches the workspace's pubspecs. To regenerate it, run `dart pub get` at the repo root and
