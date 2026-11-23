@@ -219,7 +219,8 @@ through the platform package. Cryptography included: `AtCollection<T>`, the
 notification service and the auth flows encrypt, sign and verify for the app.
 
 If an app genuinely cannot do something without one of these imports, that is
-an SDK gap, not a reason to add the package: report it as a bug.
+an SDK gap: follow [19-sdk-gaps.md](19-sdk-gaps.md), which reports it and
+adds the package only as a marked workaround.
 
 ---
 

@@ -355,6 +355,20 @@
         "Checks noports_core's pub.dev dependencies (or tells the developer to) instead of stating which at_client it uses",
         "Does not suggest a git dependency, dependency_overrides, or pinning the SDK back"
       ]
+    },
+    {
+      "id": 46,
+      "prompt": "My Flutter app uses at_client_flutter. I need a type that lives in at_commons, but the analyzer says it's undefined with just the at_client_flutter import. Should I add at_commons to my pubspec, or what's the right move?",
+      "expected_output": "Checks first for a supported way: whether the platform package exports the type or the app can reach it another way. If not, treats it as an SDK gap: searches the at_client_sdk issues, open and closed. A closed issue may be fixed only in the repo, not yet in a version on pub.dev: upgrades if a published version has the fix, otherwise keeps the workaround. As a workaround, adds at_commons with no version, imports only the needed type with show, and marks it with a comment linking the issue and saying when to remove it. Drafts an issue and files it only if the developer agrees, and tells the developer it is a workaround.",
+      "expectations": [
+        "Looks for a supported way through the platform package before adding anything",
+        "Searches existing issues, open and closed, before drafting a new one",
+        "For a closed issue, upgrades if a published version has the fix, and otherwise keeps the workaround",
+        "Adds at_commons with no version constraint and imports only the needed type with show",
+        "Marks the import with a comment that links the issue and says when to remove it",
+        "Does not use a git or path dependency, dependency_overrides, or a prerelease",
+        "Files the issue only if the developer agrees"
+      ]
     }
   ]
 }

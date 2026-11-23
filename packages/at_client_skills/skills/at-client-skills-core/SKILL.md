@@ -9,7 +9,8 @@ description: >
   receiving and confirming delivery of notifications; waiting for sync to
   settle; RPC between atsigns; remote-versus-local atServer operations;
   publishing public data; which exceptions to catch; NoPorts tunnels;
-  unit-testing without a live atServer; and which pub.dev packages to add.
+  unit-testing without a live atServer; which pub.dev packages to add; and
+  what to do when the SDK lacks something or has a bug.
   Warns against AtCollectionModel and the other APIs at_client 4.0 removed.
   Use alongside at-client-skills-cli (CLI, daemon, server, headless agents) or
   at-client-skills-flutter (Flutter apps, onboarding dialogs).
@@ -101,7 +102,8 @@ Nothing else from the SDK, beyond any feature package the app adds
 separately, so check one resolves before building on it — see
 [references/06-package-map.md](references/06-package-map.md)). An app never
 adds or imports the packages underneath — `at_client`, `at_auth`,
-`at_commons`, `at_chops`, `at_lookup`, `at_utils`. `at_client` itself is the
+`at_commons`, `at_chops`, `at_lookup`, `at_utils` — except as a marked
+workaround for an SDK gap (§18). `at_client` itself is the
 platform-neutral core, for building a platform package.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
@@ -558,6 +560,17 @@ deprecated packages and the packages in migration.
 key-naming conventions, so `AtCollection` data will not appear in raw `get()`
 queries and vice versa. Read existing data with the raw API and re-write it
 through `AtCollection<T>`; test in a staging environment first.
+
+---
+
+## 18. When the SDK Falls Short
+
+When the app needs something the SDK does not provide, or the SDK does not do
+what its docs say, read [references/19-sdk-gaps.md](references/19-sdk-gaps.md).
+In order: confirm there is no supported way; search the issues, open and
+closed, and check whether a fix is published; apply the smallest workaround;
+draft the issue and file it only if the developer agrees; and tell the
+developer it is a workaround.
 
 [upgrade-guide]: https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md
 [ex-todos]: https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/example/bin/collections_todos.dart
