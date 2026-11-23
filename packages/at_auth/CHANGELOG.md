@@ -133,8 +133,7 @@
   the passphrase may be incorrect.
 - fix: a passphrase envelope whose `kdfParams` `memory`, `iterations` or
   `parallelism` is not a positive integer, or whose `memory` is under 8 times
-  its `parallelism`, is refused with an `AtDecryptionException` saying which
-  (4.0.0 accepted any integer).
+  its `parallelism`, is refused with an `AtDecryptionException` saying which.
 - feat: `AtOnboardingRequest` takes an optional `apkamKeyPair`, which the first
   activation enrolls in place of a freshly minted APKAM keypair, as
   `AtEnrollmentRequest` does. A pair that does not sign for its public half, or
