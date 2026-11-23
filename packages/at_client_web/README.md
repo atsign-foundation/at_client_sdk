@@ -32,4 +32,4 @@ Arguments:
 - **`at_client_bridge_entry`** with no `--target` is the dart2js bridge only, as before.
 - **Anything else exits 1**, naming the allowed values: `--target both`, `--target=` (empty), an unknown target, and an unknown entry are all refused.
 
-The release workflow builds one target per release (`dart2js` by default) and publishes that target's files only: `at_client_web.js` for dart2js, and `at_client_web.wasm` plus `at_client_web.mjs` for dart2wasm. See [`docs/projects/wasm/acceptance.md`](../../docs/projects/wasm/acceptance.md) §9b and `decisions.md` D-34.
+The release workflow builds one target per release (`dart2js` by default) and publishes that target's files only: `at_client_web.js` for dart2js, and `at_client_web.wasm` plus `at_client_web.mjs` for dart2wasm. See [`docs/projects/wasm/acceptance.md`](../../docs/projects/wasm/acceptance.md) §9b and D-36 in `docs/architecture/decisions.md` (proposed).
