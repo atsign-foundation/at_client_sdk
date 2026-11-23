@@ -104,7 +104,7 @@ Feature: Collections store, read and share items through the session
   Scenario: a collection failure rejects with its code and fields (T6.4)
     Given a collection whose share fails with COLLECTION_PARTIAL_FAILURE
     When share is called
-    Then it rejects with that code and the failure's message, id, owner, kind and failures
+    Then it rejects with that code and the message the bridge words for that kind, id, owner, kind and failures
 
   Scenario: every collection code reaches JS unchanged
     Given a collection whose list fails with each of the collection kinds in turn
@@ -192,7 +192,7 @@ Feature: Collections store, read and share items through the session
   Scenario: collection watch delivers events, including unknown, and unsubscribes (T6.5, T6.8)
     Given a collection watch with an event and an error callback
     When an updated event, an event of an unknown type and an error arrive, and the returned function is then called
-    Then both events reach the event callback and the error reaches the error callback as a {code, message} object
+    Then both events reach the event callback and the error reaches the error callback as a {code, message} object carrying the code and the message the bridge words for its kind
     And that one call cancels the collection's watch once
 
   Scenario: collection watch needs a function and never throws
@@ -224,6 +224,11 @@ Feature: Collections store, read and share items through the session
     Given two handles on one collection opened with different eventSource and expiration
     When each removes the same item, the id differing only in case
     Then the second starts after the first finishes, and an operation on another id does not wait
+
+  Scenario: warns, never swallows silently, when a watch fails to cancel
+    Given a session with two active collection watches whose cancel throws
+    When close is called
+    Then both watches are still cancelled and a warning is logged for each
 
   Scenario: the item lock map is empty once the operations complete
     Given several operations on one item have finished

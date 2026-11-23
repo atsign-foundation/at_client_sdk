@@ -7,8 +7,9 @@ import '../log_text.dart';
 // The one place an exception becomes an error code and a message for JS.
 // Both are pure functions of the thrown type and its structured fields: no
 // exception's own text ever chooses a code, and the bridge authors every
-// message JS sees. The one inner text it passes through is the id refusal
-// AtCollection words itself (CollectionRefusal.itemId), bounded to one line.
+// message JS sees. The only text it passes through from an exception is the id
+// refusal AtCollection words itself (CollectionRefusal.itemId), bounded to one
+// line; every other message is fixed here or built from structured fields.
 
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
@@ -24,6 +25,7 @@ String errorCodeOf(Object error) => switch (error) {
       AtEnrollmentException() => 'enrollment_denied',
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
+      UnsupportedOperationException() ||
       UnsupportedError() ||
       ManageAccessRequiredException() =>
         'unsupported',
@@ -63,18 +65,21 @@ String atErrorMessage(Object error) => switch (error) {
         'onboarding is incomplete: no usable credential',
       EnrollmentConveyanceException(:final keyPackageStatus) =>
         'enrollment approved on server, but key conveyance failed (${keyPackageStatus.name})',
-      EnrollmentInFlightException() =>
-        'a decision for this request is already in flight',
+      EnrollmentInFlightException() => enrollmentInFlightMessage,
       AtEnrollmentException() =>
         'the enrollment request was denied or is not pending',
       SessionClosedException() || StoppedException() => sessionClosedMessage,
       UnsupportedKeyMaterialException() =>
         'the keys carry unsupported cryptographic material',
-      ManageAccessRequiredException() =>
-        'this session cannot manage enrollments',
-      UnsupportedError(:final message) =>
-        singleLine(message ?? 'unsupported operation'),
-      InvalidKeyException(:final reason) => reason,
+      ManageAccessRequiredException() => manageAccessRequiredMessage,
+      UnsupportedOperationException(:final operation) => switch (operation) {
+          UnsupportedOperation.secureContext =>
+            'a secure context (HTTPS) is required',
+        },
+      // An UnsupportedError maps by type alone: its text is never read or
+      // shown, whoever raised it (the setup lock's included).
+      UnsupportedError() => 'the operation is not supported here',
+      InvalidKeyException() => _keyMessage(error),
       AtNoCredentialException() => 'keys hold no usable credential',
       InvalidAtSignException() => 'atSign is not valid',
       _ => 'internal error',
@@ -84,11 +89,30 @@ String _bounded(String value) =>
     truncateText(singleLine(value), maxErrorMessageLength);
 
 /// What each parameter the session validates by itself has to be, for an
-/// [InvalidArgumentException] that names no `expected`.
+/// [InvalidArgumentException] that names no `expected`. The namespace is not
+/// here: the opener refuses it as an [ArgumentError] and the bridge words it.
 const _expectedOf = {
   'regex': 'a valid regular expression',
-  'namespace': 'a non-empty namespace segment',
 };
+
+String _keyMessage(InvalidKeyException error) => _bounded(switch (error) {
+      InvalidKeyException(:final field?) => _argumentMessage(field),
+      InvalidKeyException(:final refusal) => switch (refusal) {
+          KeyRefusal.publicKey => 'public keys cannot be sent with notify',
+          KeyRefusal.cachedKey => 'cached keys cannot be sent with notify',
+          KeyRefusal.sharedWithMissing => 'notify needs sharedWith',
+          KeyRefusal.sharedWithInvalid => 'sharedWith must be a valid atSign',
+          KeyRefusal.sharedByInvalid => 'sharedBy must be a valid atSign',
+          KeyRefusal.sharedByMismatch =>
+            'sharedBy must match the session atSign',
+          KeyRefusal.keyName => 'key is not a valid key name',
+          KeyRefusal.namespace => 'namespace is not valid',
+          KeyRefusal.atKey => 'key is not a valid atKey',
+          KeyRefusal.keysJson => 'keys is not valid JSON',
+          KeyRefusal.keysDocument => 'keys is not a usable .atKeys document',
+          KeyRefusal.field => 'key is not valid',
+        },
+    });
 
 String _argumentMessage(InvalidArgumentException error) {
   final name = error.parameter;

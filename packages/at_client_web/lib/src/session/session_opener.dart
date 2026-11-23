@@ -11,13 +11,14 @@ import 'session_transport_options.dart';
 /// A constructor validates every field before anything is opened and throws
 /// an [ArgumentError] naming the field, never carrying its value; it checks
 /// in the order atSign, namespace, rootDomain, then the form's own fields.
+/// The root domain is given as the text `host` or `host:port` and parsed
+/// here, once; no other layer parses or checks it.
 sealed class SessionOptions {
   SessionOptions._(
-      {required String atSign, required String namespace, this.rootDomain})
+      {required String atSign, required String namespace, String? rootDomain})
       : atSign = _atSign(atSign),
-        namespace = _namespace(namespace) {
-    _checkRoot(rootDomain);
-  }
+        namespace = _namespace(namespace),
+        rootDomain = _rootDomain(rootDomain);
 
   /// The atSign, in `@name` form.
   final String atSign;
@@ -31,11 +32,10 @@ sealed class SessionOptions {
 
   /// Checks the shared fields in order, for a form that must check its own
   /// fields after them but before this constructor runs.
-  static void _checkShared(
-      String atSign, String namespace, AtRootDomain? root) {
+  static void _checkShared(String atSign, String namespace, String? root) {
     _atSign(atSign);
     _namespace(namespace);
-    _checkRoot(root);
+    _rootDomain(root);
   }
 
   static String _atSign(String raw) {
@@ -54,13 +54,16 @@ sealed class SessionOptions {
     }
   }
 
-  static void _checkRoot(AtRootDomain? root) {
-    if (root == null) return;
+  static AtRootDomain? _rootDomain(String? raw) {
+    if (raw == null) return null;
+    final AtRootDomain root;
     try {
+      root = AtRootDomain.parse(raw);
       SessionTransportOptions(root: root);
-    } on ArgumentError {
+    } on Object {
       throw ArgumentError('is not a valid root domain', 'rootDomain');
     }
+    return root;
   }
 }
 
@@ -79,7 +82,7 @@ final class KeysSessionOptions extends SessionOptions {
   /// The decoded document.
   final AtKeys keys;
 
-  static AtKeys _keys(String atSign, String namespace, AtRootDomain? root,
+  static AtKeys _keys(String atSign, String namespace, String? root,
       Map<String, dynamic> document) {
     SessionOptions._checkShared(atSign, namespace, root);
     try {

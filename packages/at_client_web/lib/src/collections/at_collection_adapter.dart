@@ -87,7 +87,8 @@ abstract interface class ItemCollection {
 /// write re-reads the item right before writing and never removes a
 /// recipient it did not read, so a recipient another device added is kept.
 /// Every operation returns a Future that rejects with a
-/// [CollectionException].
+/// [CollectionException], except that a [StoppedException] from at_client
+/// (a call in flight when the client stops) is rethrown as it is.
 final class AtCollectionAdapter implements ItemCollection {
   /// [locks] is the session's lock map, shared by every adapter it builds,
   /// and [namespace] the folded namespace this collection is keyed under in
@@ -99,7 +100,7 @@ final class AtCollectionAdapter implements ItemCollection {
   final ItemLocks _locks;
   final String namespace;
 
-  final _logger = AtSignLogger('jsCollectionsAdapter');
+  final _logger = AtSignLogger('AtCollectionAdapter');
 
   static const _eventSources = {
     'data': EventSource.data,

@@ -93,6 +93,13 @@ Feature: create opens a session and close ends it
     Then it rejects with code invalid_argument and a message naming rootDomain without its value
     And no session is opened
 
+  Scenario: create with several bad inputs reports the type checks and key decoding before the options
+    Given create options with an atSign that is not an atSign and keys that are not JSON, or a rootDomain of a:b:c and keys that are not JSON, or a mistyped namespace and keys that are not JSON
+    When create is called with each
+    Then the first two reject with code bad_key, naming no value
+    And the third rejects with code invalid_argument naming namespace
+    And no session is opened
+
   @dos
   Scenario: a caller mistake at create opens no connection
     Given create options with one invalid option and otherwise valid keys
@@ -104,6 +111,32 @@ Feature: create opens a session and close ends it
     Given a session that has been closed
     When notify, subscribe, onStatus, collection, otp, pendingEnrollments, approve or deny is called on the session, or any operation on a collection it opened
     Then each throws SessionClosedException, an AtException; at_client's StoppedException never reaches the caller
+
+  Scenario: a router sends each kind to its opener
+    Given create options of the keys kind and of the passkey kind
+    When the router opens each
+    Then the keys options go to the keys opener and the passkey options go to the passkey opener
+    And an opener given options of another kind rejects naming options
+
+  Scenario: a wrap that fails stops the opened session and rethrows its error
+    Given an opener that opens a session and a wrap step that throws
+    When the session is opened through the wrap
+    Then the opened session is stopped once and the wrap error is thrown unchanged
+
+  Scenario: a stop that fails during that cleanup leaves the wrap error
+    Given an opener whose session stop throws and a wrap step that throws
+    When the session is opened through the wrap
+    Then the wrap error, not the stop error, is thrown
+
+  Scenario: the session close awaits the opener stop
+    Given a session whose opener supplied its own stop
+    When close is called
+    Then close resolves only after that stop has completed
+
+  Scenario: close removes the network listeners even when a stop step fails
+    Given a session listening for the browser going online and offline, whose status subscription fails to cancel
+    When close is called
+    Then the online and offline listeners are still removed and the failure is logged
 
   Scenario: a close whose stop failed can be tried again
     Given a session whose stop fails on the first close

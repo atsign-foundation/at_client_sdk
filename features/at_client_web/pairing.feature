@@ -32,6 +32,17 @@ Feature: An approving device enrolls another browser
     When otp, pendingEnrollments, approve or deny is called
     Then each rejects with code unsupported
 
+  Scenario: a decision reads the session's own grants once
+    Given an open session with __manage rw access
+    When approve is called for a pending id
+    Then the session's own enrollment record is read from the atServer once for that decision
+
+  Scenario: the primary enrollment is authorised without listing enrollments
+    Given an open session whose enrollment is the primary one, named primary or none
+    When otp is called
+    Then the call is authorised and the passcode is returned
+    And no enroll:list is sent
+
   Scenario: otp requests and returns a passcode
     Given an open session with __manage rw access
     When otp is called

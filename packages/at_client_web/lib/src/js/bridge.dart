@@ -4,7 +4,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
-    show AtRootDomain, AtSignLogger, Atsign, InvalidAtSignException;
+    show AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
 import '../collections/at_collection_adapter.dart';
@@ -50,17 +50,6 @@ Stream<void> _networkChanges() {
     },
   );
   return controller.stream;
-}
-
-/// The root domain [value] names, `host` or `host:port` (the port defaults to
-/// 64; a `proxy:` host is kept). An [ArgumentError] names the parameter,
-/// never the value.
-AtRootDomain parseRootDomain(String value) {
-  try {
-    return AtRootDomain.parse(value);
-  } on Object {
-    throw _invalidArgument('rootDomain', 'host or host:port');
-  }
 }
 
 /// A rejection reason: a plain object with `code` and `message`, never an
@@ -284,7 +273,7 @@ NotifyKey _jsKey(JSAny? value) {
         isCached: _flag(object, 'cached'),
         noNamespace: _flag(object, 'noNamespace'));
   } on InvalidArgumentException catch (e) {
-    throw InvalidKeyException(e.message);
+    throw InvalidKeyException.field(e);
   }
 }
 
@@ -572,7 +561,8 @@ class BridgeEntry {
   /// `rootDomain` is `host` or `host:port`.
   JSPromise<JSObject> create(JSAny? opts) => _promise(() async {
         if (!_isSecureContext()) {
-          throw UnsupportedError('a secure context (HTTPS) is required');
+          throw UnsupportedOperationException(
+              UnsupportedOperation.secureContext);
         }
         final session = await _open(_options(opts));
         return createJSInteropWrapper(BridgeSession(session));
@@ -585,18 +575,20 @@ class BridgeEntry {
     final atSign = _string(_own(object, 'atSign'), 'atSign');
     final namespace = _string(_own(object, 'namespace'), 'namespace');
     final rootDomain = _field(object, 'rootDomain');
-    final root = rootDomain == null ? null : parseRootDomain(rootDomain);
     final keys = _keys(_own(object, 'keys'));
     try {
       return KeysSessionOptions(
-          atSign: atSign, namespace: namespace, keys: keys, rootDomain: root);
+          atSign: atSign,
+          namespace: namespace,
+          keys: keys,
+          rootDomain: rootDomain);
     } on ArgumentError catch (e) {
       throw switch (e.name) {
         'atSign' => _invalidArgument('atSign', 'a valid atSign'),
         'namespace' =>
           _invalidArgument('namespace', 'a non-empty namespace segment'),
         'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
-        'keys' => InvalidKeyException('keys is not a usable .atKeys document'),
+        'keys' => InvalidKeyException(KeyRefusal.keysDocument),
         _ => e,
       };
     }
@@ -608,7 +600,7 @@ class BridgeEntry {
       try {
         document = jsonDecode((value as JSString).toDart);
       } on FormatException {
-        throw InvalidKeyException('keys is not valid JSON');
+        throw InvalidKeyException(KeyRefusal.keysJson);
       }
     } else {
       document = _toDart(_object(value, 'keys'), 'keys');

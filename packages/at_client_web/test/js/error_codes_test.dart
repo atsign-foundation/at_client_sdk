@@ -48,12 +48,19 @@ void main() {
       UnsupportedKeyMaterialException('@alice'),
       'unsupported'
     ),
+    'UnsupportedOperationException': (
+      UnsupportedOperationException(UnsupportedOperation.secureContext),
+      'unsupported'
+    ),
     'UnsupportedError': (UnsupportedError('no locks'), 'unsupported'),
     'ManageAccessRequiredException': (
       ManageAccessRequiredException(),
       'unsupported'
     ),
-    'InvalidKeyException': (InvalidKeyException('sharedWith'), 'bad_key'),
+    'InvalidKeyException': (
+      InvalidKeyException(KeyRefusal.sharedWithMissing),
+      'bad_key'
+    ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
     'CollectionException carries its own code': (
@@ -253,13 +260,53 @@ void main() {
     test('a session argument error names its parameter from the fields', () {
       expect(text(InvalidArgumentException('regex')),
           'regex must be a valid regular expression');
-      expect(text(InvalidArgumentException('namespace')),
-          'namespace must be a non-empty namespace segment');
       expect(
           text(InvalidArgumentException('owner', expected: 'a valid atSign')),
           'owner must be a valid atSign');
       expect(text(InvalidArgumentException.missing('opts')),
           'opts must not be null');
+    });
+
+    test('a key refusal is worded from its enum, never from exception text',
+        () {
+      for (final refusal in KeyRefusal.values) {
+        final message = text(InvalidKeyException(refusal));
+        expect(message, isNotEmpty, reason: refusal.name);
+        expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
+      }
+      expect(text(InvalidKeyException(KeyRefusal.sharedWithMissing)),
+          'notify needs sharedWith');
+      expect(text(InvalidKeyException(KeyRefusal.keysJson)),
+          'keys is not valid JSON');
+      expect(
+          text(InvalidKeyException.field(
+              InvalidArgumentException('key', expected: 'a string'))),
+          'key must be a string');
+    });
+
+    test('an unsupported operation is worded by the bridge, not by its error',
+        () {
+      for (final error in [
+        UnsupportedError('x' * 5000),
+        UnsupportedError('line\nbreak sentinel-7\u202e'),
+        UnsupportedError('a secure context (HTTPS) is required'),
+      ]) {
+        final message = text(error);
+        expect(message, 'the operation is not supported here');
+        expect(message, isNot(contains('sentinel')));
+      }
+    });
+
+    test('an unsupported operation raised here keeps its text, from its enum',
+        () {
+      expect(
+          text(UnsupportedOperationException(
+              UnsupportedOperation.secureContext)),
+          'a secure context (HTTPS) is required');
+      for (final operation in UnsupportedOperation.values) {
+        expect(errorCodeOf(UnsupportedOperationException(operation)),
+            'unsupported');
+      }
     });
 
     test('a collection rejection is worded from its kind and fields alone', () {

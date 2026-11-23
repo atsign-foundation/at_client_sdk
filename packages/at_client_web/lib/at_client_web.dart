@@ -1,6 +1,9 @@
 library;
 
 export 'src/exceptions.dart'
-    show SessionOfflineException, UnsupportedKeyMaterialException;
+    show
+        PortalSessionOfflineException,
+        SessionOfflineException,
+        UnsupportedKeyMaterialException;
 export 'src/session/portal_session.dart';
 export 'src/session/session_transport_options.dart';

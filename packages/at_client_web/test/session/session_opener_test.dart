@@ -41,7 +41,7 @@ Map<String, dynamic> _keysJson() => classicalAtKeys().toJson();
 KeysSessionOptions _keysOptions(
         {String atSign = '@alice',
         String namespace = 'MyApp',
-        AtRootDomain? rootDomain,
+        String? rootDomain,
         Map<String, dynamic>? keys}) =>
     KeysSessionOptions(
         atSign: atSign,
@@ -69,8 +69,23 @@ void main() {
     });
 
     test('a root that fails the transport rules names rootDomain', () {
-      expect(() => _keysOptions(rootDomain: AtRootDomain('a b', 64)),
-          _namingField('rootDomain'));
+      expect(() => _keysOptions(rootDomain: 'a b'), _namingField('rootDomain'));
+    });
+
+    test('a root domain is parsed by the options, host or host:port', () {
+      final bare = _keysOptions(rootDomain: 'root.example.org').rootDomain!;
+      expect((bare.rootDomain, bare.rootPort), ('root.example.org', 64));
+      final ported =
+          _keysOptions(rootDomain: 'root.example.org:9002').rootDomain!;
+      expect((ported.rootDomain, ported.rootPort), ('root.example.org', 9002));
+      expect(_keysOptions().rootDomain, isNull);
+    });
+
+    test('a root domain that does not parse names rootDomain, never its value',
+        () {
+      for (final bad in ['', 'h:0', 'h:65536', 'a:b:c:SECRET', 'SECRET/x:1']) {
+        expect(() => _keysOptions(rootDomain: bad), _namingField('rootDomain'));
+      }
     });
 
     test('keys that are not a usable document name keys', () {
@@ -85,21 +100,21 @@ void main() {
               atSign: '!',
               namespace: '',
               keys: {'aesPkamPublicKey': 5},
-              rootDomain: AtRootDomain('a b', 64)),
+              rootDomain: 'a b'),
           _namingField('atSign'));
       expect(
           () => KeysSessionOptions(
               atSign: '@alice',
               namespace: '',
               keys: {'aesPkamPublicKey': 5},
-              rootDomain: AtRootDomain('a b', 64)),
+              rootDomain: 'a b'),
           _namingField('namespace'));
       expect(
           () => KeysSessionOptions(
               atSign: '@alice',
               namespace: 'app',
               keys: {'aesPkamPublicKey': 5},
-              rootDomain: AtRootDomain('a b', 64)),
+              rootDomain: 'a b'),
           _namingField('rootDomain'));
     });
 

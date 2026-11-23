@@ -24,6 +24,12 @@ import 'package:test/test.dart';
 /// A [ItemCollection] that records each call and answers what it is
 /// told to.
 class _FakeAdapter implements ItemCollection {
+  _FakeAdapter(this._isClosed);
+
+  /// Like `SessionBoundCollection`, which owns the closed-state check: every
+  /// operation and watch throws once the session is closed. The bridge adds no
+  /// check of its own.
+  final bool Function() _isClosed;
   final calls = <String>[];
   Object? failure;
   var missing = false;
@@ -44,6 +50,7 @@ class _FakeAdapter implements ItemCollection {
   var cancelled = 0;
 
   Future<T> _run<T>(String call, T Function() result, [Object? args]) async {
+    if (_isClosed()) throw SessionClosedException();
     calls.add(call);
     last = args;
     if (failure case final error?) throw error;
@@ -81,6 +88,7 @@ class _FakeAdapter implements ItemCollection {
   @override
   Future<void> Function() watch(void Function(CollectionEvent event) onEvent,
       {required void Function(CollectionException error) onError}) {
+    if (_isClosed()) throw SessionClosedException();
     if (failure case final error?) throw error;
     this.onEvent = onEvent;
     this.onError = onError;
@@ -103,7 +111,7 @@ class _FakeSession implements Session {
   String passcode = 'Z9Y8X7';
   List<JsEnrollment> pending = [];
   final decided = <String>[];
-  final adapter = _FakeAdapter();
+  late final adapter = _FakeAdapter(() => closed);
   final collectionArgs = <Object?>[];
   var statusNow = 'connecting';
   final statusListeners = <void Function(String)>[];
@@ -419,6 +427,31 @@ void main() {
       expect(r.code, 'bad_key');
     });
 
+    test(
+        'create with several bad inputs reports the type checks and key decoding before the options',
+        () async {
+      const notJson = 'not json sentinel-9';
+      for (final bad in <Map<String, Object?>>[
+        opts({'atSign': 'not an atsign', 'keys': notJson}),
+        opts({'rootDomain': 'a:b:c', 'keys': notJson}),
+        opts({
+          'atSign': 'not an atsign',
+          'rootDomain': 'a:b:c',
+          'keys': notJson
+        }),
+      ]) {
+        final r = await _rejected(_call(api, 'create', [_obj(bad)]));
+        expect(r.code, 'bad_key', reason: '$bad');
+        expect(r.message, isNot(contains('sentinel')));
+      }
+      final r = await _rejected(_call(api, 'create', [
+        _obj(opts({'namespace': 5, 'keys': notJson}))
+      ]));
+      expect(r.code, 'invalid_argument');
+      expect(r.message, contains('namespace'));
+      expect(opened, isEmpty);
+    });
+
     test('keys that are not JSON reject with bad_key', () async {
       final r = await _rejected(_call(api, 'create', [
         _obj(opts({'keys': 'not json sentinel-9'}))
@@ -461,8 +494,9 @@ void main() {
     test('create rejects with unsupported outside a secure context', () async {
       secure = false;
 
-      expect((await _rejected(_call(api, 'create', [_obj(opts())]))).code,
-          'unsupported');
+      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      expect(r.code, 'unsupported');
+      expect(r.message, 'a secure context (HTTPS) is required');
       expect(opened, isEmpty);
     });
 
@@ -645,6 +679,23 @@ void main() {
           (false, false, false));
     });
 
+    test('bridge notify passes noNamespace as given and refuses a non-boolean',
+        () async {
+      await _resolved(_call(s, 'notify', [
+        _obj({'key': 'k', 'noNamespace': true}),
+        'v'.toJS
+      ]));
+      expect(session.keysSeen.single.noNamespace, isTrue);
+
+      final r = await _rejected(_call(s, 'notify', [
+        _obj({'key': 'k', 'noNamespace': 'yes'}),
+        'v'.toJS
+      ]));
+
+      expect(r.code, 'bad_key');
+      expect(session.keysSeen, hasLength(1));
+    });
+
     test('notify rejects a value that is not a string', () async {
       final r = await _rejected(_call(s, 'notify', [
         _obj({'key': 'k'}),
@@ -669,7 +720,7 @@ void main() {
     });
 
     test('a failing call rejects with the code of its exception', () async {
-      session.failure = InvalidKeyException('notify needs sharedWith');
+      session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
       final r = await _rejected(_call(s, 'notify', [
         _obj({'key': 'rpc'}),
@@ -680,7 +731,7 @@ void main() {
     });
 
     test('a mapped exception keeps its message', () async {
-      session.failure = InvalidKeyException('notify needs sharedWith');
+      session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
       final r = await _rejected(_call(s, 'notify', [
         _obj({'key': 'rpc'}),
@@ -1351,7 +1402,7 @@ void main() {
         expect(errors, [
           {
             'code': collectionErrorCode(CollectionFailure.failed),
-            'message': 'boom'
+            'message': 'operation failed'
           }
         ]);
         expect(adapter.cancelled, 1);

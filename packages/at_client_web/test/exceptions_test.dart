@@ -67,13 +67,14 @@ void main() {
   test('every exception the package declares is an AtException', () {
     final declared = <Object>[
       InvalidArgumentException('x'),
-      InvalidKeyException('sharedWith'),
+      InvalidKeyException(KeyRefusal.sharedWithMissing),
       ManageAccessRequiredException(),
       EnrollmentInFlightException(),
       SessionClosedException(),
       SessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       UnsupportedKeyMaterialException('@alice'),
+      UnsupportedOperationException(UnsupportedOperation.secureContext),
       SetupLockTimeoutException('lock'),
       IndexedDbException('QuotaExceededError'),
       CollectionException(CollectionFailure.failed),
@@ -123,6 +124,7 @@ void main() {
   test('the barrels export every exception they exported before', () {
     final base = File('lib/at_client_web.dart').readAsStringSync();
     for (final name in [
+      'PortalSessionOfflineException',
       'SessionOfflineException',
       'UnsupportedKeyMaterialException'
     ]) {
@@ -146,9 +148,29 @@ void main() {
     ]) {
       expect(browser, contains(name));
     }
-    // Both names resolve through the base barrel alone.
+    // Both names resolve through the base barrel alone, the old one to the
+    // new type.
+    // ignore: deprecated_member_use_from_same_package
+    expect(
+        web.PortalSessionOfflineException, same(web.SessionOfflineException));
     expect(web.SessionOfflineException, isNotNull);
     expect(web.UnsupportedKeyMaterialException, isNotNull);
+  });
+
+  test('a type renamed by the layering still resolves under its trunk name',
+      () {
+    final base = File('lib/at_client_web.dart').readAsStringSync();
+    final browser = File('lib/at_client_web_web.dart').readAsStringSync();
+    expect(base, contains('PortalSessionOfflineException'));
+    expect(browser, contains('export \'at_client_web.dart\''));
+    // The old name is the new type, so a catch on either one catches both.
+    // ignore: deprecated_member_use_from_same_package
+    final Object old = web.PortalSessionOfflineException(
+        '@alice', AtConnectionState.offline(AtConnectionCause.unreachable));
+    expect(old, isA<web.SessionOfflineException>());
+    // ignore: deprecated_member_use_from_same_package
+    expect(
+        web.PortalSessionOfflineException, same(web.SessionOfflineException));
   });
 
   test('only the bridge and its code mapping name an error code', () {

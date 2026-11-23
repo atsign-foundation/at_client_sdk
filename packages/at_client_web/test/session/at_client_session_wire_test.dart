@@ -116,6 +116,28 @@ void main() {
         });
       }
 
+      test('the primary enrollment is authorised without listing enrollments',
+          () async {
+        // The primary enrollment holds `*:rw` and has no record to read.
+        await session.close();
+        final primary = await portalSession(
+            atSign: '@alice',
+            app: 'wavi',
+            keys: classicalAtKeys(enrollmentId: 'primary'),
+            transport: (
+              lookUps: wire.lookUps,
+              finder: FixedSecondaryAddressFinder('atserver.test', 1),
+              root: AtRootDomain.atsignDomain
+            ));
+        session = AtClientSession(primary, namespace: 'wavi');
+        wire.commands.clear();
+        serve(verbs: (c) => c.startsWith('otp:get') ? 'data:Z9Y8X7' : null);
+
+        expect(await session.otp(), 'Z9Y8X7');
+        expect(sent('enroll:list'), isFalse);
+        expect(sent('otp:get'), isTrue);
+      });
+
       test('a refusal on the verb is unsupported', () async {
         serve(
             verbs: (c) => throw UnAuthorizedException(
@@ -261,26 +283,50 @@ void main() {
             namespace: 'wavi');
       });
 
-      String pendingRecord() => record('e1', 'pending', wrapped: wrapped);
-
-      test('approves the request as filed, with no namespaces of its own',
-          () async {
-        var approved = false;
-        wire.answer = (command) {
+      /// Serves each id in [pending] as a pending request (built by
+      /// [recordOf] when given); an approve moves its id out, after [hold]
+      /// for that id completes. The ids in [failing] have their first
+      /// approve refused.
+      void serveDecisions(Set<String> pending,
+          {Future<void> Function(String id)? hold,
+          Set<String>? failing,
+          String Function(String id, String status)? recordOf}) {
+        final approved = <String>{};
+        String build(String id, String status) => recordOf != null
+            ? recordOf(id, status)
+            : record(id, status, wrapped: wrapped);
+        wire.answer = (command) async {
           if (command.startsWith('enroll:list')) {
             final filtered =
                 command.contains('pending') || command.contains('approved');
             if (!filtered) return 'data:{${own(managing)}}';
-            return approved
-                ? 'data:{${record('e1', 'approved', wrapped: wrapped)}}'
-                : 'data:{${pendingRecord()}}';
+            return 'data:{${[
+              for (final id in pending) build(id, 'pending'),
+              if (!command.contains('pending'))
+                for (final id in approved) build(id, 'approved'),
+            ].join(',')}}';
           }
           if (command.startsWith('enroll:approve')) {
-            approved = true;
-            return 'data:{"enrollmentId":"e1","status":"approved"}';
+            final id = RegExp(r'"enrollmentId":"(\w+)"')
+                .firstMatch(command)!
+                .group(1)!;
+            await hold?.call(id);
+            if (failing?.remove(id) ?? false) {
+              throw StateError('refused');
+            }
+            pending.remove(id);
+            approved.add(id);
+            return 'data:{"enrollmentId":"$id","status":"approved"}';
           }
           throw KeyNotFoundException('absent');
         };
+      }
+
+      String pendingRecord() => record('e1', 'pending', wrapped: wrapped);
+
+      test('approves the request as filed, with no namespaces of its own',
+          () async {
+        serveDecisions({'e1'});
 
         await session.approve('e1');
 
@@ -291,24 +337,8 @@ void main() {
         expect(approvals.single, isNot(contains('namespace')));
       });
 
-      test('a decision reads this session\'s grants from the atServer once',
-          () async {
-        var approved = false;
-        wire.answer = (command) {
-          if (command.startsWith('enroll:list')) {
-            final filtered =
-                command.contains('pending') || command.contains('approved');
-            if (!filtered) return 'data:{${own(managing)}}';
-            return approved
-                ? 'data:{${record('e1', 'approved', wrapped: wrapped)}}'
-                : 'data:{${pendingRecord()}}';
-          }
-          if (command.startsWith('enroll:approve')) {
-            approved = true;
-            return 'data:{"enrollmentId":"e1","status":"approved"}';
-          }
-          throw KeyNotFoundException('absent');
-        };
+      test("a decision reads the session's own grants once", () async {
+        serveDecisions({'e1'});
 
         await session.approve('e1');
 
@@ -353,22 +383,7 @@ void main() {
       test(
           'concurrent approve or deny on the same id rejects without sending a second approval',
           () async {
-        var approved = false;
-        wire.answer = (command) {
-          if (command.startsWith('enroll:list')) {
-            final filtered =
-                command.contains('pending') || command.contains('approved');
-            if (!filtered) return 'data:{${own(managing)}}';
-            return approved
-                ? 'data:{${record('e1', 'approved', wrapped: wrapped)}}'
-                : 'data:{${pendingRecord()}}';
-          }
-          if (command.startsWith('enroll:approve')) {
-            approved = true;
-            return 'data:{"enrollmentId":"e1","status":"approved"}';
-          }
-          throw KeyNotFoundException('absent');
-        };
+        serveDecisions({'e1'});
 
         final first = session.approve('e1');
         final secondError = await thrownBy(() => session.deny('e1'));
@@ -380,40 +395,6 @@ void main() {
         expect(
             wire.commands.where((c) => c.startsWith('enroll:deny')), isEmpty);
       });
-
-      /// Serves each id in [pending] as a pending request; an approve moves
-      /// its id out, after [hold] for that id completes. The ids in
-      /// [failing] have their first approve refused.
-      void serveDecisions(Set<String> pending,
-          {Future<void> Function(String id)? hold, Set<String>? failing}) {
-        final approved = <String>{};
-        wire.answer = (command) async {
-          if (command.startsWith('enroll:list')) {
-            final filtered =
-                command.contains('pending') || command.contains('approved');
-            if (!filtered) return 'data:{${own(managing)}}';
-            return 'data:{${[
-              for (final id in pending) record(id, 'pending', wrapped: wrapped),
-              if (!command.contains('pending'))
-                for (final id in approved)
-                  record(id, 'approved', wrapped: wrapped),
-            ].join(',')}}';
-          }
-          if (command.startsWith('enroll:approve')) {
-            final id = RegExp(r'"enrollmentId":"(\w+)"')
-                .firstMatch(command)!
-                .group(1)!;
-            await hold?.call(id);
-            if (failing?.remove(id) ?? false) {
-              throw StateError('refused');
-            }
-            pending.remove(id);
-            approved.add(id);
-            return 'data:{"enrollmentId":"$id","status":"approved"}';
-          }
-          throw KeyNotFoundException('absent');
-        };
-      }
 
       int approvals() =>
           wire.commands.where((c) => c.startsWith('enroll:approve')).length;
@@ -492,9 +473,8 @@ void main() {
 
       test('key conveyance failure rejects with enrollment_conveyance_failed',
           () async {
-        var approved = false;
-        String withBadKeyPackage(String status) =>
-            '"e1.new.enrollments.__manage@alice":${jsonEncode({
+        String withBadKeyPackage(String id, String status) =>
+            '"$id.new.enrollments.__manage@alice":${jsonEncode({
                   'appName': 'tally',
                   'deviceName': 'Phone',
                   'namespace': {'tally': 'rw'},
@@ -502,21 +482,7 @@ void main() {
                   'encryptedAPKAMSymmetricKey': wrapped,
                   'metadata': {'keyPackage': 'not-a-signed-envelope'},
                 })}';
-        wire.answer = (command) {
-          if (command.startsWith('enroll:list')) {
-            final filtered =
-                command.contains('pending') || command.contains('approved');
-            if (!filtered) return 'data:{${own(managing)}}';
-            return approved
-                ? 'data:{${withBadKeyPackage('approved')}}'
-                : 'data:{${withBadKeyPackage('pending')}}';
-          }
-          if (command.startsWith('enroll:approve')) {
-            approved = true;
-            return 'data:{"enrollmentId":"e1","status":"approved"}';
-          }
-          throw KeyNotFoundException('absent');
-        };
+        serveDecisions({'e1'}, recordOf: withBadKeyPackage);
 
         final error = await thrownBy(() => session.approve('e1'));
 

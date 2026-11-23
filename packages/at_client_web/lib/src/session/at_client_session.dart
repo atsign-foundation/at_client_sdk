@@ -122,15 +122,20 @@ class AtClientSession implements Session {
   /// default always online, and [networkChanges] says when it may have
   /// changed (each event re-reads it; by default there are none). [itemLocks]
   /// is the item lock map every collection handle shares; by default a new one.
+  /// [subscriptions] is the set that holds each live notification subscription,
+  /// so a test can see one leave when its stream completes; by default a new
+  /// one.
   AtClientSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
       Stream<void>? networkChanges,
       Future<void> Function()? stop,
-      ItemLocks? itemLocks})
+      ItemLocks? itemLocks,
+      Set<StreamSubscription<Object?>>? subscriptions})
       : _namespace = normalizeSessionNamespace(namespace),
         _itemLocks = itemLocks ?? ItemLocks(),
+        _subscriptions = subscriptions ?? {},
         _warn = warn ?? _logger.warning,
         _isNavigatorOnline = isNavigatorOnline ?? (() => true),
         _stop = stop ?? _client.stop {
@@ -159,7 +164,7 @@ class AtClientSession implements Session {
   final AtClient _client;
   final String _namespace;
   final _sent = <String>{};
-  final _subscriptions = <StreamSubscription<Object?>>{};
+  final Set<StreamSubscription<Object?>> _subscriptions;
   final _watchCancels = <Future<void> Function()>{};
   final _deciding = <String>{};
   final ItemLocks _itemLocks;
@@ -270,45 +275,46 @@ class AtClientSession implements Session {
     if (_closed) throw SessionClosedException();
   }
 
+  /// [raw] as an [Atsign], or an [InvalidKeyException] carrying [refusal].
+  Atsign _parseAtsign(String raw, KeyRefusal refusal) {
+    try {
+      return raw.toAtsign();
+    } on InvalidAtSignException {
+      throw InvalidKeyException(refusal);
+    }
+  }
+
   AtKey _atKey(NotifyKey key) {
     if (key.isPublic) {
-      throw InvalidKeyException('public keys cannot be sent with notify');
+      throw InvalidKeyException(KeyRefusal.publicKey);
     }
     if (key.isCached) {
-      throw InvalidKeyException('cached keys cannot be sent with notify');
+      throw InvalidKeyException(KeyRefusal.cachedKey);
     }
     final rawSharedWith = key.sharedWith;
     if (rawSharedWith == null) {
-      throw InvalidKeyException('notify needs sharedWith');
+      throw InvalidKeyException(KeyRefusal.sharedWithMissing);
     }
-    final Atsign sharedWith;
-    try {
-      sharedWith = rawSharedWith.toAtsign();
-    } on InvalidAtSignException {
-      throw InvalidKeyException('sharedWith must be a valid atSign');
-    }
+    final sharedWith =
+        _parseAtsign(rawSharedWith, KeyRefusal.sharedWithInvalid);
     final own = _canonical(_client.getCurrentAtSign()!)!;
     final Atsign sharedBy;
     if (key.sharedBy != null) {
-      try {
-        sharedBy = key.sharedBy!.toAtsign();
-      } on InvalidAtSignException {
-        throw InvalidKeyException('sharedBy must be a valid atSign');
-      }
+      sharedBy = _parseAtsign(key.sharedBy!, KeyRefusal.sharedByInvalid);
       if (sharedBy != own) {
-        throw InvalidKeyException('sharedBy must match the session atSign');
+        throw InvalidKeyException(KeyRefusal.sharedByMismatch);
       }
     } else {
       sharedBy = own.toAtsign();
     }
     if (!_isKeySegment(key.key)) {
-      throw InvalidKeyException('key is not a valid key name');
+      throw InvalidKeyException(KeyRefusal.keyName);
     }
     String? namespace;
     if (!key.noNamespace) {
       final rawNs = key.namespace ?? _namespace;
       if (!_isKeySegment(rawNs) || !_notifyNamespacePattern.hasMatch(rawNs)) {
-        throw InvalidKeyException('namespace is not valid');
+        throw InvalidKeyException(KeyRefusal.namespace);
       }
       namespace = foldNamespace(rawNs);
     }
@@ -323,7 +329,7 @@ class AtClientSession implements Session {
       atKey = builder.build()..metadata.namespaceAware = false;
       serialized = atKey.toString();
     } on AtException {
-      throw InvalidKeyException('key is not a valid atKey');
+      throw InvalidKeyException(KeyRefusal.atKey);
     }
     final validation = AtKeyValidators.get().validate(
       serialized,
@@ -333,7 +339,7 @@ class AtClientSession implements Session {
         ..enforceNamespace = false,
     );
     if (!validation.isValid) {
-      throw InvalidKeyException('key is not a valid atKey');
+      throw InvalidKeyException(KeyRefusal.atKey);
     }
     return atKey;
   }
@@ -490,17 +496,25 @@ class AtClientSession implements Session {
     try {
       service.startListening();
     } catch (_) {
-      unawaited(subscription.cancel().catchError((Object _) {}));
+      _cancelQuietly(subscription);
       rethrow;
     }
     if (!done) _subscriptions.add(subscription);
     return () {
-      if (_subscriptions.remove(subscription)) {
-        unawaited(subscription.cancel().catchError((Object _) {
-          _warn('Failed to cancel notification subscription');
-        }));
-      }
+      if (_subscriptions.remove(subscription)) _cancelQuietly(subscription);
     };
+  }
+
+  /// Cancels [subscription] without waiting, warning when it fails, whether
+  /// `cancel` throws or its future fails.
+  void _cancelQuietly(StreamSubscription<Object?> subscription) {
+    unawaited(() async {
+      try {
+        await subscription.cancel();
+      } on Object catch (_) {
+        _warn('Failed to cancel notification subscription');
+      }
+    }());
   }
 
   @override
@@ -596,11 +610,12 @@ class AtClientSession implements Session {
     _closed = true;
     _itemLocks.clear();
     _statusListeners.clear();
-    try {
-      await _connection.cancel();
-      await _network?.cancel();
-    } on Object catch (_) {
-      _warn('Failed to cancel status subscription on close');
+    for (final cancel in [_connection.cancel, _network?.cancel]) {
+      try {
+        await cancel?.call();
+      } on Object catch (_) {
+        _warn('Failed to cancel status subscription on close');
+      }
     }
     for (final subscription in [..._subscriptions]) {
       try {

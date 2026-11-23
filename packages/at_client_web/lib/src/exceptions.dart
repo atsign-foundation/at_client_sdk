@@ -8,6 +8,14 @@ import 'package:at_client/at_client.dart';
 /// What a closed session rejects with, to Dart and to JS alike.
 const sessionClosedMessage = 'the session is closed';
 
+/// What a session without `__manage` rejects a pairing call with.
+const manageAccessRequiredMessage = 'this session cannot manage enrollments';
+
+/// What an approve or deny of an enrollment with an unsettled first decision
+/// rejects with.
+const enrollmentInFlightMessage =
+    'a decision for this request is already in flight';
+
 /// The longest message an `invalid_argument` or collection rejection carries.
 const maxErrorMessageLength = 128;
 
@@ -64,34 +72,101 @@ class SessionClosedException extends AtException {
   String toString() => 'SessionClosedException: $message';
 }
 
-/// Thrown when a `NotifyKey` cannot do what was asked of it, such as a notify
-/// with no `sharedWith`.
-class InvalidKeyException extends AtException {
-  InvalidKeyException(this.reason) : super(reason);
+/// What the page or browser lacks, for an [UnsupportedOperationException].
+/// The bridge words each one (lib/src/js/error_codes.dart).
+enum UnsupportedOperation { secureContext }
 
-  final String reason;
+/// Thrown when the page or browser cannot do what a call needs.
+class UnsupportedOperationException extends AtException {
+  /// What is missing.
+  final UnsupportedOperation operation;
+
+  /// Creates the exception for [operation].
+  UnsupportedOperationException(this.operation) : super(operation.name);
 
   @override
-  String toString() => 'InvalidKeyException: $reason';
+  String toString() => 'UnsupportedOperationException: ${operation.name}';
+}
+
+/// What was wrong with a key or a `.atKeys` document, for an
+/// [InvalidKeyException]. The bridge words each one (lib/src/js/error_codes.dart).
+enum KeyRefusal {
+  /// A notify key with `public: true`.
+  publicKey,
+
+  /// A notify key with `cached: true`.
+  cachedKey,
+
+  /// A notify key with no `sharedWith`.
+  sharedWithMissing,
+
+  /// A notify key whose `sharedWith` is not an atSign.
+  sharedWithInvalid,
+
+  /// A notify key whose `sharedBy` is not an atSign.
+  sharedByInvalid,
+
+  /// A notify key whose `sharedBy` is not the session's atSign.
+  sharedByMismatch,
+
+  /// A notify key whose name is not a key name.
+  keyName,
+
+  /// A notify key whose namespace is not valid.
+  namespace,
+
+  /// A notify key that does not make a valid atKey.
+  atKey,
+
+  /// A `.atKeys` document given as text that is not JSON.
+  keysJson,
+
+  /// A `.atKeys` document that is not usable.
+  keysDocument,
+
+  /// A key field of the wrong shape; [InvalidKeyException.field] names it.
+  field,
+}
+
+/// Thrown when a `NotifyKey` or a `.atKeys` document cannot do what was
+/// asked of it, such as a notify with no `sharedWith`.
+///
+/// It carries a [refusal], never finished text: the bridge words what JS sees.
+class InvalidKeyException extends AtException {
+  InvalidKeyException(this.refusal)
+      : field = null,
+        super(refusal.name);
+
+  /// A key field of the wrong shape: [field] names the parameter and what it
+  /// had to be.
+  InvalidKeyException.field(InvalidArgumentException this.field)
+      : refusal = KeyRefusal.field,
+        super(field.message);
+
+  final KeyRefusal refusal;
+
+  /// The mistyped field, for [KeyRefusal.field].
+  final InvalidArgumentException? field;
+
+  @override
+  String toString() => 'InvalidKeyException: ${refusal.name}';
 }
 
 /// Thrown by the pairing calls of a session that holds no `__manage`, which
 /// only the atServer's roster-managing enrollments do.
 class ManageAccessRequiredException extends AtException {
-  ManageAccessRequiredException()
-      : super('this session cannot manage enrollments');
+  ManageAccessRequiredException() : super(manageAccessRequiredMessage);
 
   @override
   String toString() =>
-      'ManageAccessRequiredException: this session cannot manage enrollments';
+      'ManageAccessRequiredException: $manageAccessRequiredMessage';
 }
 
 /// Thrown by an approve or deny of an enrollment whose first decision has
 /// not settled. It is an [AtEnrollmentException] to a Dart caller, and
 /// names neither the atSign nor the enrollment id.
 class EnrollmentInFlightException extends AtEnrollmentException {
-  EnrollmentInFlightException()
-      : super('a decision for this request is already in flight');
+  EnrollmentInFlightException() : super(enrollmentInFlightMessage);
 
   @override
   String toString() => 'EnrollmentInFlightException: $message';
@@ -110,6 +185,10 @@ class SessionOfflineException extends AtException {
   @override
   String toString() => 'SessionOfflineException: $message';
 }
+
+/// What [SessionOfflineException] was called before the layering renamed it.
+@Deprecated('Use SessionOfflineException')
+typedef PortalSessionOfflineException = SessionOfflineException;
 
 /// Thrown by `portalSession` for keys that carry ML-DSA-65 signing or
 /// namespace key material.

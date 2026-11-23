@@ -4,7 +4,9 @@ final _controlChars =
     RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
 
 /// Escapes control and bidirectional formatting characters in [value] as a
-/// single-line JSON string literal, bounded to [maxLength] UTF-16 code units.
+/// single-line JSON string literal. [value] is cut to [maxLength] UTF-16 code
+/// units (see [truncateText]) before it is encoded, so the quotes and the
+/// escapes add to the result's length.
 String sanitizeLogText(String value, {int maxLength = 256}) =>
     jsonEncode(truncateText(value, maxLength)).replaceAllMapped(
       _controlChars,

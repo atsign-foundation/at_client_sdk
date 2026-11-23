@@ -476,9 +476,9 @@ still rejects with `COLLECTION_ITEM_UNREADABLE`, and `get()` of an over-deep ite
 
 **Concurrency and limits.**
 
-- Within a single adapter instance, concurrent `update`, `share`, `remove`, and explicit-`id`
-  `create` calls on the same `(id, owner)` run sequentially so overlapping local writes do
-  not overwrite one another. Across separate devices or clients, last-writer-wins with a
+- Concurrent `update`, `share`, `remove`, and explicit-`id` `create` calls on the same
+  `(namespace, id, owner)` run sequentially, across every collection handle the session opens
+  (they share one lock map), so overlapping local writes do not overwrite one another. Across separate devices or clients, last-writer-wins with a
   pre-write re-read applies.
 - Opening a collection whose `eventSource` is `'notifs'` or `'both'` (default) starts
   notification listening on the session's `notificationService`.
@@ -525,6 +525,7 @@ const client = await AtClient.create({
 | Notifications | `notify`, `subscribe(regex?)` returns an `AsyncIterable<AtNotification>`; a stream error rejects one `next()` (`overflow` if buffered events exceed the queue limit) |
 | Pairing | `otp`, `pendingEnrollments`, `approve`, `deny`, only on a session whose enrollment holds `__manage` rw |
 | Status | `status` and `onStatus(cb) => off` |
+| Notify key | `notify(key, value)` takes `{ key, namespace?, sharedWith, sharedBy?, public?, cached?, noNamespace? }`. The key is sent as `<key>.<namespace>` with `namespace` or, when that is left out, the session's. `noNamespace: true` sends the key as `<key>` with no namespace, and a `namespace` given beside it is ignored; the key name is checked either way. `public: true` and `cached: true` reject with `bad_key`. A flag that is not a boolean rejects with `bad_key` |
 | Not in the alpha | `storage`, `waitUntilCaughtUp`, `isInSync`, `notificationStatus`, `retry`, passkey sign-in, onboarding and enrollment of new browsers |
 
 **Status shape.** `ConnectionStatus` is one of `'connecting'`, `'connected'`,
@@ -593,12 +594,17 @@ exception or a batch of `OpFailure`s — never a tuple, never a second thrown ty
 ### 6.1 Collection error codes
 
 Every collections adapter operation (§5.5) returns a Future that rejects with one
-`CollectionException {code, message, id?, owner?, kind?, failures}`, which the facade turns
-into `AtError` with the same `code`. `id` and `owner` name the item when known. `kind` names
-the underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
+`CollectionException` (Dart, `exceptions.dart`), or with at_client's `StoppedException` from a
+call in flight when the client stops (the bridge maps it to `closed`). `CollectionException` carries no error code. Its fields are
+`kind` (a `CollectionFailure`), `message`, `id?`, `owner?`, `causeType?`, `failures`, and the
+detail fields `refusal?`, `subject?`, `collectionOwner?`, `foundType?` and `expectedType?`. The
+bridge (`error_codes.dart`) chooses the code from `kind` and turns the exception into an `AtError`
+with that `COLLECTION_*` code. `id` and `owner` name the item when known. `causeType` names the
+underlying error from a fixed set (`AtKeyNotFoundException`, `InvalidAtSignException`,
 `CItemReadException`, `AtClientException`, `AtException`, `StateError`, `ArgumentError`,
 `TimeoutException`, `FormatException`), or is `Unknown`; it is never read from the runtime
-type, which dart2js minifies. A watch reports stream errors to `onError` in the
+type, which dart2js minifies. `failures` lists one `{op, recipient, kind}` per failed key-level
+write of a partial failure. A watch reports stream errors to `onError` in the
 same shape. The codes are a registry of their own, not the at_commons `AT00xx` codes: those
 name the atServer and client failures of key operations, and none of them says "the item is
 owned by another atSign" or "some of the key writes landed". Codes that describe one item are
@@ -638,7 +644,7 @@ land. Until then no adapter operation validates data against a schema.
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, or an invalid `address.owner`; the message names the parameter and never its value, at most 128 characters on one line |
-| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); or `UnsupportedError`, such as `create` on a page that is not a secure context |
+| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); `UnsupportedOperationException` (`create` on a page that is not a secure context); or an `UnsupportedError`, mapped by its type alone: its text is never read or shown, and the message is always `the operation is not supported here` (the passkey setup lock raises one on a browser without `navigator.locks`) |
 | `bad_key` | `InvalidKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
 | `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
 

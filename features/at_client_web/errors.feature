@@ -9,6 +9,9 @@ Feature: Every failure carries a code the caller branches on
   npm package turns {code, message} into AtError and the callbacks into async
   iterators, and specifies that in at_js.
 
+  # An UnsupportedError maps to unsupported by its type alone; its text is never
+  # read or shown (the setup lock's UnsupportedError takes this path).
+
   # Threats. Each answer names the scenario that holds it.
   #
   # Race: error mapping is pure and stateless per thrown object; concurrent
@@ -33,7 +36,7 @@ Feature: Every failure carries a code the caller branches on
   Scenario: a mapped exception keeps its message
     Given a failure inside the Dart bridge that maps to bad_key
     When a session call is made
-    Then it rejects with code bad_key and the exception's message
+    Then it rejects with code bad_key and the message the bridge words for that exception
 
   Scenario: a rejection is a plain object with only code and message
     Given a failure inside the Dart bridge
@@ -66,6 +69,28 @@ Feature: Every failure carries a code the caller branches on
     Given failures no code maps whose text contains invalid_argument, closed, a COLLECTION_ code or a JSON {code, message} object
     When a session call reaches each
     Then each rejects with code internal and the message 'internal error'
+
+  Scenario: an unsupported operation is worded by the bridge, not by its error
+    Given an UnsupportedError, whose text is long, multi-line or looks like a bridge message
+    When it is mapped
+    Then it rejects with code unsupported and the message 'the operation is not supported here'
+
+  Scenario: an unsupported operation raised here keeps its text, from its enum
+    Given an UnsupportedOperationException for the secure context
+    When it is mapped
+    Then it rejects with code unsupported and the message 'a secure context (HTTPS) is required'
+
+  Scenario: a browser without navigator.locks gets UnsupportedError from the setup lock
+    Given a browser with no navigator.locks
+    When a passkey setup runs under the setup lock
+    Then it throws UnsupportedError, as on trunk
+
+  Scenario: the shared log text sanitizer escapes, bounds and flattens untrusted text
+    Given untrusted text holding control characters, bidirectional formatting characters, a surrogate pair at the cut, and more than the bound
+    When it goes through sanitizeLogText, singleLine and truncateText
+    Then sanitizeLogText returns one JSON string literal with those characters as \u escapes, bounded with an ellipsis
+    And singleLine replaces each of them with a space
+    And truncateText never splits a surrogate pair
 
   Scenario: every closed rejection carries the same fixed message
     Given a closed session, and an open session whose client fails a call with at_client's StoppedException

@@ -102,6 +102,44 @@ class _FakeCollection<T> extends Fake implements AtCollection<T> {
       .stream;
 }
 
+/// A stream whose subscriptions fail to cancel, by throwing or by a failed
+/// future, as [cancel] does.
+class _CancelFailingStream extends Stream<AtNotification> {
+  _CancelFailingStream(this.cancel);
+
+  final Future<void> Function() cancel;
+
+  @override
+  StreamSubscription<AtNotification> listen(
+          void Function(AtNotification event)? onData,
+          {Function? onError,
+          void Function()? onDone,
+          bool? cancelOnError}) =>
+      _CancelFailingSubscription(cancel);
+}
+
+class _CancelFailingSubscription extends Fake
+    implements StreamSubscription<AtNotification> {
+  _CancelFailingSubscription(this._cancel);
+
+  final Future<void> Function() _cancel;
+
+  @override
+  Future<void> cancel() => _cancel();
+}
+
+/// A connection whose status subscription fails to cancel.
+class _CancelFailingConnection extends Fake implements AtConnection {
+  @override
+  AtConnectionState get current => AtConnectionState.online();
+
+  @override
+  Stream<AtConnectionState> get changes =>
+      (StreamController<AtConnectionState>()
+            ..onCancel = () => Future<void>.error(StateError('boom')))
+          .stream;
+}
+
 class _FakeClient extends Fake implements AtClient {
   var stops = 0;
   Completer<void>? stopHold;
@@ -115,7 +153,7 @@ class _FakeClient extends Fake implements AtClient {
   final collections = <_FakeCollection<Object?>>[];
 
   @override
-  final AtConnection connection = AtConnection(
+  AtConnection connection = AtConnection(
       atSign: '@alice', attempt: (_) async => AtConnectionState.online());
 
   @override
@@ -214,11 +252,37 @@ void main() {
       expect(service.params.last.atKey.sharedBy, '@alice');
     });
 
-    test('noNamespace leaves the session namespace off', () async {
+    test('notify with noNamespace true sends the key with no namespace',
+        () async {
       expect(
           await sentKey(
               const NotifyKey('k', sharedWith: '@bob', noNamespace: true)),
           '@bob:k@alice');
+    });
+
+    test('notify without noNamespace applies the session namespace', () async {
+      expect(await sentKey(const NotifyKey('k', sharedWith: '@bob')),
+          '@bob:k.wavi@alice');
+    });
+
+    test('notify with noNamespace true ignores a given namespace', () async {
+      expect(
+          await sentKey(const NotifyKey('k',
+              namespace: 'other', sharedWith: '@bob', noNamespace: true)),
+          '@bob:k@alice');
+    });
+
+    test(
+        'notify with noNamespace true still rejects a key name that carries more key text and sends nothing',
+        () async {
+      for (final name in ['k@carol', 'k:x', 'k..x']) {
+        await expectLater(
+            session.notify(
+                NotifyKey(name, sharedWith: '@bob', noNamespace: true), 'v'),
+            throwsA(isA<InvalidKeyException>()),
+            reason: name);
+      }
+      expect(service.params, isEmpty);
     });
 
     test('an atSign without @ is put in @name form', () async {
@@ -838,8 +902,7 @@ void main() {
       final first = data.remove(alice);
       final second = notifs.remove(same);
       final third = notifs.remove(other);
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
 
       expect([...fake.gets, ...client.collections.last.gets], ['I1', 'i2']);
 
@@ -880,8 +943,7 @@ void main() {
           .remove((id: 'i1', owner: '@alice'.toAtsign())).then<Object?>(
               (_) => null,
               onError: (Object _) => null);
-      await Future<void>.delayed(Duration.zero);
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
       expect(locks.length, 1);
 
       await tracked.close();
@@ -1000,6 +1062,24 @@ void main() {
       }
     });
 
+    test('close removes the network listeners even when a stop step fails',
+        () async {
+      client.connection = _CancelFailingConnection();
+      var networkCancelled = false;
+      final network = StreamController<void>.broadcast(
+          onCancel: () => networkCancelled = true);
+      final watching = AtClientSession(client,
+          namespace: 'wavi',
+          warn: warnings.add,
+          networkChanges: network.stream);
+
+      await watching.close();
+
+      expect(networkCancelled, isTrue);
+      expect(warnings, ['Failed to cancel status subscription on close']);
+      await network.close();
+    });
+
     test('a close whose stop failed can be tried again', () async {
       client.stopFailure = StateError('boom');
       await expectLater(session.close(), throwsA(isA<StateError>()));
@@ -1074,6 +1154,43 @@ void main() {
 
       expect(received.map((e) => e.id), ['e1']);
       expect(errors, isEmpty);
+    });
+
+    test('warns when the subscription of a failed start fails to cancel',
+        () async {
+      service.customStream =
+          _CancelFailingStream(() => throw StateError('boom'));
+      service.onStartListening = () => throw StateError('start');
+
+      expect(() => session.subscribe('.*', (_) {}, onError: (_) {}),
+          throwsA(isA<StateError>()));
+      await pumpEventQueue();
+
+      expect(warnings, ['Failed to cancel notification subscription']);
+    });
+
+    test('warns when an unsubscribed subscription fails to cancel', () async {
+      service.customStream =
+          _CancelFailingStream(() => Future.error(StateError('boom')));
+
+      session.subscribe('.*', (_) {}, onError: (_) {})();
+      await pumpEventQueue();
+
+      expect(warnings, ['Failed to cancel notification subscription']);
+    });
+
+    test('a subscription whose stream completes is removed', () async {
+      final subscriptions = <StreamSubscription<Object?>>{};
+      final tracked = AtClientSession(client,
+          namespace: 'wavi', subscriptions: subscriptions);
+      tracked.subscribe('.*', (_) {}, onError: (_) {});
+      expect(subscriptions, hasLength(1));
+
+      await service.events.close();
+      await pumpEventQueue();
+
+      expect(subscriptions, isEmpty);
+      await tracked.close();
     });
 
     test('subscribe cancels immediately if close occurs during startListening',

@@ -24,7 +24,10 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   own atSign and failed sends do not evict live ids ("remembers only the last
   #   1024 sent ids", "failed notify does not evict sent echo ids").
   # DoS: invalid keys, invalid regexes, and non-function callbacks are refused
-  #   before sending or subscribing ("notify with empty or invalid key or
+  #   before sending or subscribing, and noNamespace skips only the namespace
+  #   check, never the key-name check ("notify with noNamespace true still
+  #   rejects a key name that carries more key text and sends nothing", "bridge
+  #   notify passes noNamespace as given and refuses a non-boolean", "notify with empty or invalid key or
   #   invalid sharedWith rejects with bad_key and sends nothing", "subscribe
   #   with invalid regex rejects naming regex", "subscribe with non-function
   #   callback returns {code: invalid_argument} without throwing").
@@ -33,6 +36,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   sender/key owner are dropped ("delivers only a notification sent by the
   #   key owner", "subscribe drops notifications with malformed keys or wrong
   #   sharedWith").
+  #   noNamespace cannot widen a key: it drops the namespace entirely, even a
+  #   given one, and never changes sharedWith or sharedBy ("notify with
+  #   noNamespace true ignores a given namespace").
   # Impersonation: outbound notify refuses mismatched sharedBy, public, or
   #   cached keys upfront before any lookup, and inbound notifications compare
   #   canonical sender and owner ("notify with mismatched sharedBy rejects with
@@ -69,6 +75,34 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When notify is called with an empty or malformed key or an invalid sharedWith
     Then each rejects with bad_key
     And nothing is sent to the atServer
+
+  Scenario: notify with noNamespace true sends the key with no namespace
+    Given an open session in namespace wavi, as @alice
+    When notify is called on key k shared with @bob with noNamespace true
+    Then the notified key is @bob:k@alice
+    And the session namespace is not applied
+
+  Scenario: notify without noNamespace applies the session namespace
+    Given an open session in namespace wavi, as @alice
+    When notify is called on key k shared with @bob without noNamespace
+    Then the notified key is @bob:k.wavi@alice
+
+  Scenario: notify with noNamespace true ignores a given namespace
+    Given an open session in namespace wavi, as @alice
+    When notify is called on key k shared with @bob with namespace other and noNamespace true
+    Then the notified key is @bob:k@alice
+
+  Scenario: notify with noNamespace true still rejects a key name that carries more key text and sends nothing
+    Given an open session as @alice
+    When notify is called with noNamespace true on a key name holding an @, a colon or a doubled dot
+    Then each rejects with bad_key
+    And nothing is sent to the atServer
+
+  Scenario: bridge notify passes noNamespace as given and refuses a non-boolean
+    Given an open bridge session
+    When notify is called with noNamespace true, then with noNamespace as a string
+    Then the session receives the first key with noNamespace true
+    And the second rejects with bad_key and the session receives nothing for it
 
   Scenario: notify interrupted by close rejects with closed
     Given an open session with an in-flight undelivered notify
@@ -107,6 +141,11 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When a notification arrives from an atSign that is not the key's owner
     Then it is not delivered
     And a notification from the key's owner is
+
+  Scenario: sanitizes control and bidi characters in dropped notification logs
+    Given a subscription that drops a notification whose id holds a line break and bidirectional formatting characters
+    When the warning for the drop is logged
+    Then the warning is one line and shows those characters as \u escapes
 
   Scenario: matches the sender and the key owner by canonical atSign
     Given a subscription on every key
@@ -149,6 +188,11 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given an active subscription whose stream emits an event or error after close starts
     When close is called
     Then neither onEvent nor onError receives post-close deliveries
+
+  Scenario: a subscription whose stream completes is removed
+    Given an active subscription
+    When its notification stream completes
+    Then the session no longer holds that subscription
 
   Scenario: subscribe cancels immediately if close occurs during startListening
     Given an open session whose startListening triggers close synchronously
