@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
@@ -10,6 +11,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import 'fake_path_provider.dart';
+import 'loopback_flows.dart';
 
 class _MockAtsignFlows extends Mock implements AtsignFlows {}
 
@@ -41,8 +43,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const atSign = '@alice';
   final logs = _RecordedLogs();
+  late int closedPort;
 
-  setUpAll(() {
+  setUpAll(() async {
     // NOTE: before anything logs; a logger binds the handler on first use.
     AtSignLogger.defaultLoggingHandler = logs;
     AtSignLogger.root_level = 'info';
@@ -61,6 +64,9 @@ void main() {
                 }
               : null,
         );
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    closedPort = socket.port;
+    await socket.close();
   });
 
   setUp(logs.records.clear);
@@ -87,11 +93,12 @@ void main() {
   }
 
   /// Shows a button that opens ApkamActivationDialog for [atSign] over
-  /// [keys], through [flows].
+  /// [keys], through [flows], with its atDirectory on a loopback port nothing
+  /// listens on.
   Future<void> pumpOpener(
     WidgetTester tester, {
     required WrittenAtKeysIo keys,
-    AtsignFlows flows = const AtsignFlows(),
+    AtsignFlows flows = const LoopbackFlows(),
     String opening = atSign,
   }) async {
     await tester.pumpWidget(
@@ -103,11 +110,16 @@ void main() {
                 context: context,
                 builder: (_) => ApkamActivationDialog(
                   atSign: opening,
-                  rootDomain: AtRootDomain.atsignDomain,
+                  rootDomain: AtRootDomain(
+                    InternetAddress.loopbackIPv4.address,
+                    closedPort,
+                  ),
                   appName: 'app',
                   deviceName: 'device',
                   namespaces: const {'*': 'rw'},
-                  preference: AtClientPreference(),
+                  preference: AtClientPreference()
+                    ..rootDomain = InternetAddress.loopbackIPv4.address
+                    ..rootPort = closedPort,
                   keys: keys,
                   themeData: ThemeData(),
                   flows: flows,
@@ -134,7 +146,7 @@ void main() {
   Future<void> openDialog(
     WidgetTester tester, {
     required WrittenAtKeysIo keys,
-    AtsignFlows flows = const AtsignFlows(),
+    AtsignFlows flows = const LoopbackFlows(),
     String opening = atSign,
   }) async {
     await pumpOpener(tester, keys: keys, flows: flows, opening: opening);
@@ -273,10 +285,28 @@ void main() {
     expect(find.byType(EditableText), findsOneWidget);
   });
 
-  testWidgets('Given an Atsign that is not valid, when ApkamActivationDialog '
-      'opens it, then the refusal is shown once the dialog is up, and the '
-      'passcode form stays', (tester) async {
-    await openDialog(tester, keys: InMemoryAtKeysIo(), opening: 'al ice');
+  testWidgets('Given AtsignFlows whose resumeEnrollment refuses an Atsign that '
+      'is not valid before it returns, when ApkamActivationDialog opens it, '
+      'then the refusal is shown once the dialog is up, and the passcode form '
+      'stays', (tester) async {
+    final flows = _MockAtsignFlows();
+    when(
+      () => flows.resumeEnrollment(
+        any(),
+        keys: any(named: 'keys'),
+        preference: any(named: 'preference'),
+        lookUps: any(named: 'lookUps'),
+      ),
+    ).thenAnswer((invocation) {
+      Atsign(invocation.positionalArguments.single as String);
+      return Future<PendingEnrollment?>.value();
+    });
+    await openDialog(
+      tester,
+      keys: InMemoryAtKeysIo(),
+      flows: flows,
+      opening: 'al ice',
+    );
     await letItShow(tester);
 
     expect(tester.takeException(), isNull);
