@@ -80,8 +80,8 @@ than `invalid_argument` and `enrollment_in_flight`) do not change.
 | Bridge | BridgeSession, BridgeCollection | unchanged | Already follow the pattern |
 | Bridge | _fromJs, _jsValue, _rejection | _toDart, _toJs, _toRejection | Three converters, one shape |
 | Bridge | _expected, _required | _invalidArgument, _missingArgument | Say which error they build |
-| Bridge | atErrorCode (js/at_error_code.dart) | errorCodeOf (js/error_codes.dart) | Bridge-only mapping (D6) |
-| Opening | SessionOpener (typedef) | SessionOpener (interface) | The D3 abstraction |
+| Bridge | atErrorCode (js/at_error_code.dart) | errorCodeOf (js/error_codes.dart) | Bridge-only mapping (D-43) |
+| Opening | SessionOpener (typedef) | SessionOpener (interface) | The D-40 abstraction |
 | Opening | portalSession | KeysSessionOpener | Opens with an .atKeys file |
 | Opening | passkeyLogin | PasskeySessionOpener | Sibling of KeysSessionOpener |
 | Opening | BridgeOptions | sealed SessionOptions: KeysSessionOptions, PasskeySessionOptions | Input to the opener, not bridge-specific |
@@ -90,7 +90,7 @@ than `invalid_argument` and `enrollment_in_flight`) do not change.
 | Session | JsSession (interface) | Session | Plain noun for the interface |
 | Session | AtClientJsSession (js/js_session.dart) | AtClientSession (session/at_client_session.dart) | Pure Dart; out of js/ |
 | Session | _SessionCollection | SessionBoundCollection | Lives and dies with the session |
-| Session | JsKey | NotifyKey | The narrow notify key (D7) |
+| Session | JsKey | NotifyKey | The narrow notify key (D-44) |
 | Session | JsNotification | ReceivedNotification | What subscribe delivers |
 | Session | JsEnrollment | PendingEnrollment | Same name as at_js |
 | Session | qualified | qualifiedCollectionName | Says what it qualifies |
@@ -102,10 +102,10 @@ than `invalid_argument` and `enrollment_in_flight`) do not change.
 | Collection | _serialize, _write, _guard, _error | _queueWrite, _ownedWrite, _mapFailures, _toCollectionException | Say what each step does |
 | Collection | nestsTooDeep, itemTooDeep | exceedsMaxDepth, ItemTooDeepException | A check and an exception |
 | Collection | js_collections_adapter.dart | at_collection_adapter.dart | Match the class |
-| Exceptions | JsCollectionsError | CollectionException | An AtException with a kind, not a code (D6) |
+| Exceptions | JsCollectionsError | CollectionException | An AtException with a kind, not a code (D-43) |
 | Exceptions | BadKeyException | InvalidKeyException | Says what is wrong |
 | Exceptions | ManageAccessException | ManageAccessRequiredException | Says what is missing |
-| Exceptions | SessionClosedException | dropped for StoppedException | Duplicate (D4) |
+| Exceptions | SessionClosedException | dropped for StoppedException | Duplicate (D-41) |
 | Exceptions | _BridgeArgumentError | InvalidArgumentException | Maps to invalid_argument |
 | Exceptions | (new) | EnrollmentInFlightException | Maps to enrollment_in_flight |
-| Exceptions | spread over four files | lib/src/exceptions.dart | One file (D4) |
+| Exceptions | spread over four files | lib/src/exceptions.dart | One file (D-41) |
