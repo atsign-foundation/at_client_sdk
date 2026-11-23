@@ -245,12 +245,18 @@ the `alpha` dist-tag in [atsign-foundation/at_js](https://github.com/atsign-foun
 (`packages/at_client_web`). See [§5a](#5a-the-npm-api-alpha).
 
 **Bridge releases.** A release is started by hand: run the workflow
-`at_client_web_bridge_release.yaml` (`workflow_dispatch`) from `trunk`. It builds only the
-dart2js bridge from `packages/at_client_web/dart-workspace.lock` and attaches
-`at_client_web.js` and `at_client_web.js.sha256` to a prerelease of this repository tagged
-`at_client_web-bridge-<first 12 characters of the commit SHA>`, with a build provenance
-attestation. The bundle is built in a read-only job and a separate job attests it and
-creates the prerelease. The npm package pins one such tag and checksum.
+`at_client_web_bridge_release.yaml` (`workflow_dispatch`, with a `target` input defaulting
+to `dart2js`) from `trunk`. It builds one declared target from
+`packages/at_client_web/dart-workspace.lock` and attaches that target's files to a
+prerelease of this repository: `at_client_web.js` under
+`at_client_web-bridge-<first 12 characters of the commit SHA>` for `dart2js` (the tag is
+unchanged), or `at_client_web.wasm` and `at_client_web.mjs` under
+`at_client_web-bridge-wasm-<sha12>` for `dart2wasm` (advisory, OQ-16). One `SHA256SUMS`
+covers exactly the published files, and each published file plus `SHA256SUMS` carries a
+build provenance attestation. The bundle is built in a read-only job and a separate job
+attests it and creates the prerelease. The npm package pins one tag and verifies its files
+against `SHA256SUMS`; at_js's `fetch-bridge.mjs` must download and parse `SHA256SUMS` in
+the same change as the next `bridge.ref` bump.
 
 The build runs `dart pub get --enforce-lockfile`, so it fails when the lock no longer
 matches the workspace's pubspecs. To regenerate it, run `dart pub get` at the repo root and
