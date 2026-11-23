@@ -15,6 +15,8 @@
 # Both --target VALUE and --target=VALUE are accepted. --target both and
 # --target= (empty) are refused, and so is any unknown target or entry: those
 # exit 1 naming the allowed values (dart2js and dart2wasm, or the bridge entry).
+# Every build also writes build/bridge-manifest.json before compiling, generated
+# from Dart constants and byte-identical for both compile targets.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -101,6 +103,11 @@ build_entry() {
 }
 
 mkdir -p "$out"
+
+# Published with every build. The generator's self-check exits 1 on a const
+# that is empty, unsorted, duplicated or overlapping, so `set -e` fails the
+# build before either entry is compiled.
+dart tool/manifest.dart --out "$out/bridge-manifest.json"
 
 if [[ -z "$entry" ]]; then
   build_entry at_client_web_entry at_client "$targets"

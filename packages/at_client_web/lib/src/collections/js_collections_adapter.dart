@@ -130,6 +130,24 @@ abstract final class CollectionErrorCodes {
   static const tooDeep = 'COLLECTION_ITEM_TOO_DEEP';
 }
 
+/// Every [CollectionErrorCodes] value, sorted by value: the closed set of
+/// `COLLECTION_*` codes a [JsCollectionsError] can carry. `tool/manifest.dart`
+/// publishes it in `bridge-manifest.json`, and
+/// `test/js/at_error_code_test.dart` keeps it equal to the constants above.
+const collectionErrorCodes = <String>[
+  CollectionErrorCodes.failed,
+  CollectionErrorCodes.invalidArgument,
+  CollectionErrorCodes.alreadyExists,
+  CollectionErrorCodes.hasSubItems,
+  CollectionErrorCodes.notFound,
+  CollectionErrorCodes.notOwner,
+  CollectionErrorCodes.tooDeep,
+  CollectionErrorCodes.unreadable,
+  CollectionErrorCodes.wrongType,
+  CollectionErrorCodes.partialFailure,
+  CollectionErrorCodes.typeMismatch,
+];
+
 /// The single error shape every adapter operation rejects with.
 final class JsCollectionsError extends AtException {
   JsCollectionsError(

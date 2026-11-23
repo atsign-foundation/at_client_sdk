@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
@@ -98,21 +100,56 @@ void main() {
     test('$name maps to $code', () => expect(atErrorCode(error), code));
   }
 
-  test('every code the facade maps to is produced by some mapping', () {
-    const mapped = {
-      'pkam_refused',
-      'offline',
-      'onboarding_incomplete',
-      'enrollment_conveyance_failed',
-      'enrollment_denied',
-      'closed',
-      'unsupported',
-      'bad_key',
-      'internal',
+  test(
+      'atErrorCodes is the closed set: every non-collection code a case produces is a member and every member is produced',
+      () {
+    final produced = cases.values
+        .map((c) => c.$2)
+        .where((code) => !code.startsWith('COLLECTION_'))
+        .toSet();
+    expect(produced.difference(atErrorCodes.toSet()), isEmpty,
+        reason: 'produced codes outside atErrorCodes');
+    expect(atErrorCodes.toSet().difference(produced), isEmpty,
+        reason: 'atErrorCodes members no case produces');
+  });
+
+  test(
+      'collectionErrorCodes is the closed set: every produced COLLECTION_* code is a member and every member is produced',
+      () {
+    final produced = cases.values
+        .map((c) => c.$2)
+        .where((code) => code.startsWith('COLLECTION_'))
+        .toSet();
+    expect(produced.difference(collectionErrorCodes.toSet()), isEmpty,
+        reason: 'produced codes outside collectionErrorCodes');
+    expect(collectionErrorCodes.toSet().difference(produced), isEmpty,
+        reason: 'collectionErrorCodes members no case produces');
+  });
+
+  test('both code lists are non-empty, sorted, duplicate-free and disjoint',
+      () {
+    for (final (name, codes) in [
+      ('atErrorCodes', atErrorCodes),
+      ('collectionErrorCodes', collectionErrorCodes),
+    ]) {
+      expect(codes, isNotEmpty, reason: name);
+      expect(codes, equals([...codes]..sort()), reason: '$name is sorted');
+      expect(codes.toSet(), hasLength(codes.length),
+          reason: '$name has no duplicates');
+    }
+    expect(atErrorCodes.toSet().intersection(collectionErrorCodes.toSet()),
+        isEmpty,
+        reason: 'the two closed sets are disjoint');
+  });
+
+  test('js_collections_adapter.dart declares exactly collectionErrorCodes', () {
+    final source = File('lib/src/collections/js_collections_adapter.dart')
+        .readAsStringSync();
+    final declared = {
+      for (final match in RegExp(r"'COLLECTION_[A-Z0-9_]+'").allMatches(source))
+        match[0]!.substring(1, match[0]!.length - 1),
     };
-    final produced = cases.values.map((c) => c.$2).toSet();
-    expect(produced.containsAll(mapped), isTrue,
-        reason: '${mapped.difference(produced)}');
-    expect(produced.where((c) => !c.startsWith('COLLECTION_')).toSet(), mapped);
+    expect(declared, collectionErrorCodes.toSet(),
+        reason: 'the source literals and the published list agree');
   });
 }
