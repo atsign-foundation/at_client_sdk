@@ -91,8 +91,8 @@ The five decisions come from a design self-review of #2537, recorded in the firs
 ([`a0fd351bd`](https://github.com/atsign-foundation/at_client_sdk/commit/a0fd351bd9d501aad2f2acd96928806cea4aaf56)) and
 carried through #2601. #2537 itself has no review comments, so there is no review thread to link: the self-review is
 the originating record. Each block below gives the problem, the alternatives that were actually on the table, the
-argument that settled it, and what would reopen it. Where the review notes did not record a reason, the line is
-marked **[reconstructed: confirm]** so it can be filled in rather than ratified as something nobody argued.
+argument that settled it, and what would reopen it. The "Would reopen if" lines were written for this PR; the review
+notes didn't record them.
 
 ### D-40 — one way to open a session
 
@@ -114,8 +114,7 @@ teardown: one place waits for the stop, so a passkey's vault is never left open 
 and `publish_to: none`, so the rename is internal to its call sites and tests, and `lib/at_client_web_web.dart` must
 keep its exports working.
 
-**Would reopen if.** A third opening path appears that does not fit `SessionOptions`, or one opener cannot expose a
-single stop. **[reconstructed: confirm]**
+**Would reopen if.** An opener whose teardown can't be expressed as one awaitable stop.
 
 ### D-41 — one exceptions file
 
@@ -136,7 +135,8 @@ single stop. **[reconstructed: confirm]**
   `AtException`.
   [`879e992d8`](https://github.com/atsign-foundation/at_client_sdk/commit/879e992d85fc6c9b7d1f28e3bbc2e90fd54337e9)
   then scoped the decision to the five trunk exceptions: the closed-session type exists only in #2537, so that choice
-  and the amendment are left to that PR.
+  and the amendment are left to that PR. If at_commons later gains an `AtException`-based closed-session type, that
+  substitution becomes cheap.
 - Move the five trunk exceptions into one file and extend `AtException` (chosen). The closed-session type is left to
   the implementing PR, where the #2537-only names live.
 
@@ -145,8 +145,8 @@ each other for an error class. The cost is a visible change for callers: the two
 `AtException` subclasses, so a catch of `AtException` will begin to see them. The barrel exports must keep working,
 and the implementing PR and its release notes must say so.
 
-**Would reopen if.** at_commons gains an `AtException`-based closed-session type, which would make the substitution
-cheap. **[reconstructed: confirm]**
+**Would reopen if.** A caller turns out to depend on `PortalSessionOfflineException` or
+`UnsupportedKeyMaterialException` not being caught as `AtException`.
 
 ### D-45 — one naming pattern
 
@@ -168,8 +168,8 @@ change. The cost is eleven rows in the table above, both opening names, one file
 the same 0.1.0 and `publish_to: none` that makes D-40 cheap makes these internal. Names introduced in #2537, such as
 `JsEnrollment`, are not proposed here.
 
-**Would reopen if.** A JS-facing name has to change (the rule forbids it), or the package leaves its pre-release
-state so these stop being internal-only renames. **[reconstructed: confirm]**
+**Would reopen if.** A JS-facing name has to change (the rule forbids it), or the package is published before the
+renames land, so they would break callers.
 
 ### D-39 — a machine-readable contract
 
@@ -194,22 +194,19 @@ rename or removal is a bridge-contract major. at_js has to adopt it, which is se
 with this docs PR.
 
 **Would reopen if.** at_js stops being the consumer, or the Dart constants stop being the single source for the
-surface. **[reconstructed: confirm]**
+surface.
 
 ### D-38 — the compile target
 
 **Problem.** The trunk build script takes no argument: it always runs both compilers, warns and exits 0 when the
-dart2wasm build fails unless `WASM_REQUIRED=1`, and writes `at_client.js`. The release ships the dart2js bundle only.
-On trunk the web release ships the dart2js bundle only, and no workflow publishes the bridge at all. The target is
+dart2wasm build fails unless `WASM_REQUIRED=1`, and writes `at_client.js`. On trunk the web release ships the dart2js bundle only, and no workflow publishes the bridge at all. The target is
 therefore implicit in whatever the script last ran, and a failed wasm build can leave a dart2js-only artifact ([D-38](../../architecture/decisions.md)).
 
 **Options considered.**
 - Keep the dual-build script: rejected because the target stays implicit and a wasm failure can pass silently.
-- Make the target package configuration: rejected because the bridge code is target-agnostic (`dart:js_interop`) and
-  only the compiler changes, so this is a build choice. **[reconstructed: confirm]**
 - Keep dart2js as the primary target: D-38 does not reopen this. It keeps `dart2js` as the default, which is the
   position of [wasm D-7](decisions.md), and D-7 already keeps `dart2wasm` available "at zero cost". The measured
-  evidence favoured dart2js: one 77 KB file (24.5 KB gzipped) against dart2wasm's four files at about 25 KB, and
+  evidence favoured dart2js: one 77 KB file (24.5 KB gzipped) against dart2wasm's four files at about 25 KB gzipped, and
   Sass ships dart2js ([js-api.md](js-api.md) section 2). D-38 decides how a wasm build is made and shipped, not
   which target is primary.
 - A `--target` flag with `dart2js` as the default (chosen).
@@ -222,5 +219,5 @@ the source is already target-agnostic, so the cost is in the build and release p
 **Cost.** Two release targets to keep green, and a wasm release is a separate prerelease under its own tag and
 advisory (OQ-16), so it does not replace the default.
 
-**Would reopen if.** The bridge stops being target-agnostic **[reconstructed: confirm]**, or the wasm line is
-dropped; product sign-off on the advisory wasm release is still open (OQ-16).
+**Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped; product sign-off on the
+advisory wasm release is still open (OQ-16).
