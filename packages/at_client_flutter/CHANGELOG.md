@@ -4,7 +4,9 @@
 
 - fix: `ApkamActivationDialog` says so when it opens on an AtKeys store it
   cannot use, such as a keychain it cannot read or keys recorded for another
-  Atsign, and keeps the passcode form.
+  Atsign, and keeps the passcode form. Anything else that check throws, such
+  as a `StateError` for a pending request with no key, now reaches the app's
+  uncaught-error handler.
 - fix: `EnrollmentRequestList`'s approval and denial feedback goes when the
   list does, and a second tap on it no longer throws.
 
