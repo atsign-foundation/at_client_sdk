@@ -232,6 +232,10 @@ Future<void> loginWithApkam(BuildContext context) async {
 
 There is no second `PkamDialog`: the enrolled client is the one handed back.
 
+When it opens on keys it cannot use (a keychain it cannot read, or keys
+recorded for another Atsign), the dialog shows the first line of the
+`AtKeysUnusableException` and keeps the passcode form.
+
 **The approve side**, on the manager device:
 
 ```dart
