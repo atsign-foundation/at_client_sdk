@@ -1,17 +1,14 @@
 import 'package:at_client/at_client.dart';
 
+import '../collections/at_collection_adapter.dart' show maxItemDataDepth;
 import '../exceptions.dart';
 import '../log_text.dart';
 
 // The one place an exception becomes an error code and a message for JS.
-// Both are pure functions of the thrown type: no exception's own text ever
-// chooses a code, and no text reaches JS unless this file lets it.
-
-/// What a closed session and a stopped client both reject with.
-const _closedMessage = 'the session is closed';
-
-/// The longest message an `invalid_argument` rejection carries.
-const _maxMessageLength = 128;
+// Both are pure functions of the thrown type and its structured fields: no
+// exception's own text ever chooses a code, and the bridge authors every
+// message JS sees. The one inner text it passes through is the id refusal
+// AtCollection words itself (CollectionRefusal.itemId), bounded to one line.
 
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
@@ -52,12 +49,12 @@ String collectionErrorCode(CollectionFailure kind) => switch (kind) {
       CollectionFailure.tooDeep => 'COLLECTION_ITEM_TOO_DEEP',
     };
 
-/// The message JS sees for [error]. A collection failure carries the
-/// bounded detail the adapter wrote; every other message is fixed here, or
-/// names a parameter and never its value.
+/// The message JS sees for [error]: fixed here, or built from the exception's
+/// fields, each echoed field bounded to one line. A message names a parameter
+/// and never its value.
 String atErrorMessage(Object error) => switch (error) {
-      InvalidArgumentException(:final message) => _bounded(message),
-      CollectionException(:final message) => message,
+      InvalidArgumentException() => _argumentMessage(error),
+      CollectionException() => _collectionMessage(error),
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
       SessionOfflineException(:final state) =>
@@ -70,7 +67,7 @@ String atErrorMessage(Object error) => switch (error) {
         'a decision for this request is already in flight',
       AtEnrollmentException() =>
         'the enrollment request was denied or is not pending',
-      SessionClosedException() || StoppedException() => _closedMessage,
+      SessionClosedException() || StoppedException() => sessionClosedMessage,
       UnsupportedKeyMaterialException() =>
         'the keys carry unsupported cryptographic material',
       ManageAccessRequiredException() =>
@@ -84,4 +81,70 @@ String atErrorMessage(Object error) => switch (error) {
     };
 
 String _bounded(String value) =>
-    truncateText(singleLine(value), _maxMessageLength);
+    truncateText(singleLine(value), maxErrorMessageLength);
+
+/// What each parameter the session validates by itself has to be, for an
+/// [InvalidArgumentException] that names no `expected`.
+const _expectedOf = {
+  'regex': 'a valid regular expression',
+  'namespace': 'a non-empty namespace segment',
+};
+
+String _argumentMessage(InvalidArgumentException error) {
+  final name = error.parameter;
+  if (error.missing) return _bounded('$name must not be null');
+  final expected = error.expected ?? _expectedOf[error.parameter] ?? 'valid';
+  return _bounded('$name must be $expected');
+}
+
+String _collectionMessage(CollectionException error) {
+  final id = _token(error.id ?? '');
+  final owner = _atSign(error.owner);
+  return _bounded(switch (error.kind) {
+    CollectionFailure.invalidArgument => _refusalMessage(error),
+    CollectionFailure.notFound => 'item not found',
+    CollectionFailure.notOwner =>
+      'item $id is owned by $owner, not ${_atSign(error.collectionOwner)}',
+    CollectionFailure.alreadyExists => 'item already exists',
+    CollectionFailure.hasSubItems => 'item has sub-items',
+    CollectionFailure.unreadable => error.owner == null
+        ? 'item $id could not be read'
+        : 'item $id owned by $owner could not be read',
+    CollectionFailure.typeMismatch =>
+      'a where clause compared values of different types',
+    CollectionFailure.wrongType =>
+      'item $id is a ${_token(error.foundType ?? '')}, '
+          'not a ${_token(error.expectedType ?? '')}',
+    CollectionFailure.partialFailure =>
+      '${error.failures.length} key-level write(s) failed',
+    CollectionFailure.failed => 'operation failed',
+    CollectionFailure.tooDeep =>
+      'item data nests deeper than $maxItemDataDepth levels',
+  });
+}
+
+String _refusalMessage(CollectionException error) {
+  final subject = _token(error.subject ?? '');
+  return switch (error.refusal) {
+    CollectionRefusal.collectionName =>
+      'collection name must be a valid key name',
+    CollectionRefusal.expiration => 'expirationMs must be > 0',
+    CollectionRefusal.eventSource => 'unknown eventSource $subject',
+    CollectionRefusal.wherePath => 'empty segment in where path $subject',
+    CollectionRefusal.whereOperator => 'unknown where operator $subject',
+    CollectionRefusal.whereValue =>
+      'where $subject needs a number or string value',
+    CollectionRefusal.atSign => 'invalid atSign',
+    CollectionRefusal.itemId => error.subject ?? 'invalid argument',
+    CollectionRefusal.typeTag =>
+      'collection is already open with a different type',
+    null => 'invalid argument',
+  };
+}
+
+/// [atSign] on one line; an atSign is validated where it is built.
+String _atSign(String? atSign) => singleLine(atSign ?? '');
+
+/// [value] as one quoted token of at most 64 characters, control and
+/// direction characters escaped.
+String _token(String value) => sanitizeLogText(value, maxLength: 64);

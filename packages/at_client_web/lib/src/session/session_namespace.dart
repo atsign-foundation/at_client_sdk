@@ -4,12 +4,14 @@ import '../exceptions.dart';
 
 final _sessionNamespacePattern = RegExp('^${Regexes.charsInNamespace}\$');
 
+/// [namespace] folded to lower case; the one place a namespace is folded.
+String foldNamespace(String namespace) => namespace.toLowerCase();
+
 /// Returns [namespace] folded to lower case, or throws an [InvalidArgumentException]
-/// naming `namespace` without its value when it is empty or invalid.
+/// for `namespace` when it is empty or invalid.
 String normalizeSessionNamespace(String namespace) {
   if (!_sessionNamespacePattern.hasMatch(namespace)) {
-    throw InvalidArgumentException(
-        'namespace must be a non-empty valid segment');
+    throw InvalidArgumentException('namespace');
   }
-  return namespace.toLowerCase();
+  return foldNamespace(namespace);
 }

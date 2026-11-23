@@ -777,7 +777,14 @@ void main() {
         expect(e['message'].dartify() as String, contains('regex'));
       });
 
+      test('the bridge hands the regex text to the session uncompiled', () {
+        _call(s, 'subscribe', ['['.toJS, (() {}).toJS]);
+
+        expect(session.subscribedRegex, '[');
+      });
+
       test('subscribe with invalid regex rejects naming regex', () {
+        session.failure = InvalidArgumentException('regex');
         final e = failed('['.toJS);
 
         expect(e['code'].dartify(), 'invalid_argument');
@@ -1140,8 +1147,7 @@ void main() {
 
       test('a collection failure rejects with its code and fields (T6.4)',
           () async {
-        adapter.failure = CollectionException(
-            CollectionFailure.partialFailure, 'some writes failed',
+        adapter.failure = CollectionException(CollectionFailure.partialFailure,
             id: 'i1',
             owner: '@alice',
             causeType: 'AtKeyException',
@@ -1155,7 +1161,7 @@ void main() {
         ]));
 
         expect(r.code, collectionErrorCode(CollectionFailure.partialFailure));
-        expect(r.message, 'some writes failed');
+        expect(r.message, '1 key-level write(s) failed');
         expect((r.field('id'), r.field('owner'), r.field('kind')),
             ('i1', '@alice', 'AtKeyException'));
         expect(r.field('failures'), [
@@ -1168,37 +1174,35 @@ void main() {
           () async {
         final cases = <(CollectionException, String, String, Object?)>[
           (
-            CollectionException(CollectionFailure.notFound, 'item not found',
+            CollectionException(CollectionFailure.notFound,
                 id: 'i1', owner: '@alice', causeType: 'StateError'),
             'item not found',
             'StateError',
             null
           ),
           (
-            CollectionException(
-                CollectionFailure.notOwner, 'i1 belongs to @bob, not @alice',
-                id: 'i1', owner: '@bob'),
-            'i1 belongs to @bob, not @alice',
+            CollectionException(CollectionFailure.notOwner,
+                id: 'i1', owner: '@bob', collectionOwner: '@alice'),
+            'item "i1" is owned by @bob, not @alice',
             '',
             null
           ),
           (
-            CollectionException(CollectionFailure.failed, 'operation failed',
+            CollectionException(CollectionFailure.failed,
                 id: 'i1', owner: '@alice', causeType: 'StateError'),
             'operation failed',
             'StateError',
             null
           ),
           (
-            CollectionException(
-                CollectionFailure.partialFailure, 'some writes failed',
+            CollectionException(CollectionFailure.partialFailure,
                 id: 'i1',
                 owner: '@alice',
                 causeType: 'CollectionOpException',
                 failures: [
                   {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
                 ]),
-            'some writes failed',
+            '1 key-level write(s) failed',
             'CollectionOpException',
             [
               {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
@@ -1264,7 +1268,7 @@ void main() {
           CollectionFailure.failed,
           CollectionFailure.tooDeep,
         ]) {
-          adapter.failure = CollectionException(kind, 'm');
+          adapter.failure = CollectionException(kind);
           expect((await _rejected(_call(c, 'list'))).code,
               collectionErrorCode(kind));
         }
@@ -1337,7 +1341,7 @@ void main() {
 
         adapter.onEvent!({'type': 'updated', 'id': 'i1', 'owner': '@alice'});
         adapter.onEvent!({'type': 'unknown', 'id': 'i2', 'owner': '@bob'});
-        adapter.onError!(CollectionException(CollectionFailure.failed, 'boom'));
+        adapter.onError!(CollectionException(CollectionFailure.failed));
         off.callAsFunction();
 
         expect(events, [

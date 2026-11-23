@@ -62,7 +62,7 @@ void main() {
   test(
       'The collection exception is an AtException and keeps its kind, message, id, owner, cause type and failures',
       () {
-    final error = CollectionException(CollectionFailure.partialFailure, 'boom',
+    final error = CollectionException(CollectionFailure.partialFailure,
         id: 'i',
         owner: '@alice',
         causeType: 'K',
@@ -72,7 +72,7 @@ void main() {
     expect(error, isA<AtException>());
     expect(error.kind, CollectionFailure.partialFailure);
     expect(errorCodeOf(error), 'COLLECTION_PARTIAL_FAILURE');
-    expect(error.message, 'boom');
+    expect(error.message, isNotEmpty);
     expect(error.id, 'i');
     expect(error.owner, '@alice');
     expect(error.causeType, 'K');
@@ -181,8 +181,9 @@ void main() {
           throwsA(isA<CollectionException>()
               .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
               .having((e) => e.causeType, 'kind', 'ArgumentError')
-              .having((e) => e.message, 'message', isNot('invalid argument'))
-              .having((e) => e.message.length, 'bounded', lessThan(200))));
+              .having(atErrorMessage, 'message', isNot('invalid argument'))
+              .having(
+                  (e) => atErrorMessage(e).length, 'bounded', lessThan(200))));
     });
 
     test(
@@ -506,9 +507,9 @@ void main() {
                 collectionErrorCode(CollectionFailure.unreadable))
             .having((e) => e.id, 'id', 'b1')
             .having((e) => e.owner, 'owner', '@bob')
-            .having((e) => e.message, 'message', isNot(contains('json')))
-            .having((e) => e.message, 'message',
-                isNot(contains('FormatException')))),
+            .having(atErrorMessage, 'message', isNot(contains('json')))
+            .having(
+                atErrorMessage, 'message', isNot(contains('FormatException')))),
       );
     });
 
@@ -1204,7 +1205,7 @@ void main() {
       Matcher naming(String text) => throwsA(isA<CollectionException>()
           .having(errorCodeOf, 'code',
               collectionErrorCode(CollectionFailure.invalidArgument))
-          .having((e) => e.message, 'message', contains(text)));
+          .having(atErrorMessage, 'message', contains(text)));
 
       await expectLater(
           todos.query([(path: 'x', op: 'like', value: 'a%')]), naming('like'));
@@ -1227,8 +1228,9 @@ void main() {
         throwsA(isA<CollectionException>()
             .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.invalidArgument))
-            .having((e) => e.message.length, 'bounded length', lessThan(120))
-            .having((e) => e.message, 'truncated', contains('...'))),
+            .having((e) => atErrorMessage(e).length, 'bounded length',
+                lessThan(120))
+            .having(atErrorMessage, 'truncated', contains('...'))),
       );
     });
 

@@ -97,10 +97,10 @@ JSPromise<T> _promise<T extends JSAny?>(FutureOr<T> Function() body) =>
 /// An argument error that names the parameter and the type it expects, never
 /// the value received.
 InvalidArgumentException _invalidArgument(String name, String type) =>
-    InvalidArgumentException('$name must be $type');
+    InvalidArgumentException(name, expected: type);
 
 InvalidArgumentException _missingArgument(String name) =>
-    InvalidArgumentException('$name must not be null');
+    InvalidArgumentException.missing(name);
 
 final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSAny _objectPrototype = _objectClass['prototype']!;
@@ -309,11 +309,6 @@ class BridgeSession {
   JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
       final pattern = _string(regex, 'regex');
-      try {
-        RegExp(pattern);
-      } on FormatException {
-        throw _invalidArgument('regex', 'a valid regular expression');
-      }
       final deliver = _function(callback, 'callback');
       final report = _optionalFunction(onError, 'onError');
       final unsubscribe = _session.subscribe(
@@ -430,8 +425,8 @@ class BridgeCollection {
     try {
       return (id: id, owner: Atsign(rawOwner ?? _self));
     } on InvalidAtSignException {
-      throw InvalidArgumentException('owner must be a valid atSign',
-          id: id.toLowerCase());
+      throw InvalidArgumentException('owner',
+          expected: 'a valid atSign', id: id);
     }
   }
 

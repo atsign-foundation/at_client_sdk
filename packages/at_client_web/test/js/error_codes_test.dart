@@ -37,7 +37,7 @@ void main() {
       'closed'
     ),
     'InvalidArgumentException': (
-      InvalidArgumentException('opts must be an object'),
+      InvalidArgumentException('opts', expected: 'an object'),
       'invalid_argument'
     ),
     'EnrollmentInFlightException': (
@@ -57,48 +57,47 @@ void main() {
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
     'CollectionException carries its own code': (
-      CollectionException(
-          CollectionFailure.notFound, 'item abc is not in the collection'),
+      CollectionException(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
     ),
     'CollectionException partial failure': (
-      CollectionException(CollectionFailure.partialFailure, 'x'),
+      CollectionException(CollectionFailure.partialFailure),
       'COLLECTION_PARTIAL_FAILURE'
     ),
     'CollectionException invalid argument': (
-      CollectionException(CollectionFailure.invalidArgument, 'bad'),
+      CollectionException(CollectionFailure.invalidArgument),
       'COLLECTION_INVALID_ARGUMENT'
     ),
     'CollectionException not owner': (
-      CollectionException(CollectionFailure.notOwner, 'other'),
+      CollectionException(CollectionFailure.notOwner),
       'COLLECTION_ITEM_NOT_OWNER'
     ),
     'CollectionException already exists': (
-      CollectionException(CollectionFailure.alreadyExists, 'exists'),
+      CollectionException(CollectionFailure.alreadyExists),
       'COLLECTION_ITEM_ALREADY_EXISTS'
     ),
     'CollectionException has sub items': (
-      CollectionException(CollectionFailure.hasSubItems, 'subs'),
+      CollectionException(CollectionFailure.hasSubItems),
       'COLLECTION_ITEM_HAS_SUB_ITEMS'
     ),
     'CollectionException unreadable': (
-      CollectionException(CollectionFailure.unreadable, 'unreadable'),
+      CollectionException(CollectionFailure.unreadable),
       'COLLECTION_ITEM_UNREADABLE'
     ),
     'CollectionException type mismatch': (
-      CollectionException(CollectionFailure.typeMismatch, 'mismatch'),
+      CollectionException(CollectionFailure.typeMismatch),
       'COLLECTION_TYPE_MISMATCH'
     ),
     'CollectionException wrong type': (
-      CollectionException(CollectionFailure.wrongType, 'wrong'),
+      CollectionException(CollectionFailure.wrongType),
       'COLLECTION_ITEM_WRONG_TYPE'
     ),
     'CollectionException failed': (
-      CollectionException(CollectionFailure.failed, 'failed'),
+      CollectionException(CollectionFailure.failed),
       'COLLECTION_FAILED'
     ),
     'CollectionException too deep': (
-      CollectionException(CollectionFailure.tooDeep, 'deep'),
+      CollectionException(CollectionFailure.tooDeep),
       'COLLECTION_ITEM_TOO_DEEP'
     ),
     'an unknown Exception': (Exception('x'), 'internal'),
@@ -147,6 +146,18 @@ void main() {
     expect(atErrorMessage(StoppedException('x')), isNot(contains('Exception')));
   });
 
+  test('every closed rejection also matches the exception a session throws',
+      () {
+    expect(atErrorMessage(SessionClosedException()),
+        atErrorMessage(StoppedException('x')));
+  });
+
+  test('an invalid_argument message is cut at the shared bound', () {
+    final message = atErrorMessage(
+        InvalidArgumentException('a' * 300, expected: 'a string'));
+    expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
+  });
+
   test('exception text never chooses the code', () {
     for (final text in [
       'invalid_argument',
@@ -181,13 +192,14 @@ void main() {
   test('an invalid_argument message is bounded and never echoes the value', () {
     final hostile = '${'x\u202e' * 70000}\n${'y' * 1000000}';
     final message = atErrorMessage(
-        InvalidArgumentException('opts must be an object $hostile'));
+        InvalidArgumentException('opts', expected: 'an object $hostile'));
     expect(message.length, lessThanOrEqualTo(128));
     expect(message, isNot(contains('\n')));
     expect(message, isNot(contains('\u202e')));
     expect(message, isNot(contains('yyyy')));
     expect(
-        atErrorMessage(InvalidArgumentException('namespace must be a string')),
+        atErrorMessage(
+            InvalidArgumentException('namespace', expected: 'a string')),
         'namespace must be a string');
   });
 
@@ -229,9 +241,108 @@ void main() {
     };
     expect(expected.keys.toSet(), CollectionFailure.values.toSet());
     for (final MapEntry(:key, :value) in expected.entries) {
-      expect(errorCodeOf(CollectionException(key, 'm')), value);
+      expect(errorCodeOf(CollectionException(key)), value);
       expect(collectionErrorCode(key), value);
     }
     expect(expected.values.toSet(), hasLength(11));
+  });
+
+  group('the bridge authors every message JS sees', () {
+    String text(Object e) => atErrorMessage(e);
+
+    test('a session argument error names its parameter from the fields', () {
+      expect(text(InvalidArgumentException('regex')),
+          'regex must be a valid regular expression');
+      expect(text(InvalidArgumentException('namespace')),
+          'namespace must be a non-empty namespace segment');
+      expect(
+          text(InvalidArgumentException('owner', expected: 'a valid atSign')),
+          'owner must be a valid atSign');
+      expect(text(InvalidArgumentException.missing('opts')),
+          'opts must not be null');
+    });
+
+    test('a collection rejection is worded from its kind and fields alone', () {
+      final cases = <CollectionException, String>{
+        CollectionException(CollectionFailure.notFound): 'item not found',
+        CollectionException(CollectionFailure.alreadyExists):
+            'item already exists',
+        CollectionException(CollectionFailure.hasSubItems):
+            'item has sub-items',
+        CollectionException(CollectionFailure.failed): 'operation failed',
+        CollectionException(CollectionFailure.typeMismatch):
+            'a where clause compared values of different types',
+        CollectionException(CollectionFailure.tooDeep):
+            'item data nests deeper than 64 levels',
+        CollectionException(CollectionFailure.partialFailure, failures: const [
+          {'op': 'put'},
+          {'op': 'put'}
+        ]): '2 key-level write(s) failed',
+        CollectionException(CollectionFailure.notOwner,
+                id: 'A1', owner: '@bob', collectionOwner: '@alice'):
+            'item "a1" is owned by @bob, not @alice',
+        CollectionException(CollectionFailure.wrongType,
+            id: 'a1',
+            foundType: 'Note',
+            expectedType: 'Todo'): 'item "a1" is a "Note", not a "Todo"',
+        CollectionException(CollectionFailure.unreadable, id: 'a1'):
+            'item "a1" could not be read',
+        CollectionException(CollectionFailure.unreadable,
+            id: 'a1',
+            owner: '@bob'): 'item "a1" owned by @bob could not be read',
+        CollectionException(CollectionFailure.invalidArgument):
+            'invalid argument',
+        CollectionException(CollectionFailure.invalidArgument,
+                refusal: CollectionRefusal.collectionName):
+            'collection name must be a valid key name',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.expiration): 'expirationMs must be > 0',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.eventSource,
+            subject: 'x'): 'unknown eventSource "x"',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.wherePath,
+            subject: 'a..b'): 'empty segment in where path "a..b"',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.whereOperator,
+            subject: '=<'): 'unknown where operator "=<"',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.whereValue,
+            subject: '<'): 'where "<" needs a number or string value',
+        CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.atSign): 'invalid atSign',
+        CollectionException(CollectionFailure.invalidArgument,
+                refusal: CollectionRefusal.typeTag):
+            'collection is already open with a different type',
+      };
+      for (final MapEntry(key: error, value: expected) in cases.entries) {
+        expect(text(error), expected, reason: error.toString());
+      }
+    });
+
+    test('a subject the bridge echoes is cut to one bounded line', () {
+      final message = text(CollectionException(
+          CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.whereOperator,
+          subject: '${'x\u202e' * 500}\n'));
+      expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
+      expect(message, isNot(contains('\n')));
+      expect(message, isNot(contains('\u202e')));
+    });
+
+    test('an item id refusal carries the text AtCollection gave, bounded', () {
+      final message = text(CollectionException(
+          CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.itemId,
+          subject: 'id\n${'z' * 400}'));
+      expect(message, startsWith('id '));
+      expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
+    });
+
+    test('a Dart caller still reads a message on each exception', () {
+      expect(InvalidArgumentException('regex').message, contains('regex'));
+      expect(
+          CollectionException(CollectionFailure.notFound).message, isNotEmpty);
+    });
   });
 }

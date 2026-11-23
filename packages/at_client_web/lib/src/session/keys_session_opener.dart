@@ -4,15 +4,6 @@ import 'portal_session.dart';
 import 'session_opener.dart';
 import 'session_transport_options.dart';
 
-/// Opens the client for [AtKeys] and the transport [SessionTransportOptions]
-/// describes.
-typedef KeysOpen = Future<AtClient> Function({
-  required String atSign,
-  required String app,
-  required AtKeys keys,
-  required SessionTransport transport,
-});
-
 /// Opens a session on a `.atKeys` document, with in-memory storage.
 class KeysSessionOpener implements SessionOpener {
   /// [transport] builds the transport for the options' root; the browser's is
@@ -20,12 +11,25 @@ class KeysSessionOpener implements SessionOpener {
   /// own.
   KeysSessionOpener(
       {required SessionTransport Function(SessionTransportOptions) transport,
-      KeysOpen open = _portal})
+      Future<AtClient> Function({
+        required String atSign,
+        required String app,
+        required AtKeys keys,
+        required SessionTransport transport,
+      }) open = _portal})
       : _transport = transport,
         _open = open;
 
   final SessionTransport Function(SessionTransportOptions) _transport;
-  final KeysOpen _open;
+
+  /// Opens the client for [AtKeys] and the transport [SessionTransportOptions]
+  /// describes.
+  final Future<AtClient> Function({
+    required String atSign,
+    required String app,
+    required AtKeys keys,
+    required SessionTransport transport,
+  }) _open;
 
   static Future<AtClient> _portal(
           {required String atSign,

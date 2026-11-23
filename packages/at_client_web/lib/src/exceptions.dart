@@ -5,14 +5,47 @@ import 'package:at_client/at_client.dart';
 // file reaches no web-only API. Only the JS bridge turns one into an error
 // code or a message for JS (lib/src/js/error_codes.dart).
 
+/// What a closed session rejects with, to Dart and to JS alike.
+const sessionClosedMessage = 'the session is closed';
+
+/// The longest message an `invalid_argument` or collection rejection carries.
+const maxErrorMessageLength = 128;
+
+/// [id] folded to lower case, as AtCollection folds an item id. Exceptions
+/// and the adapter's per-item lock take their ids through this one fold.
+String foldItemId(String id) => id.toLowerCase();
+
 /// Thrown when the caller passed something the call cannot use: a missing or
 /// mistyped option, a value that does not parse, a callback that is not a
 /// function.
 ///
-/// [message] names the parameter and never holds its value. [id] is the item
-/// id an address names, for the one rejection that reports it.
+/// It carries the [parameter] and what it [expected], never the value and
+/// never finished text: the bridge words what JS sees from these fields
+/// (lib/src/js/error_codes.dart). [id] is the item id an address names, for
+/// the one rejection that reports it.
 class InvalidArgumentException extends AtException {
-  InvalidArgumentException(super.message, {this.id});
+  /// [parameter] was not usable. [expected] is what it had to be (`a string`);
+  /// left out, the bridge words it from [parameter].
+  InvalidArgumentException(this.parameter, {this.expected, String? id})
+      : missing = false,
+        id = id == null ? null : foldItemId(id),
+        super('$parameter must be ${expected ?? 'valid'}');
+
+  /// [parameter] was null or absent.
+  InvalidArgumentException.missing(this.parameter)
+      : expected = null,
+        missing = true,
+        id = null,
+        super('$parameter must not be null');
+
+  /// The name of the rejected parameter.
+  final String parameter;
+
+  /// What [parameter] had to be, or null.
+  final String? expected;
+
+  /// Whether [parameter] was null or absent.
+  final bool missing;
 
   /// The item id the rejected address named, folded to lower case.
   final String? id;
@@ -25,7 +58,7 @@ class InvalidArgumentException extends AtException {
 /// after the session was closed. at_client's `StoppedException` never reaches
 /// the caller of a closed session: it is this, an [AtException].
 class SessionClosedException extends AtException {
-  SessionClosedException() : super('the session is closed');
+  SessionClosedException() : super(sessionClosedMessage);
 
   @override
   String toString() => 'SessionClosedException: $message';
@@ -157,27 +190,84 @@ enum CollectionFailure {
   tooDeep,
 }
 
+/// What a [CollectionFailure.invalidArgument] refused. The bridge words each
+/// from [CollectionException.subject].
+enum CollectionRefusal {
+  /// The collection name is not a valid key name.
+  collectionName,
+
+  /// `expirationMs` is not positive.
+  expiration,
+
+  /// The eventSource is not `data`, `notifs` or `both`; the subject is it.
+  eventSource,
+
+  /// A `where` path has an empty segment; the subject is the path.
+  wherePath,
+
+  /// A `where` operator is unknown; the subject is it.
+  whereOperator,
+
+  /// A `where` ordering operator met a value that is neither a number nor a
+  /// string; the subject is the operator.
+  whereValue,
+
+  /// An atSign AtCollection refused.
+  atSign,
+
+  /// An item id AtCollection refused; the subject is AtCollection's own text
+  /// for it.
+  itemId,
+
+  /// The collection is already open with another type tag.
+  typeTag,
+}
+
 /// The single error shape every collection adapter operation rejects with.
 ///
-/// It carries a [kind] and no error code: the bridge maps the kind. The
-/// [message] is the bounded detail the adapter knows (an unknown
-/// eventSource, the id text AtCollection refused); the bridge decides what
-/// reaches JS.
+/// It carries a [kind] and structured fields, and neither an error code nor
+/// finished text: the bridge maps the kind to a code and words the message
+/// from the fields (lib/src/js/error_codes.dart). [message] is a terse
+/// Dart-side description for a Dart caller.
 final class CollectionException extends AtException {
   CollectionException(
-    this.kind,
-    super.message, {
-    this.id,
+    this.kind, {
+    this.refusal,
+    this.subject,
+    String? id,
     this.owner,
+    this.collectionOwner,
+    this.foundType,
+    this.expectedType,
     this.causeType,
     this.failures = const [],
-  });
+  })  : id = id == null ? null : foldItemId(id),
+        super(subject != null && refusal == CollectionRefusal.itemId
+            ? subject
+            : refusal == null
+                ? kind.name
+                : '${kind.name} (${refusal.name})');
 
   final CollectionFailure kind;
 
-  /// The item the failure is about, when known.
+  /// For [CollectionFailure.invalidArgument]: what was refused.
+  final CollectionRefusal? refusal;
+
+  /// The raw token [refusal] names, such as the unknown operator.
+  final String? subject;
+
+  /// The item the failure is about, when known, folded to lower case.
   final String? id;
   final String? owner;
+
+  /// For [CollectionFailure.notOwner]: the atSign the collection belongs to.
+  final String? collectionOwner;
+
+  /// For [CollectionFailure.wrongType]: the type tag the item carries.
+  final String? foundType;
+
+  /// For [CollectionFailure.wrongType]: the type tag the write asked for.
+  final String? expectedType;
 
   /// The Dart type of the underlying error, for [CollectionFailure.failed]
   /// and each [failures] entry: a name the adapter knows, or `'Unknown'`.

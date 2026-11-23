@@ -76,7 +76,7 @@ void main() {
       UnsupportedKeyMaterialException('@alice'),
       SetupLockTimeoutException('lock'),
       IndexedDbException('QuotaExceededError'),
-      CollectionException(CollectionFailure.failed, 'x'),
+      CollectionException(CollectionFailure.failed),
     ];
     final source = File(_exceptionsFile).readAsStringSync();
     final classes = {
@@ -168,5 +168,20 @@ void main() {
         expect(source, isNot(contains('error_codes.dart')), reason: path);
       }
     }
+  });
+
+  test(
+      'an item id on an exception is folded to lower case once, where it is built',
+      () {
+    expect(InvalidArgumentException('x', id: 'ItEm-A').id, 'item-a');
+    expect(CollectionException(CollectionFailure.notFound, id: 'ItEm-A').id,
+        'item-a');
+    expect(InvalidArgumentException('x').id, isNull);
+    expect(foldItemId('ItEm-A'), 'item-a');
+  });
+
+  test('the closed message and the message bound have one owner', () {
+    expect(SessionClosedException().message, sessionClosedMessage);
+    expect(maxErrorMessageLength, 128);
   });
 }

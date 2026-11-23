@@ -3,11 +3,10 @@ import 'dart:async';
 import 'package:at_client/at_client.dart';
 
 import '../collections/at_collection_adapter.dart';
+import '../collections/item_locks.dart';
 import '../exceptions.dart';
 import '../log_text.dart';
 import 'session_namespace.dart';
-
-export 'session_namespace.dart' show normalizeSessionNamespace;
 
 /// A key as the JS bridge names it: [key] under [namespace] (the session's
 /// own when null), shared with [sharedWith] when that is set, by [sharedBy]
@@ -121,14 +120,17 @@ class AtClientSession implements Session {
   /// default through the atSign logger; [isNavigatorOnline] tells a
   /// [Session.status] of `waiting:network` from `waiting:server`, by
   /// default always online, and [networkChanges] says when it may have
-  /// changed (each event re-reads it; by default there are none).
+  /// changed (each event re-reads it; by default there are none). [itemLocks]
+  /// is the item lock map every collection handle shares; by default a new one.
   AtClientSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
       Stream<void>? networkChanges,
-      Future<void> Function()? stop})
+      Future<void> Function()? stop,
+      ItemLocks? itemLocks})
       : _namespace = normalizeSessionNamespace(namespace),
+        _itemLocks = itemLocks ?? ItemLocks(),
         _warn = warn ?? _logger.warning,
         _isNavigatorOnline = isNavigatorOnline ?? (() => true),
         _stop = stop ?? _client.stop {
@@ -160,7 +162,7 @@ class AtClientSession implements Session {
   final _subscriptions = <StreamSubscription<Object?>>{};
   final _watchCancels = <Future<void> Function()>{};
   final _deciding = <String>{};
-  final _adapters = <String, Future<AtCollectionAdapter>>{};
+  final ItemLocks _itemLocks;
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
   final Future<void> Function() _stop;
@@ -217,23 +219,26 @@ class AtClientSession implements Session {
     return () => _statusListeners.remove(onChange);
   }
 
-  /// [name] qualified with [namespace] unless it already ends in it, folded to
-  /// lower case.
+  /// [name] folded to lower case and qualified with [namespace] (already
+  /// folded, as the session's own is) unless it already ends in it.
   static String qualifiedCollectionName(String name, String namespace) {
-    final ns = namespace.toLowerCase();
     final lower = name.toLowerCase();
-    return lower.endsWith('.$ns') ? lower : '$lower.$ns';
+    return lower.endsWith('.$namespace') ? lower : '$lower.$namespace';
   }
 
+  /// Whether [segment] can be one key or namespace segment: not empty, no
+  /// leading or trailing dot, no `..`, and none of [_keySegmentInvalidChars].
+  static bool _isKeySegment(String segment) =>
+      segment.isNotEmpty &&
+      !segment.startsWith('.') &&
+      !segment.endsWith('.') &&
+      !segment.contains('..') &&
+      !_keySegmentInvalidChars.hasMatch(segment);
+
   static String _validateCollectionName(String name) {
-    if (name.isEmpty ||
-        name.startsWith('.') ||
-        name.endsWith('.') ||
-        name.contains('..') ||
-        _keySegmentInvalidChars.hasMatch(name) ||
-        !_collectionNameAllowed.hasMatch(name)) {
+    if (!_isKeySegment(name) || !_collectionNameAllowed.hasMatch(name)) {
       throw CollectionException(CollectionFailure.invalidArgument,
-          'collection name must be a valid key name');
+          refusal: CollectionRefusal.collectionName);
     }
     return name;
   }
@@ -245,22 +250,15 @@ class AtClientSession implements Session {
     final validName = _validateCollectionName(name);
     final namespace = qualifiedCollectionName(validName, _namespace);
     final expiration = expirationMs ?? defaultExpirationMs;
-    // One adapter per collection and options, so a repeated call reuses the
-    // one open and its grants instead of fetching them again; a failed open
-    // is dropped so the next call tries again.
-    final cacheKey = '$namespace\u0000$type\u0000$expiration\u0000$eventSource';
-    final opened = _adapters[cacheKey] ??= AtCollectionAdapter.open(_client,
+    // A fresh adapter per call: at_client keeps the open AtCollection and
+    // its grants, and every adapter queues item operations on the one
+    // session lock map.
+    final adapter = await AtCollectionAdapter.open(_client,
         namespace: namespace,
         type: type,
         expirationMs: expiration,
-        eventSource: eventSource);
-    final AtCollectionAdapter adapter;
-    try {
-      adapter = await opened;
-    } on Object {
-      _adapters.removeWhere((k, v) => k == cacheKey && identical(v, opened));
-      rethrow;
-    }
+        eventSource: eventSource,
+        locks: _itemLocks);
     _open();
     if (eventSource != 'data') {
       _client.notificationService.startListening();
@@ -303,25 +301,16 @@ class AtClientSession implements Session {
     } else {
       sharedBy = own.toAtsign();
     }
-    if (key.key.isEmpty ||
-        key.key.startsWith('.') ||
-        key.key.endsWith('.') ||
-        key.key.contains('..') ||
-        _keySegmentInvalidChars.hasMatch(key.key)) {
+    if (!_isKeySegment(key.key)) {
       throw InvalidKeyException('key is not a valid key name');
     }
     String? namespace;
     if (!key.noNamespace) {
       final rawNs = key.namespace ?? _namespace;
-      if (rawNs.isEmpty ||
-          rawNs.startsWith('.') ||
-          rawNs.endsWith('.') ||
-          rawNs.contains('..') ||
-          _keySegmentInvalidChars.hasMatch(rawNs) ||
-          !_notifyNamespacePattern.hasMatch(rawNs)) {
+      if (!_isKeySegment(rawNs) || !_notifyNamespacePattern.hasMatch(rawNs)) {
         throw InvalidKeyException('namespace is not valid');
       }
-      namespace = rawNs.toLowerCase();
+      namespace = foldNamespace(rawNs);
     }
     final AtKey atKey;
     final String serialized;
@@ -449,18 +438,20 @@ class AtClientSession implements Session {
       String regex, void Function(ReceivedNotification) onEvent,
       {required void Function(Object error) onError}) {
     _open();
+    // The one place the regex is compiled. at_client matches by its own
+    // text, so the compiled pattern is handed on as its source.
+    final RegExp pattern;
     try {
-      RegExp(regex);
+      pattern = RegExp(regex);
     } on FormatException {
-      throw InvalidArgumentException(
-          'regex must be a valid regular expression');
+      throw InvalidArgumentException('regex');
     }
     final service = _client.notificationService;
     final own = _canonical(_client.getCurrentAtSign()!)!;
     var done = false;
     late final StreamSubscription<ReceivedNotification?> subscription;
     subscription = service
-        .subscribe(regex: regex, shouldDecrypt: true)
+        .subscribe(regex: pattern.pattern, shouldDecrypt: true)
         .map((n) {
           final from = _verifiedSender(n, own: own);
           if (from == null) {
@@ -603,6 +594,7 @@ class AtClientSession implements Session {
 
   Future<void> _tearDown() async {
     _closed = true;
+    _itemLocks.clear();
     _statusListeners.clear();
     try {
       await _connection.cancel();

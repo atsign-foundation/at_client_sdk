@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client_web/src/collections/item_locks.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:test/fake.dart';
@@ -69,6 +70,22 @@ class _FakeCollection<T> extends Fake implements AtCollection<T> {
   final String namespace;
 
   var cancels = 0;
+
+  @override
+  final Atsign atSign = '@alice'.toAtsign();
+
+  /// Ids `get` was asked for, in order.
+  final gets = <String>[];
+
+  /// When set, `get` waits for it, then throws a StateError.
+  Completer<void>? getHold;
+
+  @override
+  Future<CItem<T>> get(String id, Atsign owner) async {
+    gets.add(id);
+    await getHold?.future;
+    throw StateError('no item');
+  }
 
   /// When set, cancelling a watch throws it.
   Object? cancelFailure;
@@ -229,6 +246,13 @@ void main() {
       expect(params.atKey.metadata.namespaceAware, isFalse);
       expect(params.operation, OperationEnum.update);
       expect(params.value, 'hi');
+    });
+
+    test('folds a mixed-case notify namespace to lower case', () async {
+      await session.notify(
+          const NotifyKey('rpc', namespace: 'TaLLy', sharedWith: '@bob'), 'hi');
+
+      expect(service.params.single.atKey.toString(), '@bob:rpc.tally@alice');
     });
 
     test('resolves false when the notification is not delivered', () async {
@@ -492,9 +516,18 @@ void main() {
     });
 
     test('subscribe with invalid regex rejects naming regex', () {
-      expect(() => session.subscribe('[', (_) {}, onError: (_) {}),
-          throwsA(isA<InvalidArgumentException>()));
+      expect(
+          () => session.subscribe('[', (_) {}, onError: (_) {}),
+          throwsA(isA<InvalidArgumentException>()
+              .having((e) => e.parameter, 'parameter', 'regex')));
       expect(service.starts, 0);
+      expect(service.lastRegex, isNull);
+    });
+
+    test('subscribe hands the service the regex it compiled, unchanged', () {
+      session.subscribe(r'rpc\.req', (_) {}, onError: (_) {});
+
+      expect(service.lastRegex, r'rpc\.req');
     });
   });
 
@@ -759,7 +792,7 @@ void main() {
           'todos.wavi');
       expect(AtClientSession.qualifiedCollectionName('todos', 'wavi'),
           'todos.wavi');
-      expect(AtClientSession.qualifiedCollectionName('todos.MyApp', 'MyApp'),
+      expect(AtClientSession.qualifiedCollectionName('Todos.MyApp', 'myapp'),
           'todos.myapp');
     });
 
@@ -777,25 +810,88 @@ void main() {
       expect(client.openedCollections.last.$1, 'notes.wavi');
     });
 
-    test('a repeated collection call reuses the one open adapter', () async {
-      await session.collection('todos', type: 'Todo');
-      await session.collection('todos', type: 'Todo');
+    test('a repeated collection call builds a fresh adapter each time',
+        () async {
+      final first = await session.collection('todos', type: 'Todo');
+      final second = await session.collection('todos', type: 'Todo');
       await session.collection('todos.wavi', type: 'Todo');
 
-      expect(client.openedCollections, hasLength(1));
+      expect(identical(first, second), isFalse);
+      expect(client.openedCollections, hasLength(3));
     });
 
-    test('a different type, expiration or event source opens its own',
+    test(
+        'two handles with different eventSource and expiration serialise on one namespace, id and owner',
         () async {
-      await session.collection('todos', type: 'Todo');
-      await session.collection('todos', type: 'Note');
-      await session.collection('todos', type: 'Todo', expirationMs: 1000);
-      await session.collection('todos', type: 'Todo', eventSource: 'data');
+      final data = await session.collection('todos',
+          type: 'Todo', eventSource: 'data', expirationMs: 1000);
+      final notifs = await session.collection('Todos.WAVI',
+          type: 'Todo', eventSource: 'notifs', expirationMs: 2000);
+      final fake = client.collections.first;
+      fake.getHold = Completer<void>();
+      final alice = (id: 'I1', owner: '@alice'.toAtsign());
+      final same = (id: 'i1', owner: '@alice'.toAtsign());
+      final other = (id: 'i2', owner: '@alice'.toAtsign());
+      // The second open is a different fake collection; share the probe.
+      client.collections.last.getHold = fake.getHold;
 
-      expect(client.openedCollections, hasLength(4));
+      final first = data.remove(alice);
+      final second = notifs.remove(same);
+      final third = notifs.remove(other);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect([...fake.gets, ...client.collections.last.gets], ['I1', 'i2']);
+
+      fake.getHold!.complete();
+      await Future.wait([
+        first,
+        second,
+        third
+      ].map((f) => f.then<Object?>((_) => null, onError: (Object _) => null)));
+
+      expect(
+          [...fake.gets, ...client.collections.last.gets], ['I1', 'i2', 'i1']);
     });
 
-    test('a failed open is not kept, the next call opens again', () async {
+    test('the item lock map is empty once the operations complete', () async {
+      final locks = ItemLocks();
+      final tracked =
+          AtClientSession(client, namespace: 'wavi', itemLocks: locks);
+      final todos = await tracked.collection('todos', type: 'Todo');
+      final address = (id: 'i1', owner: '@alice'.toAtsign());
+      await Future.wait([
+        for (var i = 0; i < 3; i++)
+          todos
+              .remove(address)
+              .then<Object?>((_) => null, onError: (Object _) => null),
+      ]);
+
+      expect(locks.length, 0);
+    });
+
+    test('close clears the item lock map', () async {
+      final locks = ItemLocks();
+      final tracked =
+          AtClientSession(client, namespace: 'wavi', itemLocks: locks);
+      final todos = await tracked.collection('todos', type: 'Todo');
+      client.collections.last.getHold = Completer<void>();
+      final held = todos
+          .remove((id: 'i1', owner: '@alice'.toAtsign())).then<Object?>(
+              (_) => null,
+              onError: (Object _) => null);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(locks.length, 1);
+
+      await tracked.close();
+      expect(locks.length, 0);
+      client.collections.last.getHold!.complete();
+      await held;
+    });
+
+    test('a failed open leaves nothing behind, the next call opens again',
+        () async {
       client.openFailure = StateError('boom');
       await expectLater(session.collection('todos', type: 'Todo'),
           throwsA(isA<CollectionException>()));
@@ -803,7 +899,7 @@ void main() {
       await session.collection('todos', type: 'Todo');
       await session.collection('todos', type: 'Todo');
 
-      expect(client.openedCollections, hasLength(2));
+      expect(client.openedCollections, hasLength(3));
     });
 
     test('rejects invalid collection names and folds mixed-case namespace',

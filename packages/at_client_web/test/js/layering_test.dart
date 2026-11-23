@@ -65,4 +65,32 @@ void main() {
       expect(bridge, isNot(contains(name)), reason: name);
     }
   });
+
+  test('only the session compiles the subscribe regex', () {
+    expect(_read('lib/src/js/bridge.dart'), isNot(contains('RegExp(')));
+    expect(
+        RegExp(r'RegExp\(regex\)')
+            .allMatches(_read('lib/src/session/at_client_session.dart'))
+            .length,
+        1);
+  });
+
+  test('the session and the adapter raise structured exceptions, not text', () {
+    final finishedText = [
+      // A collection exception whose second argument is a string literal.
+      RegExp(r"CollectionException\(\s*[\w.]+,\s*'"),
+      // An argument exception whose first argument reads as a sentence.
+      RegExp(r"InvalidArgumentException\(\s*'[^']*\s"),
+    ];
+    for (final path in [
+      'lib/src/session/at_client_session.dart',
+      'lib/src/session/session_namespace.dart',
+      'lib/src/collections/at_collection_adapter.dart',
+    ]) {
+      for (final pattern in finishedText) {
+        expect(pattern.hasMatch(_read(path)), isFalse,
+            reason: '$path carries message text for JS');
+      }
+    }
+  });
 }

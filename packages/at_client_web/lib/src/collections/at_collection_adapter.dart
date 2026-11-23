@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 
 import '../exceptions.dart';
 import '../log_text.dart';
+import 'item_locks.dart';
 
 /// An item address: the item's id and the Atsign that owns it.
 typedef ItemAddress = ({String id, Atsign owner});
@@ -56,16 +57,9 @@ bool exceedsMaxDepth(Object? value) {
   return false;
 }
 
-String _boundedToken(String value) => sanitizeLogText(value, maxLength: 64);
-
-String _boundedMessage(String value, {int maxLength = 128}) =>
-    truncateText(singleLine(value), maxLength);
-
 /// The error for an item whose data nests deeper than [maxItemDataDepth].
 CollectionException itemTooDeep({String? id, String? owner}) =>
-    CollectionException(CollectionFailure.tooDeep,
-        'item data nests deeper than $maxItemDataDepth levels',
-        id: id, owner: owner);
+    CollectionException(CollectionFailure.tooDeep, id: id, owner: owner);
 
 /// The eight collection operations on plain values, as the JS bridge uses
 /// them. [AtCollectionAdapter] is the implementation; tests of the bridge
@@ -95,10 +89,15 @@ abstract interface class ItemCollection {
 /// Every operation returns a Future that rejects with a
 /// [CollectionException].
 final class AtCollectionAdapter implements ItemCollection {
-  AtCollectionAdapter(this._collection);
+  /// [locks] is the session's lock map, shared by every adapter it builds,
+  /// and [namespace] the folded namespace this collection is keyed under in
+  /// it. A lone adapter gets a map of its own.
+  AtCollectionAdapter(this._collection, {ItemLocks? locks, this.namespace = ''})
+      : _locks = locks ?? ItemLocks();
 
   final AtCollection<Map<String, dynamic>> _collection;
-  final _itemLocks = <(String, String), Completer<void>>{};
+  final ItemLocks _locks;
+  final String namespace;
 
   final _logger = AtSignLogger('jsCollectionsAdapter');
 
@@ -108,25 +107,13 @@ final class AtCollectionAdapter implements ItemCollection {
     'both': EventSource.both,
   };
 
-  /// Serializes writes to the same `(id, owner)` within this adapter so
-  /// concurrent `update`, `share`, `remove`, and explicit-id `create` calls
-  /// run sequentially without overwriting one another.
+  /// Serializes writes to the same `(namespace, id, owner)` across every
+  /// adapter of the session, so concurrent `update`, `share`, `remove`, and
+  /// explicit-id `create` calls run sequentially without overwriting one
+  /// another.
   Future<R> _queueWrite<R>(
-      String id, Atsign owner, Future<R> Function() body) async {
-    final key = (id.toLowerCase(), owner.toString());
-    final previous = _itemLocks[key];
-    final done = Completer<void>();
-    _itemLocks[key] = done;
-    try {
-      if (previous != null) await previous.future;
-      return await body();
-    } finally {
-      done.complete();
-      if (identical(_itemLocks[key], done)) {
-        _itemLocks.remove(key);
-      }
-    }
-  }
+          String id, Atsign owner, Future<R> Function() body) =>
+      _locks.run(namespace, id, owner, body);
 
   /// Opens [namespace] through [AtClient.collection], unchanged, writing
   /// [type] as the wire type tag. [eventSource] is `'data'`, `'notifs'` or
@@ -137,11 +124,12 @@ final class AtCollectionAdapter implements ItemCollection {
     required String type,
     required int expirationMs,
     String? eventSource,
+    ItemLocks? locks,
   }) =>
       _mapFailures(() async {
         if (expirationMs <= 0) {
-          throw CollectionException(
-              CollectionFailure.invalidArgument, 'expirationMs must be > 0');
+          throw CollectionException(CollectionFailure.invalidArgument,
+              refusal: CollectionRefusal.expiration);
         }
         final expiration = Duration(milliseconds: expirationMs);
         final AtCollection<Map<String, dynamic>> collection;
@@ -153,13 +141,14 @@ final class AtCollectionAdapter implements ItemCollection {
           final source = _eventSources[eventSource];
           if (source == null) {
             throw CollectionException(CollectionFailure.invalidArgument,
-                'unknown eventSource ${_boundedToken(eventSource)}');
+                refusal: CollectionRefusal.eventSource, subject: eventSource);
           }
           collection = await client.collection<Map<String, dynamic>>(
               namespace, expiration,
               eventSource: source, writeTypeTag: type);
         }
-        return AtCollectionAdapter(collection);
+        return AtCollectionAdapter(collection,
+            locks: locks, namespace: namespace);
       });
 
   /// Creates an item owned by this atSign. Rejects with [CollectionFailure.alreadyExists]
@@ -179,7 +168,7 @@ final class AtCollectionAdapter implements ItemCollection {
               ));
           return id == null ? run() : _queueWrite(id, _collection.atSign, run);
         },
-        id: _errorId(id),
+        id: id,
         owner: _collection.atSign,
         stateError: id == null ? null : CollectionFailure.alreadyExists,
       );
@@ -191,7 +180,7 @@ final class AtCollectionAdapter implements ItemCollection {
           final item = await _collection.getOrNull(address.id, address.owner);
           return item == null ? null : _item(item);
         },
-        id: _errorId(address.id),
+        id: address.id,
         owner: address.owner,
       );
 
@@ -226,12 +215,11 @@ final class AtCollectionAdapter implements ItemCollection {
         // An untagged item is adopted; another type's item is refused before
         // any write.
         if (current.type != 'n/a' && current.type != next.type) {
-          throw CollectionException(
-              CollectionFailure.wrongType,
-              'item ${_boundedToken(current.id)} is a '
-              '${_boundedToken(current.type)}, not a ${_boundedToken(next.type)}',
+          throw CollectionException(CollectionFailure.wrongType,
               id: current.id,
-              owner: current.owner.toString());
+              owner: current.owner.toString(),
+              foundType: current.type,
+              expectedType: next.type);
         }
         await _collection.update(next, unshareWithOthers: false);
         // The stored creation time, not the draft's.
@@ -300,19 +288,17 @@ final class AtCollectionAdapter implements ItemCollection {
         () {
           final owner = address.owner;
           if (owner != _collection.atSign) {
-            throw CollectionException(
-                CollectionFailure.notOwner,
-                'item ${_boundedToken(address.id)} is owned by $owner, not '
-                '${_collection.atSign}',
-                id: _errorId(address.id),
-                owner: owner);
+            throw CollectionException(CollectionFailure.notOwner,
+                id: address.id,
+                owner: owner,
+                collectionOwner: _collection.atSign);
           }
           return _queueWrite(address.id, owner, () async {
             final current = await _collection.get(address.id, owner);
             return await write(current);
           });
         },
-        id: _errorId(address.id),
+        id: address.id,
         owner: address.owner,
         stateError: stateError,
       );
@@ -398,8 +384,7 @@ final class AtCollectionAdapter implements ItemCollection {
       // TypeError on the VM and dart2wasm, an ArgumentError from
       // compareTo under dart2js.
       if (e is! TypeError && e is! ArgumentError) rethrow;
-      throw CollectionException(CollectionFailure.typeMismatch,
-          'a where clause compared values of different types');
+      throw CollectionException(CollectionFailure.typeMismatch);
     }
     return (
       items: [for (final i in matching) _item(i)],
@@ -430,7 +415,7 @@ final class AtCollectionAdapter implements ItemCollection {
     final segments = clause.path.split('.');
     if (segments.any((s) => s.isEmpty)) {
       throw CollectionException(CollectionFailure.invalidArgument,
-          'empty segment in where path ${_boundedToken(clause.path)}');
+          refusal: CollectionRefusal.wherePath, subject: clause.path);
     }
     Object? extract(CItem<dynamic> item) {
       Object? at = item.obj;
@@ -464,12 +449,12 @@ final class AtCollectionAdapter implements ItemCollection {
     };
     if (compare == null) {
       throw CollectionException(CollectionFailure.invalidArgument,
-          'unknown where operator ${_boundedToken(clause.op)}');
+          refusal: CollectionRefusal.whereOperator, subject: clause.op);
     }
     final value = clause.value;
     if (value is! num && value is! String) {
       throw CollectionException(CollectionFailure.invalidArgument,
-          'where ${_boundedToken(clause.op)} needs a number or string value');
+          refusal: CollectionRefusal.whereValue, subject: clause.op);
     }
     return field.isNotNull.and(compare(value as Comparable<dynamic>));
   }
@@ -536,10 +521,6 @@ final class AtCollectionAdapter implements ItemCollection {
     };
   }
 
-  /// The id an error reports for the caller's [id]: folded to lower case, as
-  /// AtCollection folds it, so it matches the id of the item listed.
-  static String? _errorId(String? id) => id?.toLowerCase();
-
   /// Runs [body], turning anything it throws into a [CollectionException].
   /// [stateError] is the code for a StateError from the operation, which
   /// AtCollection uses for a missing, existing or still-parent item.
@@ -554,13 +535,7 @@ final class AtCollectionAdapter implements ItemCollection {
     } on StoppedException {
       rethrow;
     } on StateError {
-      final message = switch (stateError) {
-        CollectionFailure.alreadyExists => 'item already exists',
-        CollectionFailure.notFound => 'item not found',
-        CollectionFailure.hasSubItems => 'item has sub-items',
-        _ => 'operation failed',
-      };
-      throw CollectionException(stateError ?? CollectionFailure.failed, message,
+      throw CollectionException(stateError ?? CollectionFailure.failed,
           id: id, owner: owner, causeType: 'StateError');
     } catch (e) {
       throw _toCollectionException(e, id: id, owner: owner);
@@ -589,21 +564,13 @@ final class AtCollectionAdapter implements ItemCollection {
         return error;
       case CItemReadException():
         // The cause can carry record content; it stays on the Dart side.
-        final id = _idOf(error.key);
-        final safeId = _boundedToken(id);
-        final owner = _unreadable(error)?.owner;
-        return CollectionException(
-            CollectionFailure.unreadable,
-            owner == null
-                ? 'item $safeId could not be read'
-                : 'item $safeId owned by $owner could not be read',
-            id: id,
-            owner: owner,
+        return CollectionException(CollectionFailure.unreadable,
+            id: _idOf(error.key),
+            owner: _unreadable(error)?.owner.toString(),
             causeType: 'CItemReadException');
       case CollectionOpException(:final failures, :final item):
         // A create without an id learns it here: the item that landed.
         return CollectionException(CollectionFailure.partialFailure,
-            '${failures.length} key-level write(s) failed',
             id: item?.id ?? id,
             owner: item?.owner.toString() ?? owner,
             causeType: 'CollectionOpException',
@@ -616,25 +583,34 @@ final class AtCollectionAdapter implements ItemCollection {
                 }
             ]);
       case AtKeyNotFoundException():
-        return CollectionException(CollectionFailure.notFound, 'item not found',
+        return CollectionException(CollectionFailure.notFound,
             id: id, owner: owner, causeType: 'AtKeyNotFoundException');
       case InvalidAtSignException():
-        return CollectionException(
-            CollectionFailure.invalidArgument, 'invalid atSign',
-            id: id, owner: owner, causeType: 'InvalidAtSignException');
+        return CollectionException(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.atSign,
+            id: id,
+            owner: owner,
+            causeType: 'InvalidAtSignException');
       case ArgumentError():
-        final String message;
-        if (error.name == 'id' && error.message is String) {
-          message = _boundedMessage(error.message as String);
-        } else if (error.name == 'writeTypeTag' || error.name == 'typeTag') {
-          message = 'collection is already open with a different type';
-        } else {
-          message = 'invalid argument';
-        }
-        return CollectionException(CollectionFailure.invalidArgument, message,
-            id: id, owner: owner, causeType: 'ArgumentError');
+        final (refusal, subject) = switch (error) {
+          ArgumentError(name: 'id', message: final String text) => (
+              CollectionRefusal.itemId,
+              text
+            ),
+          ArgumentError(name: 'writeTypeTag' || 'typeTag') => (
+              CollectionRefusal.typeTag,
+              null
+            ),
+          _ => (null, null),
+        };
+        return CollectionException(CollectionFailure.invalidArgument,
+            refusal: refusal,
+            subject: subject,
+            id: id,
+            owner: owner,
+            causeType: 'ArgumentError');
       default:
-        return CollectionException(CollectionFailure.failed, 'operation failed',
+        return CollectionException(CollectionFailure.failed,
             id: id, owner: owner, causeType: _kindOf(error));
     }
   }
