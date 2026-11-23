@@ -479,6 +479,56 @@ void main() {
       });
     }
 
+    test('a key derivation cost that is a string', () async {
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams['iterations'] = '3';
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return passPhrase;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason:
+              contains('must carry a positive integer kdfParams.iterations'),
+          error: notAPassphraseRefusal);
+    });
+
+    test('a key derivation cost that is not a whole number', () async {
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams['parallelism'] = 1.5;
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return passPhrase;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason:
+              contains('must carry a positive integer kdfParams.parallelism'),
+          error: notAPassphraseRefusal);
+    });
+
+    test('a key derivation with no memory', () async {
+      await refusedAfterOnline(
+          passPhrase: passPhrase,
+          unreadable: () async {
+            final envelope = jsonDecode(File(path).readAsStringSync())
+                as Map<String, dynamic>;
+            final kdfParams = envelope['kdfParams'] as Map<String, dynamic>;
+            kdfParams.remove('memory');
+            File(path).writeAsStringSync(jsonEncode(envelope));
+            return passPhrase;
+          },
+          reader: FileAtKeysIo(filePath: (_) => path, passPhrase: passPhrase),
+          reason: contains('must carry a positive integer kdfParams.memory'),
+          error: notAPassphraseRefusal);
+    });
+
     test('a key derivation memory and parallelism of zero', () async {
       await refusedAfterOnline(
           passPhrase: passPhrase,
