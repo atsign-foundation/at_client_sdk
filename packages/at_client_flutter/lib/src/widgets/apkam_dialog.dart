@@ -174,7 +174,7 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
         lookUps: widget.lookUps,
       );
     } catch (e) {
-      // NOTE: a resume that fails leaves the passcode form up, unreported.
+      // An unreadable store is reported when the request goes out.
       return;
     }
     if (pending == null || !mounted) return;
