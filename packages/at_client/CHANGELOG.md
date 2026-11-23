@@ -12,7 +12,7 @@
 - fix: `Atsign.enroll` refuses an AtKeys store already waiting on an
   enrollment for the Atsign, whatever that enrollment's app and device,
   before anything is sent, and names it: resume it with `resumeEnrollment`.
-  at_client_flutter 2.1.0's `ApkamActivationDialog` resumes such a request.
+  at_client_flutter 2.1.0-rc.1's `ApkamActivationDialog` resumes such a request.
 - fix: of two `Atsign.enroll` calls into one keyfile at once, or into one
   keychain from one isolate, only one files its request. The other throws
   `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
