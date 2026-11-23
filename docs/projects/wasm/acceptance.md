@@ -505,6 +505,26 @@ while the thing it was built to detect goes unrecorded.
 
 ---
 
+## 9b. Build target and release assets *(new — D-34)*
+
+These gates cover the release plumbing for one declared compile target per bridge
+release ([`decisions.md`](decisions.md) D-34). Every row is checkable on a local machine
+from `packages/at_client_web` (or the repository root, where the path is named); none
+needs a browser, an atServer or a workflow run. `dart` must be a real Dart SDK for the
+build rows, except in X-B3 and X-B4, which deliberately use a stub `dart` first on
+`PATH`.
+
+| # | Gate | Proves |
+| --- | --- | --- |
+| X-B1 | **dart2js ships one file.** From a clean build directory, `rm -rf build && bash tool/build.sh at_client_bridge_entry --target dart2js` exits 0, and `test -f build/at_client_web.js && test ! -e build/at_client_web.wasm && test ! -e build/at_client_web.mjs` succeeds. `bash tool/build.sh at_client_bridge_entry --target=dart2js` (the `--target=VALUE` form) behaves the same | The dart2js release lists, checksums and attests exactly `at_client_web.js`; a stale wasm bundle from an earlier build cannot ride along |
+| X-B2 | **dart2wasm ships the wasm module and its loader.** `rm -rf build && bash tool/build.sh at_client_bridge_entry --target dart2wasm` exits 0, and `test -f build/at_client_web.wasm && test -f build/at_client_web.mjs && test ! -e build/at_client_web.js` succeeds | The dart2wasm release publishes a matched `.wasm`/`.mjs` pair, not a `.wasm` with an older loader and not the dart2js file |
+| X-B3 | **A wasm failure is fatal for that target.** With a stub `dart` first on `PATH` that exits 1 on `compile wasm` and 0 otherwise, `bash tool/build.sh at_client_bridge_entry --target dart2wasm` exits 1 and names `dart2wasm compile failed`; the same command with `WASM_REQUIRED=0` in the environment still exits 1, because the target forces the flag. `bash tool/build.sh at_client_bridge_entry --target dart2js` exits 0 under the same stub | A broken advisory target fails its own release instead of publishing a partial bundle, and the default target is untouched by it |
+| X-B4 | **The legacy no-argument call still succeeds.** With the same stub (whose `compile js` exits 0 without writing), `bash tool/build.sh` with no arguments exits 0 and prints one `warning: dart2wasm compile failed` line per entry. With a real `dart`, `bash tool/build.sh` with no arguments exits 0 and leaves both `build/at_client.js` and `build/at_client_web.js` (`test -f build/at_client.js && test -f build/at_client_web.js`) | Today's local and CI callers keep both entries and the best-effort dart2wasm, rather than being broken by the new argument |
+| X-B5 | **Bad arguments are refused by name.** `bash tool/build.sh --target both`, `bash tool/build.sh --target=`, `bash tool/build.sh --target dart2wasm_x` and `bash tool/build.sh at_client_not_an_entry` each exit 1, and each run's stderr names both `dart2js` and `dart2wasm` (`grep -q dart2js && grep -q dart2wasm`) | A typo or a "build both" habit cannot silently produce a release from an undeclared file set; `both` is only the internal no-argument default |
+| X-B6 | **Each target's tag is fixed by the target.** The workflow's tag step maps `dart2js` to `at_client_web-bridge-<sha12>` — byte-identical to the tag every existing bridge release uses — and `dart2wasm` to `at_client_web-bridge-wasm-<sha12>`; run its `case` block locally with `TARGET=dart2js` and `TARGET=dart2wasm` and compare the prefixes, and `git tag -l 'at_client_web-bridge-*'` still matches the dart2js releases | A tag keeps meaning one file set: a wasm bundle cannot overwrite, or be mistaken for, the dart2js release for the same commit, and no already-published tag changes meaning |
+| X-B7 | **One checksum covers every asset, and attestation covers the same files.** `bash tool/build.sh at_client_bridge_entry --target dart2js && cd build && sha256sum at_client_web.js > SHA256SUMS && sha256sum -c SHA256SUMS` passes, as does the dart2wasm equivalent (`sha256sum at_client_web.wasm at_client_web.mjs > SHA256SUMS`); `grep -c 'uses: actions/attest-build-provenance' .github/workflows/at_client_web_bridge_release.yaml` is 2, one gated on each target, and each `subject-path` lists that target's assets plus `bridge/SHA256SUMS`; `grep -n 'sha256sum -c SHA256SUMS'` finds the release job's verification | The one published `SHA256SUMS` lists every published asset and nothing else, the download is checked against it, and every published asset is attested |
+| X-B8 | **M4 (the bridge manifest) is deferred to W5.** For now `grep -c 'bridge-manifest.json' .github/workflows/at_client_web_bridge_release.yaml` is 1 (the comment marking where W5 appends it) and `grep -q bridge-manifest packages/at_client_web/tool/build.sh` fails; the dart2wasm asset set is exactly the `.wasm` and `.mjs`. M4 is deferred to W5: when W5 lands, it must add `bridge-manifest.json` here, extend X-B2's and X-B7's file sets, and this row is rewritten to require it | No row here claims the manifest is shipped before it is; the deferred step has a named home and an explicit trigger to revisit the gates |
+
 ## 10. The honest limit
 
 **No gate here proves "zero runtime failures".** Stating otherwise would be the same

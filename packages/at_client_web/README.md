@@ -23,3 +23,13 @@ This is a pre-release and unpublished package intended for WebAssembly/browser t
 `bash tool/build.sh` compiles `web/at_client_web_entry.dart` into `build/`: `at_client.js` (dart2js) and `at_client.wasm` plus `at_client.mjs` (dart2wasm), unminified so class names survive. If the dart2wasm compile fails the script warns and exits 0, leaving `at_client.js`; with `WASM_REQUIRED=1` that failure exits 1.
 
 The same script also compiles the browser bridge, `web/at_client_bridge_entry.dart`, to `build/at_client_web.js` (and `at_client_web.wasm` plus `at_client_web.mjs`); `bash tool/build.sh at_client_bridge_entry` builds only the dart2js bridge.
+
+Arguments:
+
+- **No arguments** keeps the behaviour above: both entries, dart2js plus a best-effort dart2wasm.
+- **`--target dart2js`** or **`--target dart2wasm`** (also written `--target=dart2js` or `--target=dart2wasm`) builds that compile target only, for both entries unless `at_client_bridge_entry` is named as well. Each build removes the entry's stale `.js`, `.wasm` and `.mjs` first, so `build/` never holds both targets of one entry.
+- **`--target dart2wasm`** forces `WASM_REQUIRED=1`: a wasm compile failure exits 1 instead of warning and leaving the `.js`.
+- **`at_client_bridge_entry`** with no `--target` is the dart2js bridge only, as before.
+- **Anything else exits 1**, naming the allowed values: `--target both`, `--target=` (empty), an unknown target, and an unknown entry are all refused.
+
+The release workflow builds one target per release (`dart2js` by default) and publishes that target's files only: `at_client_web.js` for dart2js, and `at_client_web.wasm` plus `at_client_web.mjs` for dart2wasm. See [`docs/projects/wasm/acceptance.md`](../../docs/projects/wasm/acceptance.md) §9b and `decisions.md` D-34.
