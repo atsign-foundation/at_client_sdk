@@ -77,6 +77,8 @@ class Incoming extends ValueNotifier<InvitationLink?> {
     } on ArgumentError {
       // NOTE: the referrer is whatever the install link carried.
       return;
+    } on FormatException {
+      return;
     }
     final invitation = referrer['invitation'];
     if (invitation != null && offer(invitation)) {
