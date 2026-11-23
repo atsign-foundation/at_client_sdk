@@ -65,19 +65,23 @@ class Incoming extends ValueNotifier<InvitationLink?> {
     final ReferrerDetails details;
     try {
       details = await PlayInstallReferrer.installReferrer;
-    } on PlatformException {
+    } on PlatformException catch (e) {
       // NOTE: a sideloaded or emulator install has no Play referrer.
+      debugPrint('No Play install referrer: ${e.code}');
       return;
-    } on MissingPluginException {
+    } on MissingPluginException catch (e) {
+      debugPrint('The Play install referrer plugin is not registered: $e');
       return;
     }
     final Map<String, String> referrer;
     try {
       referrer = Uri.splitQueryString(details.installReferrer ?? '');
-    } on ArgumentError {
+    } on ArgumentError catch (e) {
       // NOTE: the referrer is whatever the install link carried.
+      debugPrint('The install referrer is not a query string: $e');
       return;
-    } on FormatException {
+    } on FormatException catch (e) {
+      debugPrint('The install referrer is not a query string: $e');
       return;
     }
     final invitation = referrer['invitation'];
