@@ -1,3 +1,7 @@
+## 4.1.0-rc.2
+
+- refactor: `AtKeysFormatException.isJson` is renamed `parsed`.
+
 ## 4.1.0-rc.1
 
 - fix: keys messages name where the keys are as "the AtKeys store
@@ -114,7 +118,7 @@
 - feat: `AtKeysUnusableException` shows the Atsign a keyfile records, and why
   reading the keys or finding their keypair failed, with their control
   characters escaped, clipped at 180 characters.
-- feat: `AtKeysFormatException.parsed` says whether the document parsed, as
+- feat: `AtKeysFormatException.isJson` says whether the document parsed, as
   JSON that is not an object or not one of the shape it must have, or as the
   `kind` of data `badField` was given.
 - fix: `AtAuth.onboard`, and so `activateAtSign`, throws before sending
