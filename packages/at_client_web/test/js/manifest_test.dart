@@ -48,7 +48,8 @@ void main() {
   final root = _packageRoot();
   final committed = File('${root.path}/bridge-manifest.json').readAsBytesSync();
 
-  test('the generator reproduces the committed manifest byte for byte', () {
+  test('The generator writes the manifest from the constants byte for byte',
+      () {
     final run = _runManifest(root, const []);
     expect(run.exitCode, 0, reason: '${run.stderr}');
     expect(_stdout(run), equals(committed));
@@ -68,7 +69,7 @@ void main() {
         reason: 'the temporary file was renamed away');
   });
 
-  test('any other argument is refused, naming both forms', () {
+  test('Any other argument is refused naming both forms', () {
     final run = _runManifest(root, ['--target', 'dart2js']);
     expect(run.exitCode, 1);
     expect(run.stderr as String, contains('dart tool/manifest.dart'));
@@ -76,7 +77,7 @@ void main() {
     expect(_stdout(run), isEmpty);
   });
 
-  test('the TARGET environment does not change the bytes', () {
+  test('The manifest bytes do not depend on the target', () {
     final js = _runManifest(root, const [], environment: {'TARGET': 'dart2js'});
     final wasm =
         _runManifest(root, const [], environment: {'TARGET': 'dart2wasm'});
@@ -121,6 +122,54 @@ void main() {
     }
   });
 
+  test('The self-check exits 1 on a bad list or an overlap', () {
+    // Runs a copy of the generator whose source has [from] replaced by [to],
+    // so each case feeds the self-check one bad list.
+    ProcessResult mutated(String from, String to) {
+      final source = File('${root.path}/tool/manifest.dart').readAsStringSync();
+      expect(source, contains(from), reason: 'the generator still has $from');
+      final scratch = Directory('${root.path}/.dart_tool')
+        ..createSync(recursive: true);
+      final temp = scratch.createTempSync('manifest_selfcheck_');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final script = File('${temp.path}/manifest.dart')
+        ..writeAsStringSync(source.replaceFirst(from, to));
+      return Process.runSync(
+        Platform.resolvedExecutable,
+        [script.path],
+        workingDirectory: root.path,
+        stdoutEncoding: null,
+        stderrEncoding: utf8,
+      );
+    }
+
+    void expectRefused(ProcessResult run, String message) {
+      expect(run.exitCode, 1, reason: '${run.stderr}');
+      expect(run.stderr as String, contains('manifest self-check failed'));
+      expect(run.stderr as String, contains(message));
+      expect(_stdout(run), isEmpty, reason: 'no manifest is written');
+    }
+
+    // A list that is empty, unsorted or duplicated.
+    {
+      const call = "_checkList('errorCodes', atErrorCodes);";
+      expectRefused(
+          mutated(call, "_checkList('errorCodes', const <String>[]);"),
+          'errorCodes is empty');
+      expectRefused(
+          mutated(call, "_checkList('errorCodes', const ['b', 'a']);"),
+          'errorCodes is not sorted');
+      expectRefused(
+          mutated(call, "_checkList('errorCodes', const ['a', 'a']);"),
+          'errorCodes has a duplicate');
+    }
+
+    // The two error code lists share a code.
+    expectRefused(
+        mutated('collectionErrorCodes.toSet()', 'atErrorCodes.toSet()'),
+        'errorCodes and collectionErrorCodes overlap');
+  });
+
   test('build.sh runs the generator once, for every entry', () {
     final source = File('${root.path}/tool/build.sh').readAsStringSync();
     const invocation =
@@ -142,7 +191,7 @@ void main() {
     expect(source, contains('out=build'));
   });
 
-  test('bridgeSurface is exactly the public members of every @JSExport class',
+  test('The surface is pinned to the public members of every @JSExport class',
       () {
     final source =
         File('${root.path}/lib/src/js/bridge.dart').readAsStringSync();
