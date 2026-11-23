@@ -12,8 +12,10 @@ not yet on trunk, except these names, which are on trunk too: `portalSession`,
 `_guard`, `_error` and `_errorId`, and the file `js_collections_adapter.dart`. The names below are the proposed ones; the rename table at the end maps each
 to what it is called now.
 
-JS values enter only at the top layer; everything below it is typed Dart, and each check
-lives in one layer.
+JS values enter the bridge only at its top layer; below the bridge the session, adapter and key-format
+layers take typed Dart, and each check lives in one layer. Existing platform helpers that need browser
+APIs (the passkey, storage and setup helpers under `lib/src/keys/` and `lib/src/session/`) keep their own
+`dart:js_interop` use; no decision here moves them behind the opener.
 
 ```mermaid
 flowchart TD
@@ -30,8 +32,8 @@ flowchart TD
 
 | Layer | Where | Holds | Does not hold |
 |---|---|---|---|
-| Bridge | `lib/src/js/` (`bridge.dart`, `error_codes.dart`) | The only file that touches `dart:js_interop`. `BridgeEntry`, `BridgeSession`, `BridgeCollection`. Shape checks (plain object, own property, string, function, array, finite number, depth), the converters `_toDart`, `_toJs`, `_toRejection`, and the mapping from an exception to a code and a fixed message (`errorCodeOf`), including the collection codes. | Closed-state checks, regex compilation, namespace folding, id lowercasing, key parsing, any rule about what an atSign may do. |
-| Session | `lib/src/session/` (`session.dart`, `at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, notify keys validated through at_client, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the opener's stop. `SessionBoundCollection`, `NotifyKey`, `ReceivedNotification`, `PendingEnrollment`. | Any `dart:js_interop` type, any error code. |
+| Bridge | `lib/src/js/` (`bridge.dart`, `error_codes.dart`) | The only file in the bridge that touches `dart:js_interop`. `BridgeEntry`, `BridgeSession`, `BridgeCollection`. Shape checks (plain object, own property, string, function, array, finite number, depth), the converters `_toDart`, `_toJs`, `_toRejection`, and the mapping from an exception to a code and a fixed message (`errorCodeOf`), including the collection codes. | Closed-state checks, regex compilation, namespace folding, id lowercasing, key parsing, any rule about what an atSign may do. |
+| Session | `lib/src/session/` (`session.dart`, `at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, notify keys validated through at_client, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the opener's stop. `SessionBoundCollection`, `NotifyKey`, `ReceivedNotification`, `PendingEnrollment`. | Any `dart:js_interop` type in the session interface or its domain rules (platform helpers under `lib/src/session/web_*.dart` keep their own), any error code. |
 | Opening | `lib/src/session/` | `SessionOpener` (interface), `KeysSessionOpener`, `PasskeySessionOpener`, sealed `SessionOptions` (`KeysSessionOptions`, `PasskeySessionOptions`), `OpenedSession`. The opener validates its own options, including the root domain. | Anything the bridge needs to know about transports. The bridge no longer imports `portal_session`, `session_transport` or the transport options. |
 | Collections adapter | `lib/src/collections/at_collection_adapter.dart` | `ItemCollection` (the eight operations) and `AtCollectionAdapter` over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, `CollectionException` with a kind. | Codes and message text. |
 | Exceptions | `lib/src/exceptions.dart` | Every exception the layers throw, each extending `AtException`. One exception sits outside that hierarchy: at_commons' `StoppedException`, used as is for a call on a closed session (it replaces `SessionClosedException`); at_commons is not changed. The pairing guard's `EnrollmentInFlightException` extends `AtEnrollmentException`. | Code mapping, which stays in the bridge. |
