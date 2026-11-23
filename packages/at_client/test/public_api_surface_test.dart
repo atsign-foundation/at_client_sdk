@@ -101,6 +101,7 @@ void main() {
 
       expect(unusable.error, isA<AtKeysPassphraseException>());
       expect(unusable.error, isA<AtDecryptionException>());
+      expect(unusable.cause, AtKeysUnusableCause.unreadable);
     });
   });
 

@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 2.1.0
+## 2.1.0-rc.1
 
 - fix: the dialogs' keys messages, and the one a confirmed Cancel that
   cannot remove the keys shows, name where the keys are, such as "the
@@ -72,7 +72,7 @@
   keychain that holds no keys.
 - fix: `AtsignFlows.activate` and `open` refuse a keychain whose entry is not
   JSON or not a JSON object, saying every Atsign stored there is affected.
-- chore: requires at_client 4.1.0 and at_auth 4.1.0.
+- chore: requires at_client 4.1.0-rc.1 and at_auth 4.1.0-rc.1.
 - feat: `KeychainAtKeysIo.describeSource` returns "this device's keychain".
 - fix: `CramDialog` fails before sending anything when the keychain holds
   keys it cannot read.
