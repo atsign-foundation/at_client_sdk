@@ -505,10 +505,10 @@ while the thing it was built to detect goes unrecorded.
 
 ---
 
-## 9b. Build target and release assets *(new — D-36, proposed)*
+## 9b. Build target and release assets *(new — proposed decision D-36, pending review)*
 
 These gates cover the release plumbing for one declared compile target per bridge
-release ([D-36 in `docs/architecture/decisions.md`](../../architecture/decisions.md), proposed). Every row is checkable on a local machine
+release (proposed decision D-36, pending review). Every row is checkable on a local machine
 from `packages/at_client_web` (or the repository root, where the path is named); none
 needs a browser, an atServer or a workflow run. `dart` must be a real Dart SDK for the
 build rows, except in X-B3 and X-B4, which deliberately use a stub `dart` first on
