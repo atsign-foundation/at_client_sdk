@@ -38,7 +38,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       widget.atClient ?? AtClientManager.getInstance().atClient;
   final List<Enrollment> _requests = [];
   final List<({Enrollment enrollment, String anchored})> _approved = [];
-  final List<Timer> _overlayTimers = [];
+  final Map<OverlayEntry, Timer> _feedback = {};
   StreamSubscription? _subscription;
   bool _isLoading = false;
   String? _error;
@@ -160,7 +160,11 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
     try {
       final result = await anchoring(enrollment.enrollmentId!);
       return (enrollment: enrollment, anchored: result.summary);
-    } on Exception {
+    } on Exception catch (e) {
+      _logger.warning(
+        'Reading whether enrollment ${enrollment.enrollmentId} is anchored '
+        'failed: $e',
+      );
       return (enrollment: enrollment, anchored: '?');
     } on Error catch (e, st) {
       _logger.severe(
@@ -257,7 +261,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
               child: AuthorisationFeedbackOverlay(
                 request: request,
                 newStatus: status,
-                onTap: () => overlayEntry.remove(),
+                onTap: () => _removeFeedback(overlayEntry),
               ),
             ),
           ),
@@ -265,23 +269,28 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
       );
 
       Overlay.of(context).insert(overlayEntry);
-      final timer = Timer(const Duration(seconds: 3), () {
-        try {
-          overlayEntry.remove();
-        } catch (_) {
-          // Already removed
-        }
-      });
-      _overlayTimers.add(timer);
+      _feedback[overlayEntry] = Timer(
+        const Duration(seconds: 3),
+        () => _removeFeedback(overlayEntry),
+      );
     });
+  }
+
+  /// Removes [entry] once, whichever of a tap, its timer and [dispose] comes
+  /// first.
+  void _removeFeedback(OverlayEntry entry) {
+    final timer = _feedback.remove(entry);
+    if (timer == null) return;
+    timer.cancel();
+    entry
+      ..remove()
+      ..dispose();
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
-    for (var timer in _overlayTimers) {
-      timer.cancel();
-    }
+    _feedback.keys.toList().forEach(_removeFeedback);
     super.dispose();
   }
 
