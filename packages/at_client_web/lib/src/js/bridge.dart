@@ -74,7 +74,6 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
 
 /// The default transport for a keys session: [sessionTransport] over
 /// [options]' root. [_openKeys] takes a caller's transport or this one.
-@visibleForTesting
 SessionTransport keysTransport(KeysSessionOptions options) =>
     sessionTransport(SessionTransportOptions(root: options.rootDomain));
 
