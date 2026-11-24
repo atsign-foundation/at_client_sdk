@@ -2,8 +2,9 @@
 
 - fix: a self-enrollment files the new enrollment's keys on a fresh read of
   the AtKeys store, so a key another writer adds while it waits on the
-  atServer is kept. A keyfile or keychain entry removed meanwhile is no longer written
-  again: the self-enrollment fails and revokes the enrollment it created.
+  atServer is kept. A keyfile or keychain entry removed meanwhile is no
+  longer written again: the self-enrollment fails and revokes the enrollment
+  it created.
 
 ## 4.1.0-rc.1
 
