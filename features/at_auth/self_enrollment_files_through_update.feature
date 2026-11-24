@@ -18,16 +18,17 @@ Feature: A self-enrollment files its keys through update
   comes from its answer to this request, and a re-run of the change files
   the same keys, minted once.
   Denial of service: a writer that removes the keyfile meanwhile makes the
-  self-enrollment fail and revoke its enrollment; such a writer already
-  holds the keyfile. When the connection's enrollment lacks __manage, the
-  revoke fails, and the error says the enrollment stays approved with no
-  keyfile holding its private key, as it already does for a failed write.
-  Forgery and impersonation: only a party holding the keyfile can write it,
-  and the connection authenticates as the keyfile's enrollment. The filing
-  checks that the keys still hold the authentication keypair read before the
-  request: a keyfile replaced meanwhile by one holding another credential is
-  refused, and the self-enrollment revokes the enrollment it created. One
-  that already holds a live typed enrollment refuses the filing too.
+  self-enrollment fail and revoke its enrollment; such a writer could
+  remove the keyfile at any other time too. When the connection's
+  enrollment lacks __manage, the revoke fails, and the error says the
+  enrollment stays approved with no keyfile holding its private key, as it
+  already does for a failed write.
+  Forgery and impersonation: the connection authenticates as the keyfile's
+  enrollment, and the filing checks that the keys still hold the
+  authentication keypair read before the request: a keyfile replaced
+  meanwhile by one holding another credential is refused, and the
+  self-enrollment revokes the enrollment it created. One that already holds
+  a live typed enrollment refuses the filing too.
 
   Scenario: A key another writer adds while a self-enrollment waits on the atServer is kept
     # packages/at_auth/test/at_self_enrollment_test.dart
