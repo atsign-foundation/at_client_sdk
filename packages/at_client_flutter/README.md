@@ -10,9 +10,13 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "`AtClient` in hand" with a few widget
 calls. One import covers an app:
 `package:at_client_flutter/at_client_flutter.dart` re-exports
-`at_client`, and nothing here asks an app to import `at_auth`. Import only
-that barrel, and do not add at_client to the app's pubspec. A test may also
-import `package:at_client_flutter/testing.dart`, for `TestEnvelopeSigner`.
+`at_client`. Import only that barrel, and do not add at_client to the app's
+pubspec. The exception is an app that catches the keys stores'
+`AtKeysFileOverwriteException`, `AtKeysSourceAbsentException` or
+`AtKeysValidationException` by type: neither barrel exports them, so it
+imports `package:at_auth/at_auth.dart` and lists `at_auth` in its pubspec. A
+test may also import `package:at_client_flutter/testing.dart`, for
+`TestEnvelopeSigner`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -227,6 +231,11 @@ await keychainStorage.appendAtKeysToKeychain(keys: atKeys);
 await keychainStorage.removeAtsignFromKeychain('@alice');
 ```
 
+`appendAtKeysToKeychain` throws `AtKeysFileOverwriteException` for an Atsign
+the keychain already holds. `KeychainAtKeysIo.write` adds an Atsign's keys and
+`KeychainAtKeysIo.update` changes them; an app holding only a `KeychainStorage`
+can build `KeychainAtKeysIo(keychainStorage: storage)`.
+
 ## Exporting atKeys
 
 End users **must** back up their master atKeys (see
@@ -251,12 +260,15 @@ file already exists, so await it and export to a path that is free.
 
 [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes an app through the whole move, at_client included; this section covers at_client_flutter's own changes.
 
-2.0 removes the two services that orchestrated at_auth for an app, and an app
-no longer imports at_auth. The dialogs take the atSign, the keys store and the
-`AtClientPreference`, and hand back the `AtClient` they opened; an app with
-its own UI calls the `Atsign` verbs through `AtsignFlows`, which supplies the
-store (`storageOrDefault`), the transport and the atDirectory, as the dialogs
-do. Nothing an app reads after login changes.
+2.0 removes the two services that orchestrated at_auth for an app, so an app
+no longer imports at_auth to run them. It imports `package:at_auth/at_auth.dart`
+only to catch the keys stores' `AtKeysFileOverwriteException`,
+`AtKeysSourceAbsentException` or `AtKeysValidationException` by type: neither
+at_client_flutter nor at_client exports them. The dialogs take the atSign, the
+keys store and the `AtClientPreference`, and hand back the `AtClient` they
+opened; an app with its own UI calls the `Atsign` verbs through `AtsignFlows`,
+which supplies the store (`storageOrDefault`), the transport and the
+atDirectory, as the dialogs do. Nothing an app reads after login changes.
 
 | 1.x                                                                                              | 2.0                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

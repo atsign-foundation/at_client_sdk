@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2.1.0-rc.2
+
+- fix: `KeychainStorage.appendAtKeysToKeychain` throws
+  `AtKeysFileOverwriteException` for an Atsign the keychain already holds,
+  rather than adding keys no read by Atsign reaches. `KeychainAtKeysIo.write`
+  adds an Atsign's keys and `KeychainAtKeysIo.update` changes them.
+- fix: the keychain stores keys that name their Atsign only in the typed
+  field under that Atsign, and refuses keys that name two different Atsigns
+  across their typed field and their metadata's `atsign` and `name` entries
+  with `AtKeysValidationException`.
+- fix: `KeychainStorage.updateAtKeysInKeychain`, and `KeychainAtKeysIo.write`,
+  `flush` and `update`, refuse keys naming another Atsign than the one given
+  with `AtKeysValidationException`; `updateAtKeysInKeychain` stores keys
+  naming none under the one given.
+- fix: `KeychainStorage.getAllAtsigns` lists an Atsign stored under two
+  spellings once, and lists none for an entry with no typed Atsign and an
+  empty metadata `atsign`.
+- build: requires `at_commons` ^5.26.0.
+
 ## 2.1.0-rc.1
 
 - fix: the dialogs' keys messages, and the one a confirmed Cancel that
