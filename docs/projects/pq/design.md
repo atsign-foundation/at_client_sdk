@@ -1569,9 +1569,12 @@ already holds.
 
 **Once per keyfile.** The retrofit is idempotent per keyfile: a keyfile that
 already carries an enrollment of the requested algorithm reuses it and mints
-nothing. The sequence runs under `retrofitSerializer`, and a `dart:io` process
-sets `fileRetrofitSerializer`, which takes a cross-process lock beside the
-keyfile. The successor's credentials are filed **in the same keyfile**, beside the
+nothing. The sequence runs under `retrofitSerializer` where the process sets
+one. at_client_cli sets `fileRetrofitSerializer`, which takes a cross-process
+lock beside a `FileAtKeysIo`'s keyfile and runs any other store unserialised.
+Elsewhere two processes sharing a keyfile may both send a request, and the
+second to file is refused and revokes its enrollment. The successor's
+credentials are filed **in the same keyfile**, beside the
 legacy material. Storage ruling (2026-06-24): the copyable `.atKeys` file is the
 default, because it is portable and a reused keyfile does not re-mint. OS keychain
 storage is opt-in (`KeychainAtKeysIo` in at_client_flutter). Revocation is per

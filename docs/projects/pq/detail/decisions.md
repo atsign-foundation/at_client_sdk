@@ -14409,7 +14409,8 @@ key sits harvestable on the enrollment record.
 
 **The first approver run converts the operator's keyfile, and that is accepted
 with two conditions.** The retrofit files typed material under the new enrollment
-id and flushes, so a legacy-flat document becomes a version 1 one. Authentication
+id through the keys store's `update`, so a legacy-flat document becomes a
+version 1 one. Authentication
 survives: the flat fields stay under the keyfile's never-lose contract, and
 [118](#118-the-retrofit-cap-is-armed-by-the-successor-not-by-the-retrofit-2026-08-27)
 as superseded by at_server PR #2797 leaves a **root** predecessor its life rather
