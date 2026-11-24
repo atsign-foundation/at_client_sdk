@@ -123,7 +123,7 @@ void main() {
     AtClientManager.getInstance().reset();
   });
 
-  test('BridgeEntry -> AtClientSession -> AtCollectionAdapter end-to-end',
+  test('BridgeEntry -> AtClientSession -> JsCollectionsAdapter end-to-end',
       () async {
     // 1. Credential-less keys fail with bad_key.
     final badKeys = await _rejected(_call(bridge, 'create', [

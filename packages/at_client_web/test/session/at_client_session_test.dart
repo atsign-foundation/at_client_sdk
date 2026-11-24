@@ -847,7 +847,7 @@ void main() {
         'with the adapter code', () async {
       await expectLater(
           session.collection('todos', type: 'Todo', expirationMs: 0),
-          throwsA(isA<CollectionException>().having(
+          throwsA(isA<JsCollectionsError>().having(
               (e) => e.kind, 'kind', CollectionFailure.invalidArgument)));
     });
 
@@ -956,7 +956,7 @@ void main() {
         () async {
       client.openFailure = StateError('boom');
       await expectLater(session.collection('todos', type: 'Todo'),
-          throwsA(isA<CollectionException>()));
+          throwsA(isA<JsCollectionsError>()));
 
       await session.collection('todos', type: 'Todo');
       await session.collection('todos', type: 'Todo');
@@ -973,7 +973,7 @@ void main() {
       for (final bad in ['', '.wavi', 'todos.', 'a..b', 'a b', 'a@b', 'a:b']) {
         await expectLater(
             mixed.collection(bad, type: 'Todo'),
-            throwsA(isA<CollectionException>().having(
+            throwsA(isA<JsCollectionsError>().having(
                 (e) => e.kind, 'kind', CollectionFailure.invalidArgument)),
             reason: bad);
       }
@@ -1016,7 +1016,7 @@ void main() {
           throwsA(isA<InvalidArgumentException>()));
       await expectLater(
           session.collection('a b', type: 'Todo'),
-          throwsA(isA<CollectionException>().having(
+          throwsA(isA<JsCollectionsError>().having(
               (e) => e.kind, 'kind', CollectionFailure.invalidArgument)));
       expect(() => AtClientSession(client, namespace: 'a.b'),
           isNot(throwsArgumentError));

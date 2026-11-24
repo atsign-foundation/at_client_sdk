@@ -1,6 +1,6 @@
 import 'package:at_client/at_client.dart';
 
-import '../collections/at_collection_adapter.dart' show maxItemDataDepth;
+import '../collections/js_collections_adapter.dart' show maxItemDataDepth;
 import '../exceptions.dart';
 import '../log_text.dart';
 
@@ -16,9 +16,9 @@ import '../log_text.dart';
 /// `internal` for anything else.
 String errorCodeOf(Object error) => switch (error) {
       InvalidArgumentException() => 'invalid_argument',
-      CollectionException(:final kind) => collectionErrorCode(kind),
+      JsCollectionsError(:final kind) => collectionErrorCode(kind),
       AtOpenRefusedException() => 'pkam_refused',
-      SessionOfflineException() => 'offline',
+      PortalSessionOfflineException() => 'offline',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       EnrollmentInFlightException() => 'enrollment_in_flight',
@@ -56,10 +56,10 @@ String collectionErrorCode(CollectionFailure kind) => switch (kind) {
 /// and never its value.
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
-      CollectionException() => _collectionMessage(error),
+      JsCollectionsError() => _collectionMessage(error),
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
-      SessionOfflineException(:final state) =>
+      PortalSessionOfflineException(:final state) =>
         'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
       AtEnrollmentPendingException() =>
         'onboarding is incomplete: no usable credential',
@@ -121,7 +121,7 @@ String _argumentMessage(InvalidArgumentException error) {
   return _bounded('$name must be $expected');
 }
 
-String _collectionMessage(CollectionException error) {
+String _collectionMessage(JsCollectionsError error) {
   final id = _token(error.id ?? '');
   final owner = _atSign(error.owner);
   return _bounded(switch (error.kind) {
@@ -147,7 +147,7 @@ String _collectionMessage(CollectionException error) {
   });
 }
 
-String _refusalMessage(CollectionException error) {
+String _refusalMessage(JsCollectionsError error) {
   final subject = _token(error.subject ?? '');
   return switch (error.refusal) {
     CollectionRefusal.collectionName =>

@@ -1,5 +1,5 @@
 import 'package:at_client_web/at_client_web_web.dart';
-import 'package:at_client_web/src/collections/at_collection_adapter.dart';
+import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 
 /// The compile target `test/web/compile_test.dart` builds with dart2js and
 /// dart2wasm: it pulls in the whole slim client, `InMemoryAtClientStorage`
@@ -11,7 +11,7 @@ Future<void> main() async {
 
 /// Reaches every adapter operation, so both compiles cover all of it.
 Future<void> _adapter(AtClient client) async {
-  final todos = await AtCollectionAdapter.open(client,
+  final todos = await JsCollectionsAdapter.open(client,
       namespace: 'todos.wavi', type: 'Todo', expirationMs: 1);
   final item = await todos.create({'title': 'a'});
   final address =

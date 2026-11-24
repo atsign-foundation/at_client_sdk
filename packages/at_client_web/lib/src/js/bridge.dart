@@ -7,7 +7,7 @@ import 'package:at_client/at_client.dart'
     show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
-import '../collections/at_collection_adapter.dart';
+import '../collections/js_collections_adapter.dart';
 import '../exceptions.dart';
 import '../session/portal_session.dart';
 import '../session/session_options.dart';
@@ -89,7 +89,7 @@ JSObject _toRejection(Object error) {
   final reason = JSObject()..['code'] = code.toJS;
   reason['message'] = atErrorMessage(error).toJS;
   switch (error) {
-    case CollectionException():
+    case JsCollectionsError():
       if (error.id case final id?) reason['id'] = id.toJS;
       if (error.owner case final owner?) reason['owner'] = owner.toJS;
       if (error.causeType case final kind?) reason['kind'] = kind.toJS;
@@ -436,7 +436,7 @@ class BridgeCollection {
   final ItemCollection _adapter;
   final String _self;
 
-  ItemAddress _address(JSAny? value) {
+  JsItemAddress _address(JSAny? value) {
     final object = _object(value, 'address');
     final id = _string(_own(object, 'id'), 'id');
     final rawOwner = _field(object, 'owner');
@@ -455,10 +455,10 @@ class BridgeCollection {
 
   /// The item as an object whose `data` is converted from depth 0, so the
   /// cap counts the data's own levels and not the envelope around it.
-  JSObject _item(Item item) {
+  JSObject _item(JsItem item) {
     try {
       return _envelope(item);
-    } on CollectionException catch (e) {
+    } on JsCollectionsError catch (e) {
       if (e.kind == CollectionFailure.tooDeep &&
           (e.id == null || e.owner == null)) {
         throw itemTooDeep(
@@ -470,7 +470,7 @@ class BridgeCollection {
     }
   }
 
-  JSObject _listing(ItemListing listing) => JSObject()
+  JSObject _listing(JsListing listing) => JSObject()
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
     ..['unreadable'] = _toJs([
       for (final u in listing.unreadable)

@@ -31,7 +31,7 @@ void main() {
   test('the session, adapter and shared text layers take typed Dart', () {
     for (final path in [
       'lib/src/session/at_client_session.dart',
-      'lib/src/collections/at_collection_adapter.dart',
+      'lib/src/collections/js_collections_adapter.dart',
       'lib/src/log_text.dart',
       'lib/src/session/session_options.dart',
       'lib/src/session/session_namespace.dart',
@@ -75,14 +75,14 @@ void main() {
   test('the session and the adapter raise structured exceptions, not text', () {
     final finishedText = [
       // A collection exception whose second argument is a string literal.
-      RegExp(r"CollectionException\(\s*[\w.]+,\s*'"),
+      RegExp(r"JsCollectionsError\(\s*[\w.]+,\s*'"),
       // An argument exception whose first argument reads as a sentence.
       RegExp(r"InvalidArgumentException\(\s*'[^']*\s"),
     ];
     for (final path in [
       'lib/src/session/at_client_session.dart',
       'lib/src/session/session_namespace.dart',
-      'lib/src/collections/at_collection_adapter.dart',
+      'lib/src/collections/js_collections_adapter.dart',
     ]) {
       for (final pattern in finishedText) {
         expect(pattern.hasMatch(_read(path)), isFalse,

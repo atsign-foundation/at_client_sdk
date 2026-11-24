@@ -13,7 +13,7 @@ import 'package:at_client/at_client.dart'
         AtNoCredentialException,
         AtOpenRefusedException,
         Atsign;
-import 'package:at_client_web/src/collections/at_collection_adapter.dart';
+import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
@@ -33,7 +33,7 @@ class _FakeAdapter implements ItemCollection {
   final calls = <String>[];
   Object? failure;
   var missing = false;
-  Item item = {
+  JsItem item = {
     'id': 'i1',
     'owner': '@alice',
     'type': 'note',
@@ -43,9 +43,9 @@ class _FakeAdapter implements ItemCollection {
     'expiresAt': 2,
     'availableAt': null,
   };
-  ItemListing listing = (items: const [], unreadable: const []);
-  void Function(CollectionEvent)? onEvent;
-  void Function(CollectionException)? onError;
+  JsListing listing = (items: const [], unreadable: const []);
+  void Function(JsEvent)? onEvent;
+  void Function(JsCollectionsError)? onError;
   Object? last;
   var cancelled = 0;
 
@@ -58,36 +58,36 @@ class _FakeAdapter implements ItemCollection {
   }
 
   @override
-  Future<Item> create(Map<String, dynamic> data,
+  Future<JsItem> create(Map<String, dynamic> data,
           {String? id, List<String> sharedWith = const []}) =>
       _run('create', () => item, (data, id, sharedWith));
 
   @override
-  Future<Item?> get(ItemAddress address) => _run('get',
+  Future<JsItem?> get(JsItemAddress address) => _run('get',
       () => missing ? null : item, (address.id, address.owner.toString()));
 
   @override
-  Future<ItemListing> list() => _run('list', () => listing);
+  Future<JsListing> list() => _run('list', () => listing);
 
   @override
-  Future<ItemListing> query(List<WhereClause> clauses) => _run('query',
+  Future<JsListing> query(List<JsWhereClause> clauses) => _run('query',
       () => listing, [for (final c in clauses) (c.path, c.op, c.value)]);
 
   @override
-  Future<Item> update(ItemAddress address, Map<String, dynamic> data) =>
+  Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
       _run('update', () => item, (address.id, address.owner.toString(), data));
 
   @override
-  Future<Item> share(ItemAddress address, List<String> atSigns) => _run(
+  Future<JsItem> share(JsItemAddress address, List<String> atSigns) => _run(
       'share', () => item, (address.id, address.owner.toString(), atSigns));
 
   @override
-  Future<void> remove(ItemAddress address, {bool cascade = false}) =>
+  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
       _run('remove', () {}, (address.id, address.owner.toString(), cascade));
 
   @override
-  Future<void> Function() watch(void Function(CollectionEvent event) onEvent,
-      {required void Function(CollectionException error) onError}) {
+  Future<void> Function() watch(void Function(JsEvent event) onEvent,
+      {required void Function(JsCollectionsError error) onError}) {
     if (_isClosed()) throw SessionClosedException();
     if (failure case final error?) throw error;
     this.onEvent = onEvent;
@@ -533,7 +533,7 @@ void main() {
     });
 
     test(
-        'external ArgumentError, AtOpenRefusedException, and SessionOfflineException do not leak internal details',
+        'external ArgumentError, AtOpenRefusedException, and PortalSessionOfflineException do not leak internal details',
         () async {
       openFailure =
           ArgumentError.value('sentinel-secret-arg', 'root', 'bad root');
@@ -550,7 +550,7 @@ void main() {
       expect(r.code, 'pkam_refused');
       expect(r.message, isNot(contains('sentinel')));
 
-      openFailure = SessionOfflineException(
+      openFailure = PortalSessionOfflineException(
           '@alice',
           AtConnectionState.offline(AtConnectionCause.unreachable,
               error: StateError('sentinel-socket-detail')));
@@ -1198,7 +1198,7 @@ void main() {
 
       test('a collection failure rejects with its code and fields (T6.4)',
           () async {
-        adapter.failure = CollectionException(CollectionFailure.partialFailure,
+        adapter.failure = JsCollectionsError(CollectionFailure.partialFailure,
             id: 'i1',
             owner: '@alice',
             causeType: 'AtKeyException',
@@ -1223,30 +1223,30 @@ void main() {
       test(
           'a collection rejection keeps code, message, id, owner, kind and failures',
           () async {
-        final cases = <(CollectionException, String, String, Object?)>[
+        final cases = <(JsCollectionsError, String, String, Object?)>[
           (
-            CollectionException(CollectionFailure.notFound,
+            JsCollectionsError(CollectionFailure.notFound,
                 id: 'i1', owner: '@alice', causeType: 'StateError'),
             'item not found',
             'StateError',
             null
           ),
           (
-            CollectionException(CollectionFailure.notOwner,
+            JsCollectionsError(CollectionFailure.notOwner,
                 id: 'i1', owner: '@bob', collectionOwner: '@alice'),
             'item "i1" is owned by @bob, not @alice',
             '',
             null
           ),
           (
-            CollectionException(CollectionFailure.failed,
+            JsCollectionsError(CollectionFailure.failed,
                 id: 'i1', owner: '@alice', causeType: 'StateError'),
             'operation failed',
             'StateError',
             null
           ),
           (
-            CollectionException(CollectionFailure.partialFailure,
+            JsCollectionsError(CollectionFailure.partialFailure,
                 id: 'i1',
                 owner: '@alice',
                 causeType: 'CollectionOpException',
@@ -1319,7 +1319,7 @@ void main() {
           CollectionFailure.failed,
           CollectionFailure.tooDeep,
         ]) {
-          adapter.failure = CollectionException(kind);
+          adapter.failure = JsCollectionsError(kind);
           expect((await _rejected(_call(c, 'list'))).code,
               collectionErrorCode(kind));
         }
@@ -1392,7 +1392,7 @@ void main() {
 
         adapter.onEvent!({'type': 'updated', 'id': 'i1', 'owner': '@alice'});
         adapter.onEvent!({'type': 'unknown', 'id': 'i2', 'owner': '@bob'});
-        adapter.onError!(CollectionException(CollectionFailure.failed));
+        adapter.onError!(JsCollectionsError(CollectionFailure.failed));
         off.callAsFunction();
 
         expect(events, [

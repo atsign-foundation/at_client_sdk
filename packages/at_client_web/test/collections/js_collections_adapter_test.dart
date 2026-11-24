@@ -5,7 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
-import 'package:at_client_web/src/collections/at_collection_adapter.dart';
+import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_utils/at_utils.dart' show LoggingHandler;
@@ -50,7 +50,7 @@ final class _Collect implements LoggingHandler {
 
 Matcher _rejectsWith(CollectionFailure kind,
         {String? id, String? owner, String? causeType}) =>
-    throwsA(isA<CollectionException>()
+    throwsA(isA<JsCollectionsError>()
         .having(errorCodeOf, 'code', collectionErrorCode(kind))
         .having((e) => e.id, 'id', id ?? anything)
         .having((e) => e.owner, 'owner', owner ?? anything)
@@ -62,7 +62,7 @@ void main() {
   test(
       'The collection exception is an AtException and keeps its kind, message, id, owner, cause type and failures',
       () {
-    final error = CollectionException(CollectionFailure.partialFailure,
+    final error = JsCollectionsError(CollectionFailure.partialFailure,
         id: 'i',
         owner: '@alice',
         causeType: 'K',
@@ -100,21 +100,20 @@ void main() {
     await alice.dispose();
   });
 
-  Future<AtCollectionAdapter> open({String type = 'Todo'}) =>
-      AtCollectionAdapter.open(alice.mock,
+  Future<JsCollectionsAdapter> open({String type = 'Todo'}) =>
+      JsCollectionsAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  ItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
-  ItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
+  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
-  List<String> ids(List<Item> items) =>
+  List<String> ids(List<JsItem> items) =>
       [for (final item in items) item['id'] as String];
 
-  Future<List<Item>> itemsOf(Future<ItemListing> listing) async =>
+  Future<List<JsItem>> itemsOf(Future<JsListing> listing) async =>
       (await listing).items;
 
-  Future<List<UnreadableItem>> unreadableOf(
-          Future<ItemListing> listing) async =>
+  Future<List<JsUnreadable>> unreadableOf(Future<JsListing> listing) async =>
       (await listing).unreadable;
 
   /// @bob writes [id], shared with @alice, and makes @alice's copy of it
@@ -178,7 +177,7 @@ void main() {
 
       await expectLater(
           todos.get(mine('a:b')),
-          throwsA(isA<CollectionException>()
+          throwsA(isA<JsCollectionsError>()
               .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
               .having((e) => e.causeType, 'kind', 'ArgumentError')
               .having(atErrorMessage, 'message', isNot('invalid argument'))
@@ -304,13 +303,13 @@ void main() {
         () async {
       const hours5 = Duration(hours: 5);
       for (final source in ['data', 'notifs', 'both']) {
-        await AtCollectionAdapter.open(alice.mock,
+        await JsCollectionsAdapter.open(alice.mock,
             namespace: _ns,
             type: 'Todo',
             expirationMs: hours5.inMilliseconds,
             eventSource: source);
       }
-      await AtCollectionAdapter.open(alice.mock,
+      await JsCollectionsAdapter.open(alice.mock,
           namespace: 'notes.demo',
           type: 'Note',
           expirationMs: _day.inMilliseconds);
@@ -340,7 +339,7 @@ void main() {
     test('An unknown eventSource rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       await expectLater(
-        AtCollectionAdapter.open(alice.mock,
+        JsCollectionsAdapter.open(alice.mock,
             namespace: _ns,
             type: 'Todo',
             expirationMs: _day.inMilliseconds,
@@ -358,7 +357,7 @@ void main() {
         () async {
       for (final ms in [0, -1]) {
         await expectLater(
-          AtCollectionAdapter.open(alice.mock,
+          JsCollectionsAdapter.open(alice.mock,
               namespace: _ns, type: 'Todo', expirationMs: ms),
           _rejectsWith(CollectionFailure.invalidArgument),
         );
@@ -406,7 +405,7 @@ void main() {
         await expectLater(
           todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
           throwsA(
-              isA<CollectionException>().having((e) => e.failures, 'failures', [
+              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'TimeoutException'}
           ])),
         );
@@ -429,7 +428,7 @@ void main() {
         await expectLater(
           todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
           throwsA(
-              isA<CollectionException>().having((e) => e.failures, 'failures', [
+              isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
           ])),
         );
@@ -502,7 +501,7 @@ void main() {
 
       await expectLater(
         todos.get(bobs('b1')),
-        throwsA(isA<CollectionException>()
+        throwsA(isA<JsCollectionsError>()
             .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.unreadable))
             .having((e) => e.id, 'id', 'b1')
@@ -918,7 +917,7 @@ void main() {
 
       await expectLater(
         todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
-        throwsA(isA<CollectionException>()
+        throwsA(isA<JsCollectionsError>()
             .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.partialFailure))
             .having((e) => e.failures, 'failures', [
@@ -935,8 +934,8 @@ void main() {
 
       final error = await todos
           .create({'title': 'a'}, sharedWith: ['@bob'])
-          .then<CollectionException?>((_) => null)
-          .catchError((Object e) => e as CollectionException);
+          .then<JsCollectionsError?>((_) => null)
+          .catchError((Object e) => e as JsCollectionsError);
 
       expect(error, isNotNull);
       expect(errorCodeOf(error!), 'COLLECTION_PARTIAL_FAILURE');
@@ -1074,7 +1073,7 @@ void main() {
       when(() => mockCollection.atSign).thenReturn('@alice'.toAtsign());
       when(() => mockCollection.getOrNull(any(), any()))
           .thenThrow(StateError('secret internal details'));
-      final wrapped = AtCollectionAdapter(mockCollection);
+      final wrapped = JsCollectionsAdapter(mockCollection);
       await expectLater(
           wrapped.get(mine('I1')),
           _rejectsWith(CollectionFailure.failed,
@@ -1119,7 +1118,7 @@ void main() {
         return controller.stream;
       });
 
-      final listing = await AtCollectionAdapter(mockCollection).list();
+      final listing = await JsCollectionsAdapter(mockCollection).list();
       expect(listing.items, isEmpty);
       expect(listing.unreadable, isEmpty);
       expect(records.where((r) => r.startsWith('WARNING|')), hasLength(2));
@@ -1132,7 +1131,7 @@ void main() {
 
   // ---------------------------------------------------------------------------
   group('query', () {
-    Future<AtCollectionAdapter> seeded() async {
+    Future<JsCollectionsAdapter> seeded() async {
       final todos = await open();
       await todos.create({
         'done': false,
@@ -1148,8 +1147,8 @@ void main() {
       return todos;
     }
 
-    Future<Set<String>> where(AtCollectionAdapter todos, String path, String op,
-            Object? value) async =>
+    Future<Set<String>> where(JsCollectionsAdapter todos, String path,
+            String op, Object? value) async =>
         ids(await itemsOf(todos.query([(path: path, op: op, value: value)])))
             .toSet();
 
@@ -1202,7 +1201,7 @@ void main() {
         'An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await seeded();
-      Matcher naming(String text) => throwsA(isA<CollectionException>()
+      Matcher naming(String text) => throwsA(isA<JsCollectionsError>()
           .having(errorCodeOf, 'code',
               collectionErrorCode(CollectionFailure.invalidArgument))
           .having(atErrorMessage, 'message', contains(text)));
@@ -1225,7 +1224,7 @@ void main() {
       final longToken = 'x' * 200;
       await expectLater(
         todos.query([(path: 'x', op: longToken, value: 1)]),
-        throwsA(isA<CollectionException>()
+        throwsA(isA<JsCollectionsError>()
             .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.invalidArgument))
             .having((e) => atErrorMessage(e).length, 'bounded length',
@@ -1281,8 +1280,8 @@ void main() {
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 't1');
-      final events = <CollectionEvent>[];
-      final errors = <CollectionException>[];
+      final events = <JsEvent>[];
+      final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1307,8 +1306,8 @@ void main() {
         () async {
       await bobSharesUnreadable('b1');
       final todos = await open();
-      final events = <CollectionEvent>[];
-      final errors = <CollectionException>[];
+      final events = <JsEvent>[];
+      final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1331,8 +1330,8 @@ void main() {
         () async {
       await bobShares('deep', _nested(65));
       final todos = await open();
-      final events = <CollectionEvent>[];
-      final errors = <CollectionException>[];
+      final events = <JsEvent>[];
+      final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1351,8 +1350,8 @@ void main() {
       final todos = await open();
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
-      final events = <CollectionEvent>[];
-      final errors = <CollectionException>[];
+      final events = <JsEvent>[];
+      final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
       await settle();
@@ -1375,13 +1374,13 @@ void main() {
 
     group('with test-controlled events', () {
       late StreamController<CEvent> upstream;
-      late AtCollectionAdapter todos;
+      late JsCollectionsAdapter todos;
 
       setUp(() {
         upstream = StreamController<CEvent>.broadcast();
         final collection = MockAtCollection();
         when(collection.watch).thenAnswer((_) => upstream.stream);
-        todos = AtCollectionAdapter(collection);
+        todos = JsCollectionsAdapter(collection);
       });
 
       tearDown(() => upstream.close());
@@ -1393,8 +1392,8 @@ void main() {
         final bob = '@bob'.toAtsign();
         final at = DateTime.utc(2030, 1, 2);
         final ancestry = [CAncestor(id: 'p1', subName: 'notes', owner: bob)];
-        final events = <CollectionEvent>[];
-        final errors = <CollectionException>[];
+        final events = <JsEvent>[];
+        final errors = <JsCollectionsError>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
         for (final event in <CEvent>[
@@ -1468,8 +1467,8 @@ void main() {
       test(
           'A stream error reaches onError as a collection error and later events still arrive',
           () async {
-        final events = <CollectionEvent>[];
-        final errors = <CollectionException>[];
+        final events = <JsEvent>[];
+        final errors = <JsCollectionsError>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
         upstream.addError(CItemReadException(

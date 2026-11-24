@@ -90,7 +90,7 @@ class SessionKeysIo extends WrittenAtKeysIo {
 ///
 /// Any other open that does not come online, such as a PKAM that fails
 /// without being classed as a refusal, stops the client and throws
-/// [SessionOfflineException]. Anything else that throws once the
+/// [PortalSessionOfflineException]. Anything else that throws once the
 /// client is built stops it and is rethrown, so a retry for the same atSign
 /// builds afresh.
 ///

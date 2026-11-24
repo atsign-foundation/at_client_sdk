@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 
-import '../collections/at_collection_adapter.dart';
+import '../collections/js_collections_adapter.dart';
 import '../collections/item_locks.dart';
 import '../exceptions.dart';
 import '../log_text.dart';
@@ -87,7 +87,7 @@ abstract interface class Session {
   /// unless it already ends in it) whose items carry the wire type tag
   /// [type]. [expirationMs] defaults to seven days; [eventSource] is
   /// `data`, `notifs` or `both`. Throws a [SessionClosedException] after
-  /// [close] and rejects with a [CollectionException] for a bad argument.
+  /// [close] and rejects with a [JsCollectionsError] for a bad argument.
   Future<ItemCollection> collection(String name,
       {required String type, String? eventSource, int? expirationMs});
 
@@ -242,7 +242,7 @@ class AtClientSession implements Session {
 
   static String _validateCollectionName(String name) {
     if (!_isKeySegment(name) || !_collectionNameAllowed.hasMatch(name)) {
-      throw CollectionException(CollectionFailure.invalidArgument,
+      throw JsCollectionsError(CollectionFailure.invalidArgument,
           refusal: CollectionRefusal.collectionName);
     }
     return name;
@@ -258,7 +258,7 @@ class AtClientSession implements Session {
     // A fresh adapter per call: at_client keeps the open AtCollection and
     // its grants, and every adapter queues item operations on the one
     // session lock map.
-    final adapter = await AtCollectionAdapter.open(_client,
+    final adapter = await JsCollectionsAdapter.open(_client,
         namespace: namespace,
         type: type,
         expirationMs: expiration,
@@ -644,52 +644,53 @@ class SessionBoundCollection implements ItemCollection {
   final ItemCollection _inner;
 
   @override
-  Future<Item> create(Map<String, dynamic> data,
+  Future<JsItem> create(Map<String, dynamic> data,
       {String? id, List<String> sharedWith = const []}) async {
     _session._open();
     return _inner.create(data, id: id, sharedWith: sharedWith);
   }
 
   @override
-  Future<Item?> get(ItemAddress address) async {
+  Future<JsItem?> get(JsItemAddress address) async {
     _session._open();
     return _inner.get(address);
   }
 
   @override
-  Future<ItemListing> list() async {
+  Future<JsListing> list() async {
     _session._open();
     return _inner.list();
   }
 
   @override
-  Future<ItemListing> query(List<WhereClause> clauses) async {
+  Future<JsListing> query(List<JsWhereClause> clauses) async {
     _session._open();
     return _inner.query(clauses);
   }
 
   @override
-  Future<Item> update(ItemAddress address, Map<String, dynamic> data) async {
+  Future<JsItem> update(
+      JsItemAddress address, Map<String, dynamic> data) async {
     _session._open();
     return _inner.update(address, data);
   }
 
   @override
-  Future<Item> share(ItemAddress address, List<String> atSigns) async {
+  Future<JsItem> share(JsItemAddress address, List<String> atSigns) async {
     _session._open();
     return _inner.share(address, atSigns);
   }
 
   @override
-  Future<void> remove(ItemAddress address, {bool cascade = false}) async {
+  Future<void> remove(JsItemAddress address, {bool cascade = false}) async {
     _session._open();
     return _inner.remove(address, cascade: cascade);
   }
 
   @override
   Future<void> Function() watch(
-    void Function(CollectionEvent event) onEvent, {
-    required void Function(CollectionException error) onError,
+    void Function(JsEvent event) onEvent, {
+    required void Function(JsCollectionsError error) onError,
   }) {
     _session._open();
     late final Future<void> Function() cancel;

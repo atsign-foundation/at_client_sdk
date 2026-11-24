@@ -12,8 +12,8 @@ void main() {
           '@alice', AtConnectionState.refused(AtConnectionCause.revoked)),
       'pkam_refused'
     ),
-    'SessionOfflineException': (
-      SessionOfflineException(
+    'PortalSessionOfflineException': (
+      PortalSessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       'offline'
     ),
@@ -63,48 +63,48 @@ void main() {
     ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
-    'CollectionException carries its own code': (
-      CollectionException(CollectionFailure.notFound),
+    'JsCollectionsError carries its own code': (
+      JsCollectionsError(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
     ),
-    'CollectionException partial failure': (
-      CollectionException(CollectionFailure.partialFailure),
+    'JsCollectionsError partial failure': (
+      JsCollectionsError(CollectionFailure.partialFailure),
       'COLLECTION_PARTIAL_FAILURE'
     ),
-    'CollectionException invalid argument': (
-      CollectionException(CollectionFailure.invalidArgument),
+    'JsCollectionsError invalid argument': (
+      JsCollectionsError(CollectionFailure.invalidArgument),
       'COLLECTION_INVALID_ARGUMENT'
     ),
-    'CollectionException not owner': (
-      CollectionException(CollectionFailure.notOwner),
+    'JsCollectionsError not owner': (
+      JsCollectionsError(CollectionFailure.notOwner),
       'COLLECTION_ITEM_NOT_OWNER'
     ),
-    'CollectionException already exists': (
-      CollectionException(CollectionFailure.alreadyExists),
+    'JsCollectionsError already exists': (
+      JsCollectionsError(CollectionFailure.alreadyExists),
       'COLLECTION_ITEM_ALREADY_EXISTS'
     ),
-    'CollectionException has sub items': (
-      CollectionException(CollectionFailure.hasSubItems),
+    'JsCollectionsError has sub items': (
+      JsCollectionsError(CollectionFailure.hasSubItems),
       'COLLECTION_ITEM_HAS_SUB_ITEMS'
     ),
-    'CollectionException unreadable': (
-      CollectionException(CollectionFailure.unreadable),
+    'JsCollectionsError unreadable': (
+      JsCollectionsError(CollectionFailure.unreadable),
       'COLLECTION_ITEM_UNREADABLE'
     ),
-    'CollectionException type mismatch': (
-      CollectionException(CollectionFailure.typeMismatch),
+    'JsCollectionsError type mismatch': (
+      JsCollectionsError(CollectionFailure.typeMismatch),
       'COLLECTION_TYPE_MISMATCH'
     ),
-    'CollectionException wrong type': (
-      CollectionException(CollectionFailure.wrongType),
+    'JsCollectionsError wrong type': (
+      JsCollectionsError(CollectionFailure.wrongType),
       'COLLECTION_ITEM_WRONG_TYPE'
     ),
-    'CollectionException failed': (
-      CollectionException(CollectionFailure.failed),
+    'JsCollectionsError failed': (
+      JsCollectionsError(CollectionFailure.failed),
       'COLLECTION_FAILED'
     ),
-    'CollectionException too deep': (
-      CollectionException(CollectionFailure.tooDeep),
+    'JsCollectionsError too deep': (
+      JsCollectionsError(CollectionFailure.tooDeep),
       'COLLECTION_ITEM_TOO_DEEP'
     ),
     'an unknown Exception': (Exception('x'), 'internal'),
@@ -248,7 +248,7 @@ void main() {
     };
     expect(expected.keys.toSet(), CollectionFailure.values.toSet());
     for (final MapEntry(:key, :value) in expected.entries) {
-      expect(errorCodeOf(CollectionException(key)), value);
+      expect(errorCodeOf(JsCollectionsError(key)), value);
       expect(collectionErrorCode(key), value);
     }
     expect(expected.values.toSet(), hasLength(11));
@@ -310,55 +310,54 @@ void main() {
     });
 
     test('a collection rejection is worded from its kind and fields alone', () {
-      final cases = <CollectionException, String>{
-        CollectionException(CollectionFailure.notFound): 'item not found',
-        CollectionException(CollectionFailure.alreadyExists):
+      final cases = <JsCollectionsError, String>{
+        JsCollectionsError(CollectionFailure.notFound): 'item not found',
+        JsCollectionsError(CollectionFailure.alreadyExists):
             'item already exists',
-        CollectionException(CollectionFailure.hasSubItems):
-            'item has sub-items',
-        CollectionException(CollectionFailure.failed): 'operation failed',
-        CollectionException(CollectionFailure.typeMismatch):
+        JsCollectionsError(CollectionFailure.hasSubItems): 'item has sub-items',
+        JsCollectionsError(CollectionFailure.failed): 'operation failed',
+        JsCollectionsError(CollectionFailure.typeMismatch):
             'a where clause compared values of different types',
-        CollectionException(CollectionFailure.tooDeep):
+        JsCollectionsError(CollectionFailure.tooDeep):
             'item data nests deeper than 64 levels',
-        CollectionException(CollectionFailure.partialFailure, failures: const [
+        JsCollectionsError(CollectionFailure.partialFailure, failures: const [
           {'op': 'put'},
           {'op': 'put'}
         ]): '2 key-level write(s) failed',
-        CollectionException(CollectionFailure.notOwner,
+        JsCollectionsError(CollectionFailure.notOwner,
                 id: 'A1', owner: '@bob', collectionOwner: '@alice'):
             'item "a1" is owned by @bob, not @alice',
-        CollectionException(CollectionFailure.wrongType,
+        JsCollectionsError(CollectionFailure.wrongType,
             id: 'a1',
             foundType: 'Note',
             expectedType: 'Todo'): 'item "a1" is a "Note", not a "Todo"',
-        CollectionException(CollectionFailure.unreadable, id: 'a1'):
+        JsCollectionsError(CollectionFailure.unreadable, id: 'a1'):
             'item "a1" could not be read',
-        CollectionException(CollectionFailure.unreadable,
+        JsCollectionsError(CollectionFailure.unreadable,
             id: 'a1',
             owner: '@bob'): 'item "a1" owned by @bob could not be read',
-        CollectionException(CollectionFailure.invalidArgument):
+        JsCollectionsError(CollectionFailure.invalidArgument):
             'invalid argument',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
                 refusal: CollectionRefusal.collectionName):
             'collection name must be a valid key name',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.expiration): 'expirationMs must be > 0',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.eventSource,
             subject: 'x'): 'unknown eventSource "x"',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.wherePath,
             subject: 'a..b'): 'empty segment in where path "a..b"',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.whereOperator,
             subject: '=<'): 'unknown where operator "=<"',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.whereValue,
             subject: '<'): 'where "<" needs a number or string value',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.atSign): 'invalid atSign',
-        CollectionException(CollectionFailure.invalidArgument,
+        JsCollectionsError(CollectionFailure.invalidArgument,
                 refusal: CollectionRefusal.typeTag):
             'collection is already open with a different type',
       };
@@ -368,8 +367,7 @@ void main() {
     });
 
     test('a subject the bridge echoes is cut to one bounded line', () {
-      final message = text(CollectionException(
-          CollectionFailure.invalidArgument,
+      final message = text(JsCollectionsError(CollectionFailure.invalidArgument,
           refusal: CollectionRefusal.whereOperator,
           subject: '${'x\u202e' * 500}\n'));
       expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
@@ -378,10 +376,8 @@ void main() {
     });
 
     test('an item id refusal carries the text AtCollection gave, bounded', () {
-      final message = text(CollectionException(
-          CollectionFailure.invalidArgument,
-          refusal: CollectionRefusal.itemId,
-          subject: 'id\n${'z' * 400}'));
+      final message = text(JsCollectionsError(CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.itemId, subject: 'id\n${'z' * 400}'));
       expect(message, startsWith('id '));
       expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
     });
@@ -389,7 +385,7 @@ void main() {
     test('a Dart caller still reads a message on each exception', () {
       expect(InvalidArgumentException('regex').message, contains('regex'));
       expect(
-          CollectionException(CollectionFailure.notFound).message, isNotEmpty);
+          JsCollectionsError(CollectionFailure.notFound).message, isNotEmpty);
     });
   });
 }

@@ -1,18 +1,13 @@
-# Proposed layering of `at_client_web` (D-38..D-41, D-45)
+# Proposed layering of `at_client_web` (D-38..D-41)
 
-**Status: Proposed (D-38..D-41, D-45).** No proposed layer is built on trunk, and this does
+**Status: Proposed (D-38..D-41).** No proposed layer is built on trunk, and this does
 not bind until the rows in [`docs/architecture/decisions.md`](../../architecture/decisions.md)
 are accepted. The layer allocations this page describes for the closed state, regex compilation, namespace
 folding, id lowercasing and error mapping are re-proposed by the implementing PRs, which carry their tests;
 D-42..D-44 are reserved for them. Trunk's `at_client_web` has `portalSession`, `passkeyLogin` and
 `lib/src/collections/js_collections_adapter.dart`, and no `lib/src/js/` bridge yet;
-[`js-api.md`](js-api.md) section 4 says where the facade lives. The "Today" names and
-columns below are those of the bridge implementation that follows these decisions (#2537),
-not yet on trunk, except these names, which are on trunk too: `portalSession`,
-`passkeyLogin`, `PortalSessionOfflineException`, `JsCollectionsError`, `JsCollectionsAdapter`,
-`JsItem`, `JsItemAddress`, `JsListing`, `JsWhereClause`, `JsEvent`, `JsUnreadable`, the adapter's `_write`,
-`_guard`, `_error` and `_errorId`, and the file `js_collections_adapter.dart`. The names below are the proposed ones; the rename table at the end maps each
-to what it is called now.
+[`js-api.md`](js-api.md) section 4 says where the facade lives. The "Today" column below is the bridge implementation that follows these decisions (#2537), not yet on
+trunk, except `portalSession`, `passkeyLogin` and the trunk names listed under Names. Trunk names are kept.
 
 JS values enter the bridge only at its top layer; below the bridge the session and adapter
 layers take typed Dart. Existing platform helpers that need browser
@@ -37,8 +32,8 @@ flowchart TD
 | Bridge | `lib/src/js/` (`bridge.dart`, `error_codes.dart`) | The only file in the bridge that touches `dart:js_interop`. `BridgeEntry`, `BridgeSession`, `BridgeCollection`. Shape checks (plain object, own property, string, function, array, finite number, depth), the converters `_toDart`, `_toJs`, `_toRejection`. | Closed-state checks, regex compilation, namespace folding, id lowercasing, key parsing, any rule about what an atSign may do. |
 | Session | `lib/src/session/` (`at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the opener's stop. `SessionBoundCollection`, `ReceivedNotification`, `JsEnrollment`. | Any `dart:js_interop` type in the session interface or its domain rules (platform helpers under `lib/src/session/web_*.dart` keep their own), any error code. |
 | Opening | `lib/src/js/bridge.dart` (`_openSession`, behind the `OpenJsSession` seam); `lib/src/session/session_options.dart` | One private function opens a keys session on `portalSession` or a passkey session on `passkeyLogin` and hands `AtClientSession` the stop that `close()` awaits. The sealed `SessionOptions` (`KeysSessionOptions`, `PasskeySessionOptions`) validate themselves, including the root domain, which they parse once from its `host` or `host:port` text; the bridge only checks that it is a string. Nothing here is exported from the package barrels. | An exported opener family. |
-| Collections adapter | `lib/src/collections/at_collection_adapter.dart` | `ItemCollection` (the eight operations) and `AtCollectionAdapter` over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. | Codes and message text. |
-| Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each extending `AtException` (`EnrollmentInFlightException` through `AtEnrollmentException`, itself an `AtException`): `InvalidArgumentException`, `SessionClosedException`, `UnsupportedOperationException`, `InvalidKeyException`, `ManageAccessRequiredException`, `EnrollmentInFlightException`, `SessionOfflineException`, `UnsupportedKeyMaterialException`, `SetupLockTimeoutException`, `IndexedDbException` and `CollectionException`. Trunk names `UnsupportedKeyMaterialException`, `SetupLockTimeoutException` and `IndexedDbException` keep their names and move into this one file; the trunk name `PortalSessionOfflineException` stays as a deprecated typedef alias of `SessionOfflineException`; the trunk name `JsCollectionsError` becomes `CollectionException`, with no alias. | Code mapping, which stays in the bridge. |
+| Collections adapter | `lib/src/collections/js_collections_adapter.dart` | `ItemCollection` (the eight operations) and `JsCollectionsAdapter` over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. | Codes and message text. |
+| Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each extending `AtException` (`EnrollmentInFlightException` through `AtEnrollmentException`, itself an `AtException`): `InvalidArgumentException`, `SessionClosedException`, `UnsupportedOperationException`, `InvalidKeyException`, `ManageAccessRequiredException`, `EnrollmentInFlightException`, `PortalSessionOfflineException`, `UnsupportedKeyMaterialException`, `SetupLockTimeoutException`, `IndexedDbException` and `JsCollectionsError`. Trunk names `UnsupportedKeyMaterialException`, `SetupLockTimeoutException` and `IndexedDbException` and `PortalSessionOfflineException` keep their names and move into this one file; `JsCollectionsError` keeps its name and now extends `AtException`, with no alias for any of them. | Code mapping, which stays in the bridge. |
 | Contract manifest | release asset `bridge-manifest.json` | A `schemaVersion`, every exported method and every error code, generated from the Dart constants and identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against `bridge.ref`, and fails when its TypeScript types or code list disagree. | Anything written by hand. |
 | Build target | `tool/build.sh`, the bridge release workflow (ships separately) | Today `tool/build.sh` has no target flag: with no argument it builds both entries (dart2js, plus dart2wasm, whose failure warns unless `WASM_REQUIRED=1`), `at_client_bridge_entry` builds only the bridge with dart2js, and any other argument exits 1; the release workflow, which ships separately, builds the dart2js bridge only and has no target input. The `--target dart2js\|dart2wasm` flag (`dart2js` by default; `dart2wasm` strict, no silent fallback; an unknown target exits 1), the dispatch input read through `env:`, a distinct wasm tag (for example `at_client_web-bridge-wasm-<first 12 characters of the SHA>`) and attestation of every asset land with the release follow-up PR. | A target chosen by which entry name is passed. |
 
@@ -52,24 +47,11 @@ passkey session's (which also closes its vault) for a passkey. A keys session's 
 `stop()`; the bridge adds no bound of its own. Validation runs first, in a fixed order, before any side effect, and
 rejects with an argument error without echoing a value.
 
-## Rename table (D-45)
+## Names
 
-Rules: each name says what it does and names its layer; siblings share a suffix; an
-interface takes the plain noun and an implementation adds a qualifier; nothing pure-Dart
-starts with `Js`. JS-facing names (`create`, method names, event shapes, error codes) do not
-change. The table lists the names on trunk that change; names introduced in #2537 are not
-proposed here.
-
-| Layer | Today | Proposed | Why |
-|---|---|---|---|
-| Opening | PortalSessionOfflineException | SessionOfflineException | Drop "portal" |
-| Collection | JsCollectionsAdapter | AtCollectionAdapter | Adapts AtCollection to ItemCollection |
-| Collection | JsItem, JsItemAddress, JsListing, JsWhereClause, JsEvent | Item, ItemAddress, ItemListing, WhereClause, CollectionEvent | Drop Js; match at_js names |
-| Collection | JsUnreadable | UnreadableItem | Drop Js; match at_js names |
-| Collection | _write, _guard, _error | _ownedWrite, _mapFailures, _toCollectionException | Say what each step does |
-| Collection | js_collections_adapter.dart | at_collection_adapter.dart | Match the class |
-| Exceptions | JsCollectionsError | CollectionException | Drop Js; it is pure Dart |
-| Exceptions | spread over four files | lib/src/exceptions.dart | One file (D-41) |
+Names on trunk keep their trunk names: `PortalSessionOfflineException`, `JsCollectionsAdapter`, `JsItem`,
+`JsItemAddress`, `JsListing`, `JsWhereClause`, `JsEvent`, `JsUnreadable`, `JsCollectionsError` and the file `js_collections_adapter.dart`. The only trunk name
+that moves is `JsCollectionsError`'s file: it joins the other exceptions in `lib/src/exceptions.dart` (D-41).
 
 ## Reasoning
 
@@ -127,29 +109,6 @@ and the implementing PR and its release notes must say so.
 
 **Would reopen if.** at_commons gains an `AtException`-based closed-session type, which would make the substitution
 cheap. **[reconstructed: confirm]**
-
-### D-45 — one naming pattern
-
-**Problem.** Trunk has `Js`-prefixed types that are pure Dart (`JsItem`, `JsUnreadable`, `JsListing`, `JsWhereClause`,
-`JsEvent`, `JsCollectionsAdapter`), an adapter class with no interface above it, and two opening names that do not say
-they are alternatives. There is no rule to apply to a new type, so each name is decided on its own
-([D-45](../../architecture/decisions.md)).
-
-**Options considered.**
-- Keep the current names: rejected because the `Js` prefix on pure Dart reads as a JS-facing type, and nothing guides
-  a new name.
-- Rename everything now, including the #2537-only types: rejected for this PR because those names are not on trunk;
-  the rename PR settles them.
-- Rename the trunk names now under one pattern (chosen).
-
-**Decision and why.** Each name says what it does and names its layer; siblings share a suffix; an interface takes
-the plain noun and an implementation adds a qualifier; nothing pure-Dart starts with `Js`; JS-facing names do not
-change. The cost is eleven rows in the table above, both opening names, one file rename and one exception rename;
-the same 0.1.0 and `publish_to: none` that makes D-40 cheap makes these internal. Names introduced in #2537, such as
-`JsEnrollment`, are not proposed here.
-
-**Would reopen if.** A JS-facing name has to change (the rule forbids it), or the package leaves its pre-release
-state so these stop being internal-only renames. **[reconstructed: confirm]**
 
 ### D-39 — a machine-readable contract
 

@@ -231,7 +231,7 @@ product; the compiler is a packaging decision.*
 packages/at_client_web/
   lib/at_client_web.dart         # Dart-facing platform impls — unchanged by this doc
   lib/src/js/                   # the @JSExport facade, marshalling, error mapping
-  lib/src/collections/          # at_collection_adapter.dart: Dart-side translation onto
+  lib/src/collections/          # js_collections_adapter.dart: Dart-side translation onto
                                 #   AtCollection, unexported, VM-tested (§5.5)
   web/at_client_bridge_entry.dart  # main() that installs __atsignAtClientWeb ← dart compile js
 ```
@@ -250,7 +250,7 @@ PR CI checks that `packages/at_client_web/dart-workspace.lock` matches the works
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
 also serving Node. Now that the JS surface exposes the collection API via `BridgeCollection`
-and `AtCollectionAdapter` ([§5.5](#55-the-dart-side-collections-adapter)), splitting is
+and `JsCollectionsAdapter` ([§5.5](#55-the-dart-side-collections-adapter)), splitting is
 still straightforward — the facade is self-contained under `lib/src/js/`.
 
 ---
@@ -427,7 +427,7 @@ paragraph as the code above, not buried in §10:**
 
 ### 5.5 The Dart-side collections adapter
 
-`packages/at_client_web/lib/src/collections/at_collection_adapter.dart` is the layer the
+`packages/at_client_web/lib/src/collections/js_collections_adapter.dart` is the layer the
 `@JSExport` facade calls. No library directly under `lib/` exports it. It is plain Dart with no
 interop imports, so it runs under `dart test` on the VM, and `web/at_client_web_entry.dart`
 reaches every operation so both dart2js and dart2wasm compile it.
@@ -456,7 +456,7 @@ rejects with `COLLECTION_INVALID_ARGUMENT` before any write when the id is empty
 starting with `_`, and a new item's id must match `^[a-z0-9][a-z0-9_-]{0,63}$`. When
 `create` is given no id, `AtCollection` generates one.
 
-**Item data.** `data` for `create` and `update` must be a plain object (no arrays or non-plain built-in objects such as `Date`, `Map`, `Set`, `RegExp`, or typed arrays), at most 64 levels deep and free of cycles; otherwise the call rejects with code `invalid_argument`, naming `data`. Arrays nested inside `data` are valid. Optional object parameters such as `opts` also require plain objects, and bridge reads inspect own properties only. Item data returned to JS nests at most 64 levels, the data object being the first. An item nested deeper (another client can write one) is reported as unreadable with `COLLECTION_ITEM_TOO_DEEP`: `list` and `query` add an `unreadable` entry and return every other item; `get` and `share` of it reject with that code (carrying `id` and `owner`), and `share` writes nothing; `update` replaces its data and resolves; `remove` deletes it and resolves.
+**Item data.** `data` for `create` and `update` must be a plain object (no arrays or non-plain built-in objects such as `Date`, `Map`, `Set`, `RegExp`, or typed arrays), at most 64 levels deep and free of cycles; otherwise the call rejects with code `invalid_argument`, naming `data`. Arrays nested inside `data` are valid. Optional object parameters such as `opts` also require plain objects, and bridge reads inspect own properties only. JsItem data returned to JS nests at most 64 levels, the data object being the first. An item nested deeper (another client can write one) is reported as unreadable with `COLLECTION_ITEM_TOO_DEEP`: `list` and `query` add an `unreadable` entry and return every other item; `get` and `share` of it reject with that code (carrying `id` and `owner`), and `share` writes nothing; `update` replaces its data and resolves; `remove` deletes it and resolves.
 
 **List and query results.** `list()` and `query()` resolve to
 `{items, unreadable}`. `items` holds every readable item, in upstream order.
@@ -512,7 +512,7 @@ const client = await AtClient.create({
 | --- | --- |
 | Session | `create` opens a keys-file session (`portalSession`); `close`; secure context required |
 | Collections | `collection<T>(name, { type, eventSource, expiration })` returns `Collection<T>` with `create`, `get`, `list`, `query`, `update`, `share`, `remove`, `watch`. `query` takes a `{ path, op, value }[]`; there is no fluent builder, `orderByPath` or `limit` |
-| `watch` | `AsyncIterable<CollectionEvent<T>>`; `updated` carries `type`, `id`, `owner` only; an unrecognised kind arrives as `unknown`; a stream error rejects one `next()` and the stream continues (`overflow` if buffered events exceed the queue limit) |
+| `watch` | `AsyncIterable<JsEvent<T>>`; `updated` carries `type`, `id`, `owner` only; an unrecognised kind arrives as `unknown`; a stream error rejects one `next()` and the stream continues (`overflow` if buffered events exceed the queue limit) |
 | Notifications | `notify`, `subscribe(regex?)` returns an `AsyncIterable<AtNotification>`; a stream error rejects one `next()` (`overflow` if buffered events exceed the queue limit) |
 | Pairing | `otp`, `pendingEnrollments`, `approve`, `deny`, only on a session whose enrollment holds `__manage` rw |
 | Status | `status` and `onStatus(cb) => off` |
@@ -585,8 +585,8 @@ exception or a batch of `OpFailure`s — never a tuple, never a second thrown ty
 ### 6.1 Collection error codes
 
 Every collections adapter operation (§5.5) returns a Future that rejects with one
-`CollectionException` (Dart, `exceptions.dart`), or with at_client's `StoppedException` from a
-call in flight when the client stops (the bridge maps it to `closed`). `CollectionException` carries no error code. Its fields are
+`JsCollectionsError` (Dart, `exceptions.dart`), or with at_client's `StoppedException` from a
+call in flight when the client stops (the bridge maps it to `closed`). `JsCollectionsError` carries no error code. Its fields are
 `kind` (a `CollectionFailure`), `message`, `id?`, `owner?`, `causeType?`, `failures`, and the
 detail fields `refusal?`, `subject?`, `collectionOwner?`, `foundType?` and `expectedType?`. The
 bridge (`error_codes.dart`) chooses the code from `kind` and turns the exception into an `AtError`
@@ -600,12 +600,12 @@ same shape. The codes are a registry of their own, not the at_commons `AT00xx` c
 name the atServer and client failures of key operations, and none of them says "the item is
 owned by another atSign" or "some of the key writes landed". Codes that describe one item are
 `COLLECTION_ITEM_*`; the rest are `COLLECTION_*`. `COLLECTION_NOT_FOUND` would read as a missing
-collection, which is why the item codes carry `ITEM`. On the Dart side `CollectionException` is an `AtException`, so callers that catch
+collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollectionsError` is an `AtException`, so callers that catch
 `AtException` also catch it; the JS shape is unchanged.
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid collection `name`, or an item id AtCollection refuses | `CollectionException` of kind `invalidArgument`, raised by the adapter (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts`, and an invalid `address.owner`, reject at the bridge boundary with `invalid_argument` naming the parameter) |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid collection `name`, or an item id AtCollection refuses | `JsCollectionsError` of kind `invalidArgument`, raised by the adapter (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts`, and an invalid `address.owner`, reject at the bridge boundary with `invalid_argument` naming the parameter) |
 | `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |
@@ -623,12 +623,12 @@ land. Until then no adapter operation validates data against a schema.
 ### 6.2 Session error codes (alpha)
 
 `errorCodeOf` (`error_codes.dart`) maps every error the bridge rejects with to one code. A
-`COLLECTION_*` code comes from `CollectionException` (§6.1); the other codes are:
+`COLLECTION_*` code comes from `JsCollectionsError` (§6.1); the other codes are:
 
 | Code | Raised when |
 |---|---|
 | `pkam_refused` | `AtOpenRefusedException`: the atServer refuses the open (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
-| `offline` | `SessionOfflineException`: the open did not come online and was not classed as a refusal |
+| `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
 | `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
 | `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
@@ -918,7 +918,7 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   subtypes can ship in a minor version. The JS discriminated union's encoder and every
   documented consumer pattern must include a default/unknown branch, or a future
   upstream minor silently breaks JS consumers that pattern-matched exhaustively.
-- **Write-compatibility with typed Dart peers is wired through Route A** (§5.2). `AtClient.collection` supports `writeTypeTag`, `AtCollectionAdapter` passes `type` through it, and `BridgeCollection` exposes the adapter so JS writes carry the declared `type` tag on the wire (see [§11](#11-open-questions) JS-7).
+- **Write-compatibility with typed Dart peers is wired through Route A** (§5.2). `AtClient.collection` supports `writeTypeTag`, `JsCollectionsAdapter` passes `type` through it, and `BridgeCollection` exposes the adapter so JS writes carry the declared `type` tag on the wire (see [§11](#11-open-questions) JS-7).
 
 ---
 

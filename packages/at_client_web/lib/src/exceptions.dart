@@ -173,22 +173,18 @@ class EnrollmentInFlightException extends AtEnrollmentException {
 }
 
 /// Thrown by `portalSession` when the client did not come online.
-class SessionOfflineException extends AtException {
+class PortalSessionOfflineException extends AtException {
   final String atSign;
 
   /// The connection state the open ended in.
   final AtConnectionState state;
 
-  SessionOfflineException(this.atSign, this.state)
+  PortalSessionOfflineException(this.atSign, this.state)
       : super('$atSign did not come online (${state.cause?.name})');
 
   @override
-  String toString() => 'SessionOfflineException: $message';
+  String toString() => 'PortalSessionOfflineException: $message';
 }
-
-/// What [SessionOfflineException] was called before the layering renamed it.
-@Deprecated('Use SessionOfflineException')
-typedef PortalSessionOfflineException = SessionOfflineException;
 
 /// Thrown by `portalSession` for keys that carry ML-DSA-65 signing or
 /// namespace key material.
@@ -262,7 +258,7 @@ enum CollectionFailure {
   /// Some key-level writes of one operation failed.
   partialFailure,
 
-  /// Any other failure; [CollectionException.causeType] names it.
+  /// Any other failure; [JsCollectionsError.causeType] names it.
   failed,
 
   /// An item whose data nests deeper than the adapter allows.
@@ -270,7 +266,7 @@ enum CollectionFailure {
 }
 
 /// What a [CollectionFailure.invalidArgument] refused. The bridge words each
-/// from [CollectionException.subject].
+/// from [JsCollectionsError.subject].
 enum CollectionRefusal {
   /// The collection name is not a valid key name.
   collectionName,
@@ -308,8 +304,8 @@ enum CollectionRefusal {
 /// finished text: the bridge maps the kind to a code and words the message
 /// from the fields (lib/src/js/error_codes.dart). [message] is a terse
 /// Dart-side description for a Dart caller.
-final class CollectionException extends AtException {
-  CollectionException(
+final class JsCollectionsError extends AtException {
+  JsCollectionsError(
     this.kind, {
     this.refusal,
     this.subject,
@@ -357,5 +353,5 @@ final class CollectionException extends AtException {
   final List<Map<String, String>> failures;
 
   @override
-  String toString() => 'CollectionException(${kind.name}): $message';
+  String toString() => 'JsCollectionsError(${kind.name}): $message';
 }

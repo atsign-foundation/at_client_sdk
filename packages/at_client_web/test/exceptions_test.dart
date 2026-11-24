@@ -71,13 +71,13 @@ void main() {
       ManageAccessRequiredException(),
       EnrollmentInFlightException(),
       SessionClosedException(),
-      SessionOfflineException(
+      PortalSessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       UnsupportedKeyMaterialException('@alice'),
       UnsupportedOperationException(UnsupportedOperation.secureContext),
       SetupLockTimeoutException('lock'),
       IndexedDbException('QuotaExceededError'),
-      CollectionException(CollectionFailure.failed),
+      JsCollectionsError(CollectionFailure.failed),
     ];
     final source = File(_exceptionsFile).readAsStringSync();
     final classes = {
@@ -125,7 +125,6 @@ void main() {
     final base = File('lib/at_client_web.dart').readAsStringSync();
     for (final name in [
       'PortalSessionOfflineException',
-      'SessionOfflineException',
       'UnsupportedKeyMaterialException'
     ]) {
       expect(base, contains(name));
@@ -148,12 +147,8 @@ void main() {
     ]) {
       expect(browser, contains(name));
     }
-    // Both names resolve through the base barrel alone, the old one to the
-    // new type.
-    // ignore: deprecated_member_use_from_same_package
-    expect(
-        web.PortalSessionOfflineException, same(web.SessionOfflineException));
-    expect(web.SessionOfflineException, isNotNull);
+    // The trunk name resolves through the base barrel alone.
+    expect(web.PortalSessionOfflineException, isNotNull);
     expect(web.UnsupportedKeyMaterialException, isNotNull);
   });
 
@@ -163,14 +158,11 @@ void main() {
     final browser = File('lib/at_client_web_web.dart').readAsStringSync();
     expect(base, contains('PortalSessionOfflineException'));
     expect(browser, contains('export \'at_client_web.dart\''));
-    // The old name is the new type, so a catch on either one catches both.
-    // ignore: deprecated_member_use_from_same_package
-    final Object old = web.PortalSessionOfflineException(
+    // The trunk name is the type itself: no alias, no deprecation.
+    final Object error = web.PortalSessionOfflineException(
         '@alice', AtConnectionState.offline(AtConnectionCause.unreachable));
-    expect(old, isA<web.SessionOfflineException>());
-    // ignore: deprecated_member_use_from_same_package
-    expect(
-        web.PortalSessionOfflineException, same(web.SessionOfflineException));
+    expect(error, isA<web.PortalSessionOfflineException>());
+    expect(error.runtimeType.toString(), 'PortalSessionOfflineException');
   });
 
   test('only the bridge and its code mapping name an error code', () {
@@ -196,7 +188,7 @@ void main() {
       'an item id on an exception is folded to lower case once, where it is built',
       () {
     expect(InvalidArgumentException('x', id: 'ItEm-A').id, 'item-a');
-    expect(CollectionException(CollectionFailure.notFound, id: 'ItEm-A').id,
+    expect(JsCollectionsError(CollectionFailure.notFound, id: 'ItEm-A').id,
         'item-a');
     expect(InvalidArgumentException('x').id, isNull);
     expect(foldItemId('ItEm-A'), 'item-a');
