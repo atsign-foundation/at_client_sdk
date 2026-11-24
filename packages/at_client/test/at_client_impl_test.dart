@@ -81,7 +81,7 @@ void main() {
           reason: 'naming the id captured BEFORE a retrofit must reach the '
               'client that retrofitted, not build a second one for the same '
               'enrollment — a second connection, a second _init and a second '
-              'startup tail taking the same mint locks, filed over the first');
+              'startup tail taking the same mint locks');
       expect(
           AtClientImpl.atClientInstanceMap.keys
               .where((k) => k is String && k.startsWith('$atSign|')),

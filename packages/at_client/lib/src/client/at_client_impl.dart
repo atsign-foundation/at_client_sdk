@@ -772,7 +772,7 @@ class AtClientImpl implements AtClient {
   /// while another is still building a client for the same principal throws
   /// a [StateError] before it builds anything, and so does a build that, as
   /// it finishes, finds another client already filed for its principal: it
-  /// stops the client it built first.
+  /// first stops the client it built.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -884,7 +884,7 @@ class AtClientImpl implements AtClient {
       // after, so a re-used cached client keeps its original key source.
       final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
       atClientInstanceMap[filedKey] = atClientImpl;
-      return atClientInstanceMap[filedKey];
+      return atClientImpl;
     }
 
     // NOTE: the check and the claim take no await between them.

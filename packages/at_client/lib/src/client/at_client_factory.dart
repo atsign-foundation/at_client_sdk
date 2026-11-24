@@ -40,9 +40,9 @@ import 'package:at_lookup/at_lookup.dart';
 /// refused as it files, finding another client filed for the principal
 /// first, stops the client it built, which closes [storage] when it was
 /// built with `closedByClient: true`. Another enrollment of the atSign is
-/// another principal and builds beside it, given a store of its own. A failure while building leaves nothing behind — the
-/// part-built client is stopped, which unfiles it and releases its claim on
-/// [storage].
+/// another principal and builds beside it, given a store of its own. A
+/// failure while building leaves nothing behind — the part-built client is
+/// stopped, which unfiles it and releases its claim on [storage].
 Future<AtClient> buildAtClient({
   required String atSign,
   required AtClientPreference preference,
