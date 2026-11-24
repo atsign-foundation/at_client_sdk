@@ -86,8 +86,12 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// decide inside [mutate], and with the default a cancel can write back a
   /// copy read before the approval was, removing the approved keys.
   ///
-  /// [mutate] receives the freshly-read [AtKeys] and mutates it in place. It
-  /// returns whether anything changed: **false** abandons the write, which is
+  /// The default runs [mutate] on the [AtKeys] that [read] returns, so a store
+  /// whose [read] hands back an instance it holds must override [update]: with
+  /// the default, a change that returns false or throws still reaches it.
+  ///
+  /// [mutate] receives the freshly-read [AtKeys] and changes it. It returns
+  /// whether anything changed: **false** abandons the write, which is
   /// how a caller that finds the material already there — re-delivery is the
   /// substrate's normal mode — avoids rewriting the store to say nothing.
   /// Throwing from it abandons the write too.

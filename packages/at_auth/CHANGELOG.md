@@ -8,9 +8,9 @@
   change on a copy of the stored keys and stores it only when the change
   returns true, so a change that returns false or throws leaves the stored
   keys as they were. Updates of one Atsign run one at a time, an update
-  started from inside a change on the same Atsign throws `StateError`, and
-  an `AtKeys` passed to `write` or `holding` is no longer changed by a later
-  `update`, beyond being given the store's Atsign when it records none.
+  started from inside a change on the same Atsign, while that change's
+  update runs, throws `StateError`, and an `AtKeys` passed to `write` or
+  `holding` is no longer changed by a later `update`.
 
 ## 4.1.0-rc.1
 

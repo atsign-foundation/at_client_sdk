@@ -1,6 +1,6 @@
 ## 0.1.0
 
-- An update of a `portalSession`'s keys no longer changes them, whatever its change returns or throws; keys that record no Atsign are given the session's.
+- An update of a `portalSession`'s keys no longer changes them, whatever its change returns or throws.
 - `portalSession`'s refusal of keys a session cannot hold says "an in-memory AtKeys store".
 - The passkey formats a browser login depends on (at_auth's HKDF labels and sealed record layout, and at_client's names for the records on the atServer) are promised from the first stable release: after it they change only with a compatibility path.
 - Renamed `at_client_web` (it was `at_client_wasm`): apps import `package:at_client_web/at_client_web_web.dart`. A browser that ran an earlier build no longer finds the passkey hints it saved, and logs in as one that does not remember the Atsign; what the earlier build saved stays until the site's data is cleared.
