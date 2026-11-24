@@ -153,7 +153,7 @@ class AtClientSession implements Session {
   /// How long a collection keeps an item when the caller names no expiration.
   static const defaultExpirationMs = 7 * 24 * 3600 * 1000;
 
-  /// How many sent notification ids are remembered for dropping echoes.
+  /// How many delivered notification ids are remembered for dropping echoes.
   static const sentIdLimit = 1024;
 
   static final _keySegmentInvalidChars = RegExp(r'[:@\s\x00-\x1f\x7f-\x9f]');
@@ -350,29 +350,51 @@ class AtClientSession implements Session {
   Future<bool> notify(NotifyKey key, String value) async {
     _open();
     final atKey = _atKey(key);
-    var remembered = false;
+    String? rememberedId;
     final result = await _client.notificationService
         .notify(NotificationParams.forUpdate(atKey, value: value),
             onSentToSecondary: (sent) {
-      remembered = true;
+      rememberedId = sent.notificationID;
       _remember(sent.notificationID);
     });
-    if (!remembered && result.atClientException == null) {
+    if (rememberedId == null && result.atClientException == null) {
+      rememberedId = result.notificationID;
       _remember(result.notificationID);
     }
     if (result.notificationStatusEnum == NotificationStatusEnum.delivered) {
+      _pruneSent();
       return true;
     }
+    // An undelivered send has no echo coming, so its id must not hold a slot
+    // or suppress a later notification that reuses it. Any other status is
+    // unknown, and an echo may still arrive, so the id stays. Either way the
+    // prune keeps the set within its bound.
+    if (result.notificationStatusEnum == NotificationStatusEnum.undelivered &&
+        rememberedId != null) {
+      _forget(rememberedId!);
+    }
+    _pruneSent();
     _open();
     if (result.atClientException case final cause?) throw cause;
     return false;
   }
 
+  /// Remembers [id] until the send's outcome is known: an echo can arrive
+  /// before [notify] resolves, and only a delivered send is bounded.
   void _remember(String id) {
     if (id.isEmpty) return;
     _sent.add(id);
-    if (_sent.length > sentIdLimit) _sent.remove(_sent.first);
   }
+
+  /// Drops the ids of sends known not to be echoed: a delivered send fills a
+  /// slot, so the oldest beyond [sentIdLimit] are dropped.
+  void _pruneSent() {
+    while (_sent.length > sentIdLimit) {
+      _sent.remove(_sent.first);
+    }
+  }
+
+  void _forget(String id) => _sent.remove(id);
 
   /// The canonical atSign that sent [n], or null when [n.key] is malformed,
   /// targets another recipient, or its owner does not match [n.from].

@@ -417,9 +417,45 @@ void main() {
             throwsA(isA<AtClientException>()));
       }
 
+      // Calls that reach the secondary but poll undelivered have no echo
+      // coming, so their ids must not evict the live ones either.
+      service.reportsSent = true;
+      for (var i = 0; i < 10; i++) {
+        await expectLater(
+            session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
+            throwsA(isA<AtClientException>()));
+      }
+
       service.events.add(_echo('n0'));
       await pumpEventQueue();
       expect(received, isEmpty);
+    });
+
+    test('an unknown-status notify still leaves the sent id set bounded',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      for (var i = 0; i < 1024; i++) {
+        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+      }
+      // NotificationStatusEnum has no third value, so an exception-carrying
+      // undelivered result stands in for an outcome the session cannot call
+      // delivered. Its id must be forgotten before the prune: it suppresses
+      // neither its own echo nor the oldest live id.
+      service
+        ..status = NotificationStatusEnum.undelivered
+        ..exception = AtClientException('AT0001', 'unknown outcome');
+      await expectLater(
+          session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
+          throwsA(isA<AtClientException>()));
+
+      service.events
+        ..add(_echo('n1024'))
+        ..add(_echo('n0'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['n1024']);
     });
   });
 
