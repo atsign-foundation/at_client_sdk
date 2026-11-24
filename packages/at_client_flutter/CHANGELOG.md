@@ -4,9 +4,10 @@
 
 - fix: `KeychainStorage.deleteAllAtKeysData` now throws when it cannot clear
   the keychain, where it used to complete as if it had: the keychain's own
-  error, or an `AtException` when a store is still there or cannot be read
-  back after its delete. It also throws a failure to read the app's package
-  name before it deletes anything. On Windows, two
+  error, or an `AtException` when a store, or on Windows a segment of one,
+  is still there after its delete, or a store cannot be read back after it.
+  It also throws a failure to read the app's package name before it deletes
+  anything. On Windows, two
   failed clears still go unseen: one whose delete the credential store
   refuses while the entry then reads as absent, and one that cannot read or
   parse the entry's header, which leaves stored any segment past a gap. A
