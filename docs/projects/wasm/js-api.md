@@ -447,7 +447,7 @@ does not exist yet.
 
 | Operation | `AtCollection` call | Rule |
 | --- | --- | --- |
-| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `expirationMs` must be positive, else `COLLECTION_INVALID_ARGUMENT` |
+| `open(client, namespace, type, expirationMs, eventSource?)` | `AtClient.collection(namespace, Duration(ms), eventSource, writeTypeTag: type)` | namespace verbatim; an omitted `eventSource` leaves upstream's default; `type` must be non-blank and `expirationMs` must be positive, else `COLLECTION_INVALID_ARGUMENT` |
 | `create(data, {id, sharedWith})` | `create` | a given `id` must match the item-id rule below |
 | `get({id, owner})` | `getOrNull(id, owner)` | items are addressed by id **and** owner; null when absent; an unreadable item rejects `COLLECTION_ITEM_UNREADABLE` |
 | `list()` | `getItemsAsStream()` with a per-item error handler | resolves `{items, unreadable}` (below); upstream order; never re-sorted |
@@ -631,7 +631,7 @@ collection, which is why the item codes carry `ITEM`. On the Dart side `JsCollec
 
 | Code | Raised for | Upstream source |
 | --- | --- | --- |
-| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, empty `type` or path segment, an ordering operator without a number or string value, an invalid collection `name`, or an item id AtCollection refuses | `JsCollectionsError` of kind `invalidArgument`, raised by the adapter (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts`, and an invalid `address.owner`, reject at the bridge boundary with `invalid_argument` naming the parameter) |
+| `COLLECTION_INVALID_ARGUMENT` | unknown `eventSource` or operator, non-positive `expirationMs`, blank `type` (empty or whitespace-only) or path segment, an ordering operator without a number or string value, an invalid collection `name`, or an item id AtCollection refuses | `JsCollectionsError` of kind `invalidArgument`, raised by the adapter (malformed JS shapes such as non-object `data`, non-array `where`/`atSigns`, non-integer `expiration`, or non-plain `opts`, and an invalid `address.owner`, reject at the bridge boundary with `invalid_argument` naming the parameter) |
 | `COLLECTION_ITEM_NOT_FOUND` | no item at `{id, owner}` for update, share or remove | `AtKeyNotFoundException`; `StateError` from `update`/`updateSharedWith` |
 | `COLLECTION_ITEM_NOT_OWNER` | update, share or remove of an item another atSign owns | adapter check, mirroring upstream's `ArgumentError` |
 | `COLLECTION_ITEM_ALREADY_EXISTS` | create with an id that exists | `StateError` from `create` with an id |

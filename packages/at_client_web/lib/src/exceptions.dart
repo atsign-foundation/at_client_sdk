@@ -272,6 +272,9 @@ enum CollectionRefusal {
   /// The collection name is not a valid key name.
   collectionName,
 
+  /// The collection type is blank.
+  type,
+
   /// `expirationMs` is not positive.
   expiration,
 

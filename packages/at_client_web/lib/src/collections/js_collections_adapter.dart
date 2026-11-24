@@ -119,7 +119,9 @@ final class JsCollectionsAdapter implements ItemCollection {
 
   /// Opens [namespace] through [AtClient.collection], unchanged, writing
   /// [type] as the wire type tag. [eventSource] is `'data'`, `'notifs'` or
-  /// `'both'`; when omitted, AtClient's default applies.
+  /// `'both'`; when omitted, AtClient's default applies. A blank [type] or a
+  /// non-positive [expirationMs] rejects with
+  /// [CollectionFailure.invalidArgument] before anything opens.
   static Future<JsCollectionsAdapter> open(
     AtClient client, {
     required String namespace,
@@ -132,6 +134,10 @@ final class JsCollectionsAdapter implements ItemCollection {
         if (expirationMs <= 0) {
           throw JsCollectionsError(CollectionFailure.invalidArgument,
               refusal: CollectionRefusal.expiration);
+        }
+        if (type.trim().isEmpty) {
+          throw JsCollectionsError(CollectionFailure.invalidArgument,
+              refusal: CollectionRefusal.type);
         }
         final expiration = Duration(milliseconds: expirationMs);
         final AtCollection<Map<String, dynamic>> collection;

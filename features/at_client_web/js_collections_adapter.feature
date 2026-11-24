@@ -41,8 +41,9 @@ Feature: The JS collections adapter translates onto AtCollection
     Then the open rejects with COLLECTION_INVALID_ARGUMENT
 
   Scenario: An empty type rejects with COLLECTION_INVALID_ARGUMENT
-    When the adapter opens a collection with type ""
-    Then the open rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter opens a collection with type "" and with a type of only whitespace
+    Then the open rejects with COLLECTION_INVALID_ARGUMENT and a message naming "type"
+    And AtClient.collection is never called
 
   Scenario: A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT
     When the adapter opens a collection with expirationMs 0 or -1

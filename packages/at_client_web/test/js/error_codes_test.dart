@@ -340,6 +340,8 @@ void main() {
                 refusal: CollectionRefusal.collectionName):
             'collection name must be a valid key name',
         JsCollectionsError(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.type): 'type must be a non-empty string',
+        JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.expiration): 'expirationMs must be > 0',
         JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.eventSource,
@@ -356,12 +358,18 @@ void main() {
         JsCollectionsError(CollectionFailure.invalidArgument,
             refusal: CollectionRefusal.atSign): 'invalid atSign',
         JsCollectionsError(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.itemId,
+            subject: 'id must not be empty'): 'id must not be empty',
+        JsCollectionsError(CollectionFailure.invalidArgument,
                 refusal: CollectionRefusal.typeTag):
             'collection is already open with a different type',
       };
       for (final MapEntry(key: error, value: expected) in cases.entries) {
         expect(text(error), expected, reason: error.toString());
       }
+      expect(cases.keys.map((error) => error.refusal).toSet(),
+          {...CollectionRefusal.values, null},
+          reason: 'every refusal, and the unrefused default, needs a case');
     });
 
     test('a subject the bridge echoes is cut to one bounded line', () {

@@ -152,6 +152,7 @@ String _refusalMessage(JsCollectionsError error) {
   return switch (error.refusal) {
     CollectionRefusal.collectionName =>
       'collection name must be a valid key name',
+    CollectionRefusal.type => 'type must be a non-empty string',
     CollectionRefusal.expiration => 'expirationMs must be > 0',
     CollectionRefusal.eventSource => 'unknown eventSource $subject',
     CollectionRefusal.wherePath => 'empty segment in where path $subject',

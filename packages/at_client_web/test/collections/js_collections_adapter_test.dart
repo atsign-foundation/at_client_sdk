@@ -349,8 +349,25 @@ void main() {
     });
 
     test('An empty type rejects with COLLECTION_INVALID_ARGUMENT', () async {
-      await expectLater(
-          open(type: ''), _rejectsWith(CollectionFailure.invalidArgument));
+      for (final type in ['', '   ']) {
+        await expectLater(
+          open(type: type),
+          throwsA(isA<JsCollectionsError>()
+              .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+              .having((e) => e.refusal, 'refusal', CollectionRefusal.type)
+              .having(atErrorMessage, 'message',
+                  'type must be a non-empty string')),
+        );
+      }
+      verifyNever(() => alice.mock.collection<Map<String, dynamic>>(
+            any(),
+            any(),
+            eventSource: any(named: 'eventSource'),
+            fromJson: any(named: 'fromJson'),
+            typeTag: any(named: 'typeTag'),
+            writeTypeTag: any(named: 'writeTypeTag'),
+            cleanupOrphansOnCreation: any(named: 'cleanupOrphansOnCreation'),
+          ));
     });
 
     test('A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT',
