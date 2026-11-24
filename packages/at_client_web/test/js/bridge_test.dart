@@ -15,12 +15,14 @@ import 'package:at_client/at_client.dart'
         AtNoCredentialException,
         AtOpenRefusedException,
         Atsign;
+import 'package:at_client/passkey.dart' show PasskeySession;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:at_client_web/src/session/session_transport_options.dart';
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
@@ -293,6 +295,40 @@ class _QuietClient extends Fake implements AtClient {
   @override
   final AtConnection connection = AtConnection(
       atSign: '@alice', attempt: (_) async => AtConnectionState.online());
+}
+
+/// A passkey session whose [stop] is recorded and can be held open.
+class _GatedPasskeySession extends Fake implements PasskeySession {
+  _GatedPasskeySession(this.client);
+
+  @override
+  final AtClient client;
+
+  var stops = 0;
+  Completer<void>? stopGate;
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    if (stopGate case final gate?) await gate.future;
+  }
+}
+
+/// Records the options and transport the passkey arm hands the login, and
+/// opens [session].
+class _RecordingPasskeyLogin {
+  _RecordingPasskeyLogin(this.session);
+
+  final _GatedPasskeySession session;
+  final seen = <PasskeySessionOptions>[];
+  final transports = <SessionTransportOptions>[];
+
+  Future<PasskeySession> call(
+      PasskeySessionOptions options, SessionTransportOptions transport) async {
+    seen.add(options);
+    transports.add(transport);
+    return session;
+  }
 }
 
 void main() {
@@ -610,6 +646,44 @@ void main() {
         await create(passkeyOpts());
 
         expect(opened.single, isA<PasskeySessionOptions>());
+      });
+
+      test('create with the passkey options opens a passkey session', () async {
+        final passkey = _GatedPasskeySession(_QuietClient())
+          ..stopGate = Completer<void>();
+        final login = _RecordingPasskeyLogin(passkey);
+        final bridge = createJSInteropWrapper(BridgeEntry(
+            open: (o) => openJsSession(o, passkeyOpen: login.call),
+            isSecureContext: () => true));
+
+        final result =
+            await _resolved(_call(bridge, 'create', [_obj(passkeyOpts())]))
+                as JSObject;
+
+        final passkeyOptions = login.seen.single;
+        expect((
+          passkeyOptions.atSign,
+          passkeyOptions.namespace,
+          passkeyOptions.rpId,
+          passkeyOptions.rpName
+        ), (
+          '@alice',
+          'tally',
+          'example.org',
+          'Tally'
+        ), reason: 'create opens through the passkey login');
+        expect(login.transports.single.root.rootDomain, 'root.atsign.org');
+
+        var closed = false;
+        final closing =
+            _resolved(_call(result, 'close')).then((_) => closed = true);
+        await Future<void>.delayed(Duration.zero);
+        expect(closed, isFalse,
+            reason: "close awaits the passkey session's stop");
+        expect(passkey.stops, 1);
+        passkey.stopGate!.complete();
+        await closing;
+        expect(closed, isTrue);
       });
 
       test(

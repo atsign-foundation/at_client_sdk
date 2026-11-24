@@ -1,9 +1,11 @@
 Feature: create opens a session and close ends it
 
-  create takes {atSign, namespace, keys, rootDomain?} and resolves a session. It
-  needs a secure context. close stops the session: a later call that returns a
-  promise rejects with code closed, and subscribe and onStatus return {code:
-  closed} instead of a function.
+  create takes {atSign, namespace, keys, rootDomain?} for a keys-file session,
+  or {atSign, namespace, passkey: true, rpId, rpName, rootDomain?} and no keys
+  for a passkey session, and resolves a session. It needs a secure context.
+  close stops the session: a later call that returns a promise rejects with
+  code closed, and subscribe and onStatus return {code: closed} instead of a
+  function.
 
   These scenarios describe the Dart bridge that @atsign/at_client_web wraps; the
   npm package turns {code, message} into AtError and the callbacks into async
@@ -81,8 +83,13 @@ Feature: create opens a session and close ends it
     When create is called
     Then it rejects with code bad_key
 
+  Scenario: create with the passkey options opens a passkey session
+    Given create options with passkey: true, an atSign, a namespace, rpId and rpName and no keys
+    When create is called
+    Then a session opens through the passkey login and its close awaits that session's stop
+
   Scenario: create with missing or mistyped options rejects with invalid_argument naming the option
-    Given options that are null, a string, an array, a function or a class instance, and options whose atSign, namespace or keys is absent, whose atSign, namespace or rootDomain is not a string, or whose keys is a number or JSON text of something other than an object
+    Given options that are null, a string, an array, a function or a class instance, and options whose atSign, namespace or keys is absent, whose atSign, namespace or rootDomain is not a string, or whose keys is a number or JSON text of something other than an object, and passkey options with passkey: true and no keys whose passkey, rpId or rpName is absent or mistyped
     When create is called with each
     Then each rejects with code invalid_argument and a message naming opts or that option
     And no session is opened
