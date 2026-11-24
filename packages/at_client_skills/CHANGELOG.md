@@ -182,6 +182,9 @@
   `AtAuthErrorReplyException` (at_client 4.1.0) carrying the reply's code as
   `errorCode`, and a refusal code gives the refused cause (`SKILL.md`;
   `references/15`).
+- An app imports `package:at_auth/at_auth.dart` only to catch the keys
+  stores' exceptions by type, which neither platform package exports
+  (`SKILL.md`; `references/01`, `05`, `06`).
 
 ## 1.3.0 — 2026-07-31
 

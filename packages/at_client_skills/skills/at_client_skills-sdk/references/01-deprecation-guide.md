@@ -121,7 +121,7 @@ await collection.delete(item);
 | `AuthService().onboard(AtOnboardingRequest(...), cramKey)`              | `CramDialog.show(...)` → `AtClient`, or `const AtsignFlows().activate(a, ...)`                           |
 | `FlutterEnrollmentService().enroll(...)` then a `PkamDialog`            | `ApkamActivationDialog.show(...)` → `AtClient`, or `const AtsignFlows().enroll(a, ...)` then `pending.client(...)` |
 | `AtClientManager.getInstance().setCurrentAtSign(...)` after auth        | `AtClientManager.getInstance().use(client)`                                                   |
-| `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing; `RegistrarService` comes through the platform package                                |
+| `import 'package:at_auth/at_auth.dart'` in an app                       | Nothing, except to catch the keys stores' `AtKeysFileOverwriteException`, `AtKeysSourceAbsentException` or `AtKeysValidationException` by type; `RegistrarService` comes through the platform package |
 
 See [05-flutter-auth.md](05-flutter-auth.md) and
 [15-client-lifecycle.md](15-client-lifecycle.md).

@@ -4,7 +4,8 @@
 Every dialog hands back the **`AtClient` it opened**, or `null` when the user
 cancelled or the dialog failed. The app owns that client: it uses it, makes it
 current if its screens read `AtClientManager`, and `stop()`s it when done.
-Nothing in these flows imports `at_auth`.
+Nothing in these flows imports `at_auth`; an app imports it only to catch the
+keys stores' exceptions by type (see [Key Imports](#key-imports)).
 
 ## Dependencies
 
@@ -331,6 +332,11 @@ import 'package:at_client_flutter/extensions.dart';
 // Note: String.toAtsign() comes from at_client, NOT this import.
 ```
 
-No `import 'package:at_auth/at_auth.dart'`: `AtAuthRequest`, `AuthResponse`,
-`AtOnboardingRequest` and `AtEnrollmentResponse` are gone with the services
-that took them. `AtRootDomain` comes from `at_commons`, via `at_client`.
+No `import 'package:at_auth/at_auth.dart'` for these flows: `AtAuthRequest`,
+`AuthResponse`, `AtOnboardingRequest` and `AtEnrollmentResponse` are gone with
+the services that took them. `AtRootDomain` comes from `at_commons`, via
+`at_client`. An app imports `package:at_auth/at_auth.dart`, and lists
+`at_auth` in its pubspec, only to catch the keys stores'
+`AtKeysFileOverwriteException`, `AtKeysSourceAbsentException` or
+`AtKeysValidationException` by type: neither at_client_flutter nor at_client
+exports them.

@@ -60,9 +60,12 @@ No extra package. Onboarding, login and enrollment are verbs on `Atsign` in
 both platform packages, and the approving side is `client.enrollments`; see
 [15-client-lifecycle.md](15-client-lifecycle.md). An app building its own UI
 calls those; a Flutter app uses the dialogs, a CLI program `CLIBase`. **Do not
-add `at_auth`**: it is the protocol layer under `at_client`, its 4.0 removed
-the request and response types apps used to hold, and the one type an app may
-want from it, `RegistrarService`, is re-exported by both platform packages.
+add `at_auth`** except to catch the keys stores'
+`AtKeysFileOverwriteException`, `AtKeysSourceAbsentException` or
+`AtKeysValidationException` by type, which neither platform package exports:
+it is the protocol layer under `at_client`, its 4.0 removed the request and
+response types apps used to hold, and `RegistrarService`, which an app may
+want from it, is re-exported by both platform packages.
 `RegistrarAdminService` (also `at_auth`) is the super-API-key registration
 and deletion flow — admin/backend tooling only, never a client app, since the
 super key must never ship in a mobile or web bundle. Its `registerAtsign`

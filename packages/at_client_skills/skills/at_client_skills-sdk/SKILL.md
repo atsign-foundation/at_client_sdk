@@ -82,12 +82,15 @@ Install with `dart pub add` — it resolves the latest compatible version:
 An app imports `package:at_client_cli/at_client_cli.dart` or
 `package:at_client_flutter/at_client_flutter.dart`, and nothing else from the
 SDK beyond any feature package it adds (`at_contact`, `at_policy`,
-`at_telemetry`). An app never imports `at_auth`: `at_client` owns onboarding,
-login and enrollment (see §11), and both platform packages re-export the one
-at_auth type an app may want, `RegistrarService`. `RegistrarAdminService`
-(super-API-key registration and deletion) is admin/backend tooling, never a
-client app; its `registerAtsign` returns a `RegisteredAtsign`, and callers
-activate as `registeredAtsign`.
+`at_telemetry`). An app imports `package:at_auth/at_auth.dart`, and lists
+`at_auth` in its pubspec, only to catch the keys stores'
+`AtKeysFileOverwriteException`, `AtKeysSourceAbsentException` or
+`AtKeysValidationException` by type, which neither platform package exports.
+`at_client` owns onboarding, login and enrollment (see §11), and both
+platform packages re-export `RegistrarService`, the at_auth type an app uses
+to register. `RegistrarAdminService` (super-API-key registration and
+deletion) is admin/backend tooling, never a client app; its `registerAtsign`
+returns a `RegisteredAtsign`, and callers activate as `registeredAtsign`.
 
 **Never add:** `at_common_flutter`, `at_onboarding_flutter` (discontinued — use
 the `at_client_flutter` auth dialogs), `at_backupkey_flutter`,
@@ -332,7 +335,8 @@ collection.readReceipts.listen((r) => print('${r.from} read ${r.id} at ${r.readA
 Four flows, four dialogs. Every dialog hands back the **`AtClient` it opened**
 (`null` means the user cancelled or the dialog failed) and the app owns it: it
 uses it, makes it current if its screens read the manager, and `stop()`s it
-when done. Nothing here needs `at_auth`.
+when done. The dialogs need no `at_auth` import; an app adds one only to catch
+the keys stores' exceptions by type (§2).
 
 **Flow 2 (existing `.atKeys` file) — most common for returning developers:**
 
@@ -807,7 +811,7 @@ longer compiles:
 | `atClient.stream(...)`, `sendStreamAck`; `uploadFile`, `downloadFile`, `reuploadFiles`, `shareFiles`                                                         | `put` or `notify` the value; file transfer belongs in the app |
 | `ConnectivityListener`; `RemoteSecondary.isAvailable()`; `atClient.persistenceBundle`                                                                        | The app's own connectivity package; `checkAtSignServer(lookUp, atSign)`; the `AtClientStorage` the client was given |
 | `AtOnboardingService`, `AtOnboardingPreference`, `OnboardingUtil`, `AuthKeyType`, `MySyncProgressListener` (at_onboarding_cli, at_cli_commons)                   | `CLIBase`, or `Atsign(a).open(...)` with `CliKeys` (§16)  |
-| `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app                              | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
+| `AtAuthRequest`, `AuthResponse`, `AuthService`, `FlutterEnrollmentService` (at_client_flutter 1.x); importing `at_auth` in an app to use them                  | The dialogs hand back the `AtClient` (§10); the `Atsign` verbs (§11) |
 
 **Deprecated, or being retired** — avoid in new code:
 
