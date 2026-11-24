@@ -23,9 +23,11 @@ Feature: A self-enrollment files its keys through update
   revoke fails, and the error says the enrollment stays approved with no
   keyfile holding its private key, as it already does for a failed write.
   Forgery and impersonation: only a party holding the keyfile can write it,
-  and the connection authenticates as the keyfile's enrollment. A party that
-  replaces the keyfile meanwhile gets the new enrollment's keys filed beside
-  the credential it put there, and it already holds that credential.
+  and the connection authenticates as the keyfile's enrollment. The filing
+  checks that the keys still hold the authentication keypair read before the
+  request: a keyfile replaced meanwhile by one holding another credential is
+  refused, and the self-enrollment revokes the enrollment it created. One
+  that already holds a live typed enrollment refuses the filing too.
 
   Scenario: A key another writer adds while a self-enrollment waits on the atServer is kept
     # packages/at_auth/test/at_self_enrollment_test.dart
@@ -49,6 +51,14 @@ Feature: A self-enrollment files its keys through update
     Then the keyfile holds the other writer's enrollment and not the new enrollment's keys
     And the enrollment the self-enrollment created is revoked
     And it throws AtEnrollmentException saying the keyfile could not be written
+
+  Scenario: A keyfile replaced by one holding a different credential while a self-enrollment waits on the atServer is not filed into
+    # packages/at_auth/test/at_self_enrollment_test.dart
+    Given @alice's keyfile on disk, which a self-enrollment has read
+    When the keyfile is replaced by one holding a different credential before the atServer answers the self-enrollment's request
+    Then the keyfile holds the replacement's credential and not the new enrollment's keys
+    And the enrollment the self-enrollment created is revoked
+    And it throws AtEnrollmentException saying the keyfile could not be written and that the enrollment it created was revoked
 
   Scenario: A key another writer adds to the keychain while a self-enrollment waits on the atServer is kept
     # packages/at_client_flutter/test/self_enrollment_files_through_update_test.dart

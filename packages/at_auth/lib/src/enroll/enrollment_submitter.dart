@@ -195,6 +195,17 @@ class EnrollmentSubmitter {
               '${algorithm.name} has no keyfile material spelling here'),
       };
 
+  /// [keys]' authentication keypair for the enrollment they authenticate as,
+  /// or null when they hold none or it cannot be resolved.
+  static ({SigningAlgoType algorithm, String publicKey, String privateKey})?
+      _authenticationKeyPairOf(AtKeys keys) {
+    try {
+      return keys.authenticationKeyPairFor(keys.enrollmentToAuthenticateAs());
+    } on AtException {
+      return null;
+    }
+  }
+
   /// Runs [AtEnrollmentRequest.metadataBuilder], if the caller supplied one,
   /// over an [AtKeysIo] holding this request's freshly generated keys.
   ///
@@ -447,7 +458,9 @@ class EnrollmentSubmitter {
   /// [WrittenAtKeysIo.update], on a fresh read, so material another writer
   /// added since the first read is kept, and a keyfile removed since is not
   /// written again. The request to the atServer stays outside that update,
-  /// since an update may run its change more than once.
+  /// since an update may run its change more than once. The filing is refused
+  /// unless the fresh keys still hold the authentication keypair the first
+  /// read held, and a refused filing revokes the new enrollment.
   ///
   /// Idempotent per keyfile: when the keyfile already holds an active
   /// ML-DSA-65 signing material under some enrollment id, that enrollment is
@@ -641,11 +654,19 @@ class EnrollmentSubmitter {
       }
 
       final signing = request.advertisedSigningKey;
+      final readKeyPair = _authenticationKeyPairOf(existing);
       AtKeys? filed;
       try {
         await keysIo.update(request.atSign.toAtsign(), (keys) {
           // NOTE: update may run this again on a fresh read; only the last
           // run counts.
+          // NOTE: the keys filed into must hold the authentication keypair
+          // the first read held.
+          final keyPair = _authenticationKeyPairOf(keys);
+          if (readKeyPair == null || keyPair != readKeyPair) {
+            throw StateError('the keys for ${request.atSign} no longer hold '
+                'the authentication keypair they held before the request');
+          }
           filed = keys;
           keys.fileApkamMaterial(
               enrollmentId: newEnrollmentId,

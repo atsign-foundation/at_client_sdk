@@ -957,8 +957,65 @@ void main() {
           isA<AtEnrollmentException>().having(
               (e) => e.message,
               'message',
+              allOf(
+                  contains('could not be written'),
+                  contains('no longer hold the authentication keypair they '
+                      'held before the request'))));
+    });
+
+    test(
+        'A keyfile replaced by one holding a different credential while a '
+        'self-enrollment waits on the atServer is not filed into', () async {
+      final keyfile = await keyfileOnDisk();
+      final replacement = '$keyfile.replacement';
+      final replacementPrivate = b64('replacement-rsa-private');
+      final sent = <String>[];
+      final originalAs =
+          (await keysAt(keyfile).read(atSign)).enrollmentToAuthenticateAs();
+      String? replacementAs;
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestOn(keyfile),
+            answeringAfter(() async {
+              await keysAt(replacement).write(
+                  atSign,
+                  AtKeys.legacy(
+                      apkamPublicKey: b64('replacement-rsa-public'),
+                      apkamPrivateKey: replacementPrivate,
+                      encryptionPublicKey: b64('enc-public'),
+                      encryptionPrivateKey: b64('enc-private'),
+                      selfEncryptionKey: AESKey.generate(32).key,
+                      enrollmentId: 'legacy-1'));
+              await File(replacement).rename(keyfile);
+              replacementAs = (await keysAt(keyfile).read(atSign))
+                  .enrollmentToAuthenticateAs();
+            }, sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(replacementAs, originalAs,
+          reason: 'the replacement authenticates as the same enrollment id '
+              'as the original, with a different keypair');
+      final after = await keysAt(keyfile).read(atSign);
+      expect(after.keysForEnrollment('new-123'), isEmpty,
+          reason: 'the replacement is not filed into');
+      expect(
+          after
+              .authenticationKeyPairFor(after.enrollmentToAuthenticateAs())
+              ?.privateKey,
+          replacementPrivate,
+          reason: "the keyfile holds the replacement's credential");
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
               allOf(contains('could not be written'),
-                  contains('already holds an active authentication key'))));
+                  contains('new-123 it created was revoked'))));
     });
   });
 
