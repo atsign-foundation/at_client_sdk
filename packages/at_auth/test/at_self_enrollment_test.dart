@@ -843,16 +843,18 @@ void main() {
 
   const namespaceKeyId = 'nskey.app_1.kid1';
 
-  /// Another writer's update filing an active namespace key private,
-  /// atSign-scope, as at_client files one.
+  /// An active namespace key private, atSign-scope, as at_client files one.
+  CryptographicMaterial namespaceKey() => CryptographicMaterial(
+      keyId: namespaceKeyId,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
+      bytes: AtBytes(Uint8List.fromList(List.filled(32, 7))),
+      createdAt: DateTime.utc(2026, 1, 1));
+
+  /// Another writer's update filing [namespaceKey].
   Future<void> addNamespaceKey(String keyfile) =>
       keysAt(keyfile).update(atSign.toAtsign(), (keys) {
-        keys.addKey(CryptographicMaterial(
-            keyId: namespaceKeyId,
-            role: CryptographicMaterialRole.privateDecapsulation,
-            algorithm: CryptographicMaterialAlgorithm.xWing,
-            bytes: AtBytes(Uint8List.fromList(List.filled(32, 7))),
-            createdAt: DateTime.utc(2026, 1, 1)));
+        keys.addKey(namespaceKey());
         return true;
       });
 
@@ -953,7 +955,10 @@ void main() {
       expect(
           thrown,
           isA<AtEnrollmentException>().having(
-              (e) => e.message, 'message', contains('could not be written')));
+              (e) => e.message,
+              'message',
+              allOf(contains('could not be written'),
+                  contains('already holds an active authentication key'))));
     });
   });
 
@@ -963,7 +968,8 @@ void main() {
     test(
         'when a self-enrollment files its keys, then the keyfile holds one '
         'copy of each key', () async {
-      final keysIo = _TwiceRunningKeysIo();
+      final keysIo = _TwiceRunningKeysIo(
+          anotherWriter: (stored) => stored.addKey(namespaceKey()));
       await keysIo.write(atSign, legacyKeys());
       final mock = approvingLookUp();
 
@@ -994,9 +1000,16 @@ void main() {
               }),
           mock);
 
+      expect(keysIo.anotherWriterRan, isTrue,
+          reason: 'the store changed between the two runs of the filing');
+      final stored = await keysIo.read(atSign);
+      expect(
+          stored.getAtSignKey(
+              namespaceKeyId, CryptographicMaterialRole.privateDecapsulation),
+          isNotNull,
+          reason: 'the key another writer added between the runs is kept');
       final filed = [
-        for (final m
-            in (await keysIo.read(atSign)).keysForEnrollment('new-123'))
+        for (final m in stored.keysForEnrollment('new-123'))
           '${m.keyId} ${m.role.value}'
       ]..sort();
       expect(filed, [
@@ -1007,7 +1020,7 @@ void main() {
         'sign:rsa2048:1 publicVerification',
       ]);
       // ignore: deprecated_member_use_from_same_package
-      expect(response.atAuthKeys, same(await keysIo.read(atSign)),
+      expect(response.atAuthKeys, same(stored),
           reason: 'the response carries the keys the last run of the change '
               'was handed, which are the keys the store wrote');
       verify(() => mock.executeCommand(any(that: startsWith('enroll:request:')),
@@ -1084,17 +1097,30 @@ class _NeverRunsTheChangeKeysIo extends InMemoryAtKeysIo {
 
 /// An in-memory keyfile whose [update] runs the change twice, each time on a
 /// fresh copy of what it holds, and stores what the second run left.
+///
+/// Between the two runs of the first update whose change adds material,
+/// [anotherWriter] changes the stored keys, as a concurrent writer would.
 class _TwiceRunningKeysIo extends InMemoryAtKeysIo {
+  final void Function(AtKeys stored) anotherWriter;
+  bool anotherWriterRan = false;
+
   // ignore: invalid_use_of_visible_for_testing_member
-  _TwiceRunningKeysIo();
+  _TwiceRunningKeysIo({required this.anotherWriter});
 
   @override
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
     late AtKeys copy;
     for (var run = 0; run < 2; run++) {
-      copy = AtKeys.fromJson((await read(atsign.toString())).toJson());
+      final stored = (await read(atsign.toString()))..atsign ??= atsign;
+      copy = AtKeys.fromJson(stored.toJson());
       if (await mutate(copy) == false) return;
+      if (run == 0 &&
+          !anotherWriterRan &&
+          copy.keys.length > stored.keys.length) {
+        anotherWriterRan = true;
+        anotherWriter(stored);
+      }
     }
     await flush(atsign, copy);
   }
