@@ -28,6 +28,7 @@ import 'package:at_client_web/src/session/web_passkey_entry.dart'
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
+import 'package:web/web.dart' as web;
 
 import 'bridge_test_helpers.dart';
 
@@ -1935,6 +1936,24 @@ void main() {
 
       await session.close();
       expect(stops, 1);
+    });
+  });
+
+  group('network changes', () {
+    test('each online or offline event reaches the session', () async {
+      final events = <void>[];
+      final subscription = networkChanges().listen(events.add);
+      await pumpEventQueue();
+
+      web.window.dispatchEvent(web.Event('online'));
+      web.window.dispatchEvent(web.Event('offline'));
+      await pumpEventQueue();
+      expect(events, hasLength(2));
+
+      await subscription.cancel();
+      web.window.dispatchEvent(web.Event('online'));
+      await pumpEventQueue();
+      expect(events, hasLength(2));
     });
   });
 }

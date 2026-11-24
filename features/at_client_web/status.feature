@@ -59,6 +59,11 @@ Feature: The connection status is readable and observable
     When the browser goes offline and a network event arrives, then comes back online and another event arrives
     Then the session reclassifies each time and the listener saw waiting:network and then waiting:server
 
+  Scenario: each online or offline event reaches the session
+    Given the browser's network-change stream
+    When online and offline events are dispatched, then the stream is cancelled and another event is dispatched
+    Then each dispatched event before cancel arrives once and nothing arrives after cancel
+
   Scenario: an event that changes nothing reports nothing
     Given a session whose connection is down with a status listener
     When a network event arrives and the browser's online state is unchanged

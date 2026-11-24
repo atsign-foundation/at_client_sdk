@@ -59,7 +59,7 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
     return AtClientSession(client,
         namespace: options.namespace,
         isNavigatorOnline: () => web.window.navigator.onLine,
-        networkChanges: _networkChanges(),
+        networkChanges: networkChanges(),
         warn: _logger.warning,
         stop: stop);
   } on Object {
@@ -104,8 +104,9 @@ Future<PasskeySession> browserPasskeyOpener(
         transport: transport);
 
 /// An event each time the browser goes online or offline, so a session's
-/// `waiting:network` and `waiting:server` follow it.
-Stream<void> _networkChanges() {
+/// `waiting:network` and `waiting:server` follow it. The session [sessionOver]
+/// builds is given this stream; no barrel exports it.
+Stream<void> networkChanges() {
   late StreamController<void> controller;
   late final JSFunction listener;
   controller = StreamController<void>(
