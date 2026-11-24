@@ -1,9 +1,11 @@
 import 'package:at_client/at_client.dart';
 
-// Every exception this package throws is declared here and is an
-// [AtException], so a Dart caller can catch the family with one `on`. The
-// file reaches no web-only API. Only the JS bridge turns one into an error
-// code or a message for JS (lib/src/js/error_codes.dart).
+// Every exception this package declares lives here and extends
+// [AtException], so a Dart caller can catch the family with one `on`.
+// Exceptions it throws from at_client keep their own types, such as
+// [AtEnrollmentException] and [StoppedException]. The file reaches no
+// web-only API. Only the JS bridge turns one into an error code or a message
+// for JS (lib/src/js/error_codes.dart).
 
 /// What a closed session rejects with, to Dart and to JS alike.
 const sessionClosedMessage = 'the session is closed';
