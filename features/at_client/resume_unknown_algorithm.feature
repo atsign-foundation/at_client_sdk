@@ -9,8 +9,9 @@ Feature: Resuming an enrollment whose signing algorithm this build does not know
   Races: none; the resume decides from one read of the store. Replay: none;
   the refusal comes before any connection is opened, and nothing is sent.
   DoS: the message quotes the algorithm's name clipped, as it quotes ids.
-  Forgery and impersonation: only the app's own builds write the store, and
-  they already hold the request's keys.
+  Forgery and impersonation: whoever can write the store (the app, a merge,
+  a restore or a hand edit) already holds the request's keys, and the
+  refusal reads the store and sends nothing.
 
   Scenario: Resuming a pending enrollment whose signing algorithm this build does not know names it
     Given an AtKeys store holding @alice's one pending enrollment request, whose signing algorithm this build does not know
