@@ -663,7 +663,9 @@ class BridgeEntry {
   /// keys?, rootDomain?}`: `passkey: true` asks for the passkey sign-in
   /// [rpId] and [rpName] name, and `keys` is then not read; otherwise `keys`
   /// is the `.atKeys` document, as its JSON text or as an object.
-  /// `rootDomain` is `host` or `host:port`.
+  /// `rootDomain` is `host` or `host:port`. The returned session is the
+  /// caller's: `close()` is the caller's to call, and nothing closes it on
+  /// its own.
   @JSExport()
   JSPromise<JSObject> create(JSAny? opts) => _promise(() async {
         if (!_isSecureContext()) {
