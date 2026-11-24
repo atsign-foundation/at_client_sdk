@@ -59,9 +59,7 @@ drives the real arms over fakes; no barrel exports it.
 ```dart
 // private to lib/src/js/bridge.dart
 Future<Session> _openSession(SessionOptions options,
-    {SessionTransport? keysTransport,
-    SessionTransportOptions? passkeyTransport,
-    OpenPasskeySession? passkeyOpen});
+    {SessionTransport? keysTransport, OpenPasskeySession? passkeyOpen});
 ```
 
 `close()` rules:
