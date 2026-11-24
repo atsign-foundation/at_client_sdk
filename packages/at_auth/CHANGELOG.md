@@ -1,3 +1,13 @@
+## 4.1.0-rc.2
+
+- fix: `InMemoryAtKeysIo.update` (also exported from at_client) runs the
+  change on a copy of the stored keys and stores it only when the change
+  returns true, so a change that returns false or throws leaves the stored
+  keys as they were. Updates of one Atsign run one at a time, an update
+  started from inside a change on the same Atsign throws `StateError`, and
+  an `AtKeys` passed to `write` or `holding` is no longer changed by a later
+  `update`, beyond being given the store's Atsign when it records none.
+
 ## 4.1.0-rc.1
 
 - fix: keys messages name where the keys are as "the AtKeys store
