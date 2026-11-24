@@ -1834,7 +1834,7 @@ void main() {
   });
 
   group('keysTransport', () {
-    test('builds the default keys transport for the options root', () {
+    test("a keys session with no caller transport dials the options' root", () {
       final options = KeysSessionOptions(
           atSign: '@alice',
           namespace: 'tally',

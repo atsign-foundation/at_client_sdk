@@ -48,6 +48,12 @@ Feature: create opens a session and close ends it
     Then each session opens with that host and port, the port being 64 when none is given
     And the proxy: prefix stays on the host
 
+  Scenario: a keys session with no caller transport dials the options' root
+    Given a keys session whose options name a rootDomain and no caller supplies a transport
+    When the session is opened
+    Then the transport dials the options' root host and port
+    And Atsigns are looked up there over HTTPS
+
   Scenario: create rejects with unsupported outside a secure context
     Given a page that is not a secure context
     When create is called
@@ -87,6 +93,12 @@ Feature: create opens a session and close ends it
     Given create options with passkey: true, an atSign, a namespace, rpId and rpName and no keys
     When create is called
     Then a session opens through the passkey login and its close awaits that session's stop
+
+  Scenario: create with the passkey options opens through the browser's passkey login
+    Given passkey options and no injected login
+    When the session is opened
+    Then the browser's passkey login is the opener, opening its hint store once
+    And that store is closed when the login throws
 
   Scenario: create with missing or mistyped options rejects with invalid_argument naming the option
     Given options that are null, a string, an array, a function or a class instance, and options whose atSign, namespace or keys is absent, whose atSign, namespace or rootDomain is not a string, or whose keys is a number or JSON text of something other than an object, and passkey options with passkey: true and no keys whose passkey, rpId or rpName is absent or mistyped
