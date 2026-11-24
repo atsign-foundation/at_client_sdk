@@ -4,9 +4,8 @@ Feature: A session checks manage access from its own enrollment record
   enrollment record with one enroll:fetch for its enrollment id and allows
   the call only when that record is approved and grants __manage read-write.
   The primary enrollment, whose *:rw limits nothing, is allowed with no
-  server call. A missing record, or a refusal from the atServer reading it,
-  means the session lacks manage access; every other failure reaches the
-  caller unchanged.
+  server call. A missing record or an atServer refusal means the session lacks
+  manage access; any other failure reaches the caller unchanged.
 
   Races: none arise beyond the one decision per enrollment id that pairing.feature
   states; the check reads once and changes nothing.
@@ -38,6 +37,11 @@ Feature: A session checks manage access from its own enrollment record
     When it checks manage access
     Then only the approved one is allowed
     And every other status throws ManageAccessRequiredException
+
+  Scenario: A refusal reading the record is refused as lacking manage access
+    Given a session whose enroll:fetch is refused by the atServer
+    When it checks manage access
+    Then it throws ManageAccessRequiredException, not the refusal
 
   Scenario: A transport failure reading the record reaches the caller unchanged
     Given a session whose enroll:fetch fails with an error that is not a missing record

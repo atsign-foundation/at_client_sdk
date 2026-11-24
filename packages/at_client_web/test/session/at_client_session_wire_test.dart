@@ -207,6 +207,18 @@ void main() {
         });
       }
 
+      test('A refusal reading the record is refused as lacking manage access',
+          () async {
+        wire.answer = (command) => command.startsWith('enroll:fetch')
+            ? throw UnAuthorizedException('no access to the __manage namespace')
+            : 'data:{}';
+
+        final error = await thrownBy(session.pendingEnrollments);
+
+        expect(error, isA<ManageAccessRequiredException>());
+        expect(error, isNot(isA<UnAuthorizedException>()));
+      });
+
       test(
           'A transport failure reading the record reaches the caller unchanged',
           () async {
