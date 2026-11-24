@@ -350,7 +350,7 @@ class KeychainStorage {
   /// data still held under the legacy pre-2.0.0 `_` delimited store name.
   ///
   /// Throws the first failure to clear either store: the keychain's own
-  /// error, or a [StateError] when the store, or on Windows a segment of it,
+  /// error, or an [AtException] when the store, or on Windows a segment of it,
   /// is still stored after its delete, or the store cannot be read back. A
   /// store that holds nothing is not a failure. On Windows, a delete that the
   /// credential store refuses goes unseen when the entry then also reads as
@@ -383,7 +383,7 @@ class KeychainStorage {
     if (first != null) Error.throwWithStackTrace(first.$1, first.$2);
   }
 
-  /// Throws [StateError] unless the store [name] reads back as absent, a read
+  /// Throws [AtException] unless the store [name] reads back as absent, a read
   /// that throws counting as the store still being there.
   Future<void> _expectDeleted(String name) async {
     final bool stored;
@@ -391,7 +391,7 @@ class KeychainStorage {
       stored = await _isStored(name);
     } catch (e, s) {
       Error.throwWithStackTrace(
-        StateError(
+        AtException(
           'Keychain store "$name" could not be read back after its delete, '
           'so it may still be stored: $e',
         ),
@@ -399,7 +399,7 @@ class KeychainStorage {
       );
     }
     if (stored) {
-      throw StateError(
+      throw AtException(
         'Keychain store "$name" is still stored after its delete',
       );
     }
@@ -786,12 +786,12 @@ class KeychainStorage {
   Future<bool> _isStored(String name) async =>
       await (await _getBiometricStorageFile(name)).read() != null;
 
-  /// Deletes the Windows segment [name], throwing [StateError] if it is still
+  /// Deletes the Windows segment [name], throwing [AtException] if it is still
   /// stored afterwards.
   Future<void> _deleteSegment(String name) async {
     await (await _getBiometricStorageFile(name)).delete();
     if (await _isStored(name)) {
-      throw StateError('Windows keychain segment "$name" is still stored');
+      throw AtException('Windows keychain segment "$name" is still stored');
     }
   }
 

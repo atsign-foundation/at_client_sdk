@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:at_client_flutter/at_client_flutter.dart' show AtException;
 import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:biometric_storage/biometric_storage.dart';
@@ -178,7 +179,7 @@ void main() {
 
       expect(
         error,
-        isA<StateError>().having(
+        isA<AtException>().having(
           (e) => e.message,
           'message',
           'Keychain store "$current" is still stored after its delete',
@@ -189,8 +190,8 @@ void main() {
   );
 
   test('Given a delete that leaves the AtKeys entry stored and a read-back '
-      'that throws, when the keychain is cleared, then it throws a StateError '
-      'saying the entry may still be stored', () async {
+      'that throws, when the keychain is cleared, then it throws an '
+      'AtException saying the entry may still be stored', () async {
     held[current] = entry;
     final storage = keychain(
       deleting: {current: leavesStored},
@@ -206,7 +207,7 @@ void main() {
 
     expect(
       error,
-      isA<StateError>().having(
+      isA<AtException>().having(
         (e) => e.message,
         'message',
         startsWith(
@@ -243,7 +244,7 @@ void main() {
       final (error, _) = await thrownBy(storage.deleteAllAtKeysData);
       expect(
         error,
-        isA<StateError>().having(
+        isA<AtException>().having(
           (e) => e.message,
           'message',
           contains('"test_data_1" is still stored'),

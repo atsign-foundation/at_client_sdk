@@ -566,7 +566,7 @@ void main() {
         await expectLater(
           windowsKeychain().deleteAllAtKeysData(),
           throwsA(
-            isA<StateError>().having(
+            isA<AtException>().having(
               (e) => e.message,
               'message',
               contains('"${current}_segment_1" is still stored'),
@@ -772,7 +772,7 @@ void main() {
         await expectLater(
           windowsKeychain().deleteAllAtKeysData(),
           throwsA(
-            isA<StateError>().having(
+            isA<AtException>().having(
               (e) => e.message,
               'message',
               contains('"${segment}2559" is still stored'),
