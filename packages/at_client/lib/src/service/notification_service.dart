@@ -42,11 +42,21 @@ abstract class NotificationService {
   /// from one that was never sent. Broadcast, and it does not replay.
   Stream<DroppedNotification> get droppedEvents;
 
-  /// Stops all subscriptions on the current instance. By default
-  /// will also stop listening for notifications from the atServer. If you
-  /// wish to stop listening for notifications for some reason, but keep the
-  /// subscriptions, then you should call [startListening].
-  void stopAllSubscriptions({bool stopNotificationsListener = true});
+  /// Stops this service for good: every subscription ends and the
+  /// notifications listener stops.
+  ///
+  /// Afterwards [subscribe], [subscribeFiltered] and [startListening] throw
+  /// [StoppedException], and a second call does nothing. To pause the
+  /// listener and keep the subscriptions, call [stopListening] instead, and
+  /// [startListening] to resume. To receive notifications after a stop, build
+  /// a new client. The client's `stop()` calls this for you.
+  ///
+  /// [stopNotificationsListener] is ignored: the listener always stops.
+  void stopAllSubscriptions(
+      {@Deprecated('Ignored: stopAllSubscriptions always stops the '
+          'notifications listener. To pause it and keep the subscriptions, '
+          'call stopListening.')
+      bool stopNotificationsListener = true});
 
   /// Explicitly start the notification listener. If the notification listener
   /// is already started, this should do nothing. Sets [targetListenerState] to

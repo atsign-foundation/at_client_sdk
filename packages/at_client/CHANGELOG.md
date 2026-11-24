@@ -1,3 +1,11 @@
+## 4.1.0-rc.2
+
+- fix: `NotificationService.stopAllSubscriptions` always stops the
+  notifications listener. Its `stopNotificationsListener` parameter is
+  deprecated and ignored: a stopped service delivers nothing, and
+  `startListening()` throws `StoppedException`. To pause the listener and
+  keep the subscriptions, call `stopListening()`.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and

@@ -803,7 +803,11 @@ class NotificationServiceImpl extends NotificationService {
   }
 
   @override
-  void stopAllSubscriptions({bool stopNotificationsListener = true}) {
+  void stopAllSubscriptions(
+      {@Deprecated('Ignored: stopAllSubscriptions always stops the '
+          'notifications listener. To pause it and keep the subscriptions, '
+          'call stopListening.')
+      bool stopNotificationsListener = true}) {
     if (isStopped) {
       logger.info(
           'stopAllSubscriptions() called, but service is already stopped. Ignoring.');
@@ -812,9 +816,7 @@ class NotificationServiceImpl extends NotificationService {
     isStopped = true;
     _stopping.complete();
 
-    if (stopNotificationsListener) {
-      stopListening();
-    }
+    stopListening();
 
     unawaited(_filingSubscription?.cancel());
     _filingSubscription = null;
