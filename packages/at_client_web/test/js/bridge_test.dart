@@ -7,6 +7,8 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
     show
+        AtClient,
+        AtConnection,
         AtConnectionCause,
         AtConnectionState,
         AtEnrollmentException,
@@ -19,6 +21,7 @@ import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:test/fake.dart';
 import 'package:test/test.dart';
 
 /// A [ItemCollection] that records each call and answers what it is
@@ -272,6 +275,24 @@ final JSObject _reflectClass = globalContext['Reflect']! as JSObject;
 
 JSAny _jsConstruct(String ctor, [List<JSAny?> args = const []]) => _reflectClass
     .callMethod('construct'.toJS, globalContext[ctor]!, args.toJS)!;
+
+/// A client whose session cannot be built: reading its connection throws,
+/// as an invalid session namespace does.
+class _ThrowingConnectionClient extends Fake implements AtClient {
+  _ThrowingConnectionClient(this.failure);
+
+  final Object failure;
+
+  @override
+  AtConnection get connection => throw failure;
+}
+
+/// A client whose session builds.
+class _QuietClient extends Fake implements AtClient {
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice', attempt: (_) async => AtConnectionState.online());
+}
 
 void main() {
   late _FakeSession session;
@@ -1699,6 +1720,36 @@ void main() {
         expect((await _rejected(_call(s, 'approve', ['e9'.toJS]))).code,
             'enrollment_denied');
       });
+    });
+  });
+
+  group('sessionOver', () {
+    KeysSessionOptions options() =>
+        KeysSessionOptions(atSign: '@alice', namespace: 'tally', keys: const {
+          '@alice': {'k': 'v'}
+        });
+
+    test('a session that fails to build after opening is stopped', () async {
+      final failure =
+          ArgumentError('is not a valid namespace segment', 'namespace');
+      var stops = 0;
+
+      await expectLater(
+          sessionOver(_ThrowingConnectionClient(failure), () async => stops++,
+              options()),
+          throwsA(same(failure)));
+      expect(stops, 1);
+    });
+
+    test('a session that builds leaves what was opened running', () async {
+      var stops = 0;
+
+      final session =
+          await sessionOver(_QuietClient(), () async => stops++, options());
+      expect(stops, 0);
+
+      await session.close();
+      expect(stops, 1);
     });
   });
 }

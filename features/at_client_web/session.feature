@@ -117,6 +117,11 @@ Feature: create opens a session and close ends it
     When close is called
     Then close resolves only after that stop has completed
 
+  Scenario: a session that fails to build after opening is stopped
+    Given create options that open a client but whose session cannot be built
+    When create is called
+    Then the error is rethrown after the opened client or passkey session is stopped
+
   Scenario: close removes the network listeners even when a stop step fails
     Given a session listening for the browser going online and offline, whose status subscription fails to cancel
     When close is called

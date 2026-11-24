@@ -5,6 +5,7 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
     show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
+import 'package:meta/meta.dart';
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
@@ -32,12 +33,26 @@ Future<Session> _openSession(SessionOptions options) async {
     KeysSessionOptions() => await _openKeys(options),
     PasskeySessionOptions() => await _openPasskey(options),
   };
-  return AtClientSession(client,
-      namespace: options.namespace,
-      isNavigatorOnline: () => web.window.navigator.onLine,
-      networkChanges: _networkChanges(),
-      warn: _logger.warning,
-      stop: stop);
+  return sessionOver(client, stop, options);
+}
+
+/// The [Session] [options] describes over [client], whose [stop] ends what
+/// opened it. A construction that throws awaits [stop] before rethrowing, so
+/// an opened client or passkey session is never left running.
+@visibleForTesting
+Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
+    SessionOptions options) async {
+  try {
+    return AtClientSession(client,
+        namespace: options.namespace,
+        isNavigatorOnline: () => web.window.navigator.onLine,
+        networkChanges: _networkChanges(),
+        warn: _logger.warning,
+        stop: stop);
+  } on Object {
+    await stop();
+    rethrow;
+  }
 }
 
 Future<(AtClient, Future<void> Function())> _openKeys(
