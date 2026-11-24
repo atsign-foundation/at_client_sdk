@@ -59,9 +59,7 @@ Matcher _rejectsWith(CollectionFailure kind,
 void main() {
   setUpAll(registerAdapterFallbacks);
 
-  test(
-      'The collection exception is an AtException and keeps its kind, message, id, owner, cause type and failures',
-      () {
+  test('JsCollectionsError is an AtException and keeps its fields', () {
     final error = JsCollectionsError(CollectionFailure.partialFailure,
         id: 'i',
         owner: '@alice',

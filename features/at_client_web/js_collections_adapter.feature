@@ -54,14 +54,14 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter opens a collection
     Then the open rejects with COLLECTION_FAILED and kind "StateError"
 
-  Scenario: The collection exception is an AtException and keeps its kind, message, id, owner, cause type and failures
+  Scenario: JsCollectionsError is an AtException and keeps its fields
     Given a collection exception built with a kind, message, id, owner, cause type and failures
     When a Dart caller catches AtException
     Then the collection exception is caught
     And its kind, message, id, owner, cause type and failures are kept
     And it carries no error code
 
-  Scenario: Every collection kind maps to one code and the codes are the COLLECTION_ and COLLECTION_ITEM_ names
+  Scenario: The error codes are the COLLECTION_ and COLLECTION_ITEM_ names
     Given every kind a collection exception can carry
     When the bridge maps an exception of each kind
     Then each kind gives a different code and the eleven codes are exactly those listed in js-api.md 6.1

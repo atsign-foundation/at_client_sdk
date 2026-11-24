@@ -230,9 +230,7 @@ void main() {
     expect(errorCodeOf(caught), 'enrollment_in_flight');
   });
 
-  test(
-      'Every collection kind maps to one code and the codes are the COLLECTION_ and COLLECTION_ITEM_ names',
-      () {
+  test('The error codes are the COLLECTION_ and COLLECTION_ITEM_ names', () {
     const expected = {
       CollectionFailure.invalidArgument: 'COLLECTION_INVALID_ARGUMENT',
       CollectionFailure.partialFailure: 'COLLECTION_PARTIAL_FAILURE',

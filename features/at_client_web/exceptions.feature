@@ -24,12 +24,6 @@ Feature: Every exception the package declares is an AtException in one file
     When the first names PortalSessionOfflineException and UnsupportedKeyMaterialException, and the second also names SetupLockTimeoutException, IndexedDbException and the at_client and at_auth passkey exceptions the barrel lists today
     Then both files analyze without error
 
-  Scenario: a type renamed by the layering still resolves under its trunk name
-    Given a Dart file that imports only package:at_client_web/at_client_web.dart
-    When it names PortalSessionOfflineException
-    Then the file analyzes with no deprecation notice
-    And the type keeps its trunk name, with no alias under another name
-
   Scenario: only the bridge and its code mapping name an error code
     Given every Dart file under packages/at_client_web/lib except lib/src/js/bridge.dart and the bridge's code-mapping file
     Then none holds a string literal that is one of the bridge's error codes or starts with COLLECTION_

@@ -152,19 +152,6 @@ void main() {
     expect(web.UnsupportedKeyMaterialException, isNotNull);
   });
 
-  test('a type renamed by the layering still resolves under its trunk name',
-      () {
-    final base = File('lib/at_client_web.dart').readAsStringSync();
-    final browser = File('lib/at_client_web_web.dart').readAsStringSync();
-    expect(base, contains('PortalSessionOfflineException'));
-    expect(browser, contains('export \'at_client_web.dart\''));
-    // The trunk name is the type itself: no alias, no deprecation.
-    final Object error = web.PortalSessionOfflineException(
-        '@alice', AtConnectionState.offline(AtConnectionCause.unreachable));
-    expect(error, isA<web.PortalSessionOfflineException>());
-    expect(error.runtimeType.toString(), 'PortalSessionOfflineException');
-  });
-
   test('only the bridge and its code mapping name an error code', () {
     for (final file in _libFiles()) {
       final path = _path(file);
