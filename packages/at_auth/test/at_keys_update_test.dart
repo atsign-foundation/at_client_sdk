@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
@@ -324,7 +325,42 @@ void main() {
   });
 
   group('the default update', () {
-    test('InMemoryAtKeysIo inherits read-mutate-flush', () async {
+    test('runs read-mutate-flush', () async {
+      final io = _DefaultUpdateAtKeysIo();
+      await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
+
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.addKey(keyNamed('first'));
+        return true;
+      });
+
+      expect(io.flushes, 1,
+          reason: 'a true return is "persist this", so flush must run — the '
+              'control arm for the false-return test below');
+      expect(
+          (await io.read(atSign)).getAtSignKey(
+              'first', CryptographicMaterialRole.privateDecapsulation),
+          isNotNull);
+    });
+
+    test('and honours a false return', () async {
+      final io = _DefaultUpdateAtKeysIo();
+      await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
+
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.addKey(keyNamed('first'));
+        return false;
+      });
+
+      expect(io.flushes, 0,
+          reason: 're-delivery is the substrate\'s normal mode, so a caller '
+              'that finds the material already there must be able to say so '
+              'without writing the store');
+    });
+  });
+
+  group('InMemoryAtKeysIo.update', () {
+    test('stores the changed copy through flush', () async {
       final io = _CountingFlushesAtKeysIo();
       await io.write(atSign, legacyAtKeys(atsign: atSign.toAtsign()));
 
@@ -351,24 +387,23 @@ void main() {
         return false;
       });
 
-      // Counting the flush, not re-reading the store: InMemoryAtKeysIo hands
-      // `read` back the very instance the callback mutated, so the added key
-      // is visible either way and a length check here passes just as well on
-      // an update that ignored the false return entirely.
       expect(io.flushes, 0,
           reason: 're-delivery is the substrate\'s normal mode, so a caller '
               'that finds the material already there must be able to say so '
               'without writing the store');
+      expect(
+          (await io.read(atSign)).getAtSignKey(
+              'first', CryptographicMaterialRole.privateDecapsulation),
+          isNull,
+          reason: 'the change ran on a copy, which a false return discards');
     });
   });
 }
 
 /// An [InMemoryAtKeysIo] that counts the flushes it is asked to perform.
 ///
-/// [InMemoryAtKeysIo] aliases the instance it stores, so an in-place mutation
-/// made by an `update` callback is observable through `read` whether or not
-/// the write happened. The flush count is the only thing that distinguishes
-/// honouring the callback's false return from ignoring it.
+/// Its `update` stores the changed copy through [flush], so the count says
+/// whether an update stored anything.
 class _CountingFlushesAtKeysIo extends InMemoryAtKeysIo {
   int flushes = 0;
 
@@ -376,5 +411,31 @@ class _CountingFlushesAtKeysIo extends InMemoryAtKeysIo {
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
     flushes++;
     return super.flush(atsign, atKeys);
+  }
+}
+
+/// A store that keeps [WrittenAtKeysIo]'s default `update`, counting the
+/// flushes it is asked to perform.
+///
+/// [read] hands back the instance it stores, so an in-place change is visible
+/// whether or not the write happened, and the flush count is what shows a
+/// false return was honoured.
+class _DefaultUpdateAtKeysIo extends WrittenAtKeysIo {
+  final Map<Atsign, AtKeys> _stored = {};
+  int flushes = 0;
+
+  @override
+  FutureOr<AtKeys> read(String atsign) =>
+      _stored[atsign.toAtsign()] ?? (throw StateError('no keys for $atsign'));
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) async {
+    _stored[atsign.toAtsign()] = atKeys;
+  }
+
+  @override
+  FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
+    flushes++;
+    _stored[atsign.toAtsign()] = atKeys;
   }
 }

@@ -18,6 +18,14 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// to the same entry.
   final Map<Atsign, AtKeys> _internal = {};
 
+  /// Completes when the last update queued for each Atsign ends; removed
+  /// once it has.
+  final Map<Atsign, Completer<void>> _updates = {};
+
+  /// The zone key under which an update records the Atsigns it is changing
+  /// on this store.
+  final Object _updating = Object();
+
   @visibleForTesting
   InMemoryAtKeysIo();
 
@@ -63,5 +71,41 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   @override
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
     _internal[atsign.toAtsign()] = atKeys;
+  }
+
+  /// Runs [mutate] on a copy of the stored keys, and stores the copy through
+  /// [flush] only when [mutate] returns true, so a false return or a throw
+  /// leaves the stored keys as they were.
+  ///
+  /// Updates of one Atsign run one at a time, and an update started from
+  /// inside a change on the same Atsign throws [StateError].
+  ///
+  /// Stored keys that record no Atsign are given [atsign] before the copy is
+  /// made; keys that record one keep it.
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final key = atsign.toAtsign();
+    final changing = Zone.current[_updating] as Set<Atsign>? ?? const {};
+    if (changing.contains(key)) {
+      throw StateError('an update for $key was started from inside a change '
+          'to $key on the same store');
+    }
+    final before = _updates[key]?.future;
+    final ended = _updates[key] = Completer<void>();
+    try {
+      await before;
+      final stored = await read(atsign.toString());
+      stored.atsign ??= key;
+      final copy = AtKeys.fromJson(stored.toJson())..atsign = stored.atsign;
+      final changed = await runZoned(() => mutate(copy), zoneValues: {
+        _updating: {...changing, key}
+      });
+      if (changed == false) return;
+      await flush(atsign, copy);
+    } finally {
+      ended.complete();
+      if (identical(_updates[key], ended)) _updates.remove(key);
+    }
   }
 }
