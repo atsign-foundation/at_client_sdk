@@ -1,5 +1,6 @@
 ## Unreleased
 
+- `PortalSessionOfflineException` and `UnsupportedKeyMaterialException` now extend `AtException` (D-41), so a caller catching `AtException` starts catching them; both keep their names.
 - PR CI checks `dart-workspace.lock` sync. The bridge bundle, its build target and the release workflow ship with the release PR.
 - Browser bridge (`web/at_client_bridge_entry.dart`, built as `build/at_client_web.js` by the release build): `create` opens a keys-file session, or a passkey session when asked, and returns `@JSExport` session and collection objects. Rejections carry `{code, message}`, with `id`, `owner`, `kind` and `failures` for collection failures; item data crosses as objects with no prototype.
 - Passkey sign-in: `create` with `passkey: true`, `rpId` and `rpName` opens a passkey session (`passkeyLogin`) and returns the same `@JSExport` session; it needs no `keys` document, and a missing or mistyped field rejects with `invalid_argument` naming the field.
