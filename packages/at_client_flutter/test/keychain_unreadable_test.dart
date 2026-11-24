@@ -556,18 +556,26 @@ void main() {
         expect(held, isEmpty);
       });
 
-      test('a delete-all whose segment stays stored logs it at severe and '
-          'still deletes the header', () async {
+      test('a delete-all whose segment stays stored still deletes the header, '
+          'then throws', () async {
         held[current] = '{"segmentCount":2}';
         held['${current}_segment_0'] = 'a';
         held['${current}_segment_1'] = 'b';
         undeletableStores.add('${current}_segment_1');
 
-        await windowsKeychain().deleteAllAtKeysData();
+        await expectLater(
+          windowsKeychain().deleteAllAtKeysData(),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('"${current}_segment_1" is still stored'),
+            ),
+          ),
+        );
 
         expect(held.keys, contains('${current}_segment_1'));
         expect(held, isNot(contains(current)), reason: 'the header is gone');
-        expect(severeLogs(), isNotEmpty);
       });
 
       for (final (form, count) in const [
@@ -761,7 +769,17 @@ void main() {
           return true;
         };
 
-        await windowsKeychain().deleteAllAtKeysData();
+        await expectLater(
+          windowsKeychain().deleteAllAtKeysData(),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('"${segment}2559" is still stored'),
+            ),
+          ),
+          reason: 'the delete ends at the bound, on the segment it left',
+        );
 
         expect(
           indexesTouched(),

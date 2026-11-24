@@ -61,10 +61,10 @@ Feature: A keychain entry that does not parse says why, and none of its text
     When an app deletes every atSign's keys
     Then the header and both segments are deleted
 
-  Scenario: a delete-all whose segment stays stored logs it at severe and still deletes the header
+  Scenario: a delete-all whose segment stays stored still deletes the header, then throws
     Given a Windows keychain entry whose header names 2 segments, the second of which stays stored when deleted
     When an app deletes every atSign's keys
-    Then the header is deleted, the second segment is still stored, and the failure is logged at severe
+    Then the header is deleted, the second segment is still stored, and the delete-all throws the failure
 
   Scenario Outline: a delete-all over a <form> header naming <count> segments takes the count as it is
     Given a Windows keychain entry whose <form> header names <count> segments, each stored

@@ -785,10 +785,13 @@ void main() {
             options: any(named: 'options'),
           ),
         ).thenAnswer((_) async => mockBiometricStorageFile);
+        var currentHeld = true;
         when(
           () => mockBiometricStorageFile.read(),
-        ).thenAnswer((_) async => '{"segmentCount": 2}');
-        when(() => mockBiometricStorageFile.delete()).thenAnswer((_) async {});
+        ).thenAnswer((_) async => currentHeld ? '{"segmentCount": 2}' : null);
+        when(
+          () => mockBiometricStorageFile.delete(),
+        ).thenAnswer((_) async => currentHeld = false);
 
         when(
           () => mockBiometricStorage.getStorage(
@@ -811,10 +814,13 @@ void main() {
             options: any(named: 'options'),
           ),
         ).thenAnswer((_) async => legacyStorageFile);
+        var legacyHeld = true;
         when(
           () => legacyStorageFile.read(),
-        ).thenAnswer((_) async => '{"segmentCount": 1}');
-        when(() => legacyStorageFile.delete()).thenAnswer((_) async {});
+        ).thenAnswer((_) async => legacyHeld ? '{"segmentCount": 1}' : null);
+        when(
+          () => legacyStorageFile.delete(),
+        ).thenAnswer((_) async => legacyHeld = false);
 
         when(
           () => mockBiometricStorage.getStorage(
@@ -840,6 +846,7 @@ void main() {
         for (final name in [
           '@atsigns:test_segment_2',
           '@atsigns_test_segment_1',
+          'test_data_0',
         ]) {
           when(
             () => mockBiometricStorage.getStorage(
@@ -856,12 +863,6 @@ void main() {
         verify(() => currentSegment0.delete()).called(1);
         verify(() => currentSegment1.delete()).called(1);
         verify(() => legacySegment0.delete()).called(1);
-
-        // Both stores are gone, so nothing is left to migrate forward.
-        when(
-          () => mockBiometricStorageFile.read(),
-        ).thenAnswer((_) async => null);
-        when(() => legacyStorageFile.read()).thenAnswer((_) async => null);
 
         final result = await keyChainStorage.readAtKeysData();
 

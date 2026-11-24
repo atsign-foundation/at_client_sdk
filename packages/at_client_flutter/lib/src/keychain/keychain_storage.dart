@@ -345,22 +345,60 @@ class KeychainStorage {
 
   /// Delete all persisted Atsign key data from the keychain, including any
   /// data still held under the legacy pre-2.0.0 `_` delimited store name.
-  /// TODO(3.0.0): remove the `_` cleanup once `_` stores are deleted during
-  /// migration (see [_readAtKeysDataRaw] sequencing comment).
+  ///
+  /// Throws the first failure to clear either store: the keychain's own
+  /// error, or a [StateError] when the store, or on Windows a segment of it,
+  /// is still stored after its delete, or the store cannot be read back. A
+  /// store that holds nothing is not a failure. On Windows, a delete that the
+  /// credential store refuses goes unseen when the entry then also reads as
+  /// absent.
   Future<void> deleteAllAtKeysData() => _writes.synchronized(_deleteAll);
 
   Future<void> _deleteAll() async {
-    try {
-      await _delete(keychainStoreName: await AtKeysStore.getName());
-    } catch (e, s) {
-      _logger.info('_getAtClientData', e, s);
-      print(s);
+    final names = [
+      await AtKeysStore.getName(),
+      await _getImproperAtKeysStoreName(),
+    ];
+    (Object, StackTrace)? first;
+    for (final name in names) {
+      try {
+        await _delete(keychainStoreName: name, clearingLegacySegments: true);
+        await _expectDeleted(name);
+      } catch (e, s) {
+        if (first == null) {
+          first = (e, s);
+        } else {
+          _logger.warning(
+            'Failed to delete keychain store "$name" as well; the first '
+            'failure is thrown',
+            e,
+            s,
+          );
+        }
+      }
     }
+    if (first != null) Error.throwWithStackTrace(first.$1, first.$2);
+  }
+
+  /// Throws [StateError] unless the store [name] reads back as absent, a read
+  /// that throws counting as the store still being there.
+  Future<void> _expectDeleted(String name) async {
+    final bool stored;
     try {
-      await _delete(keychainStoreName: await _getImproperAtKeysStoreName());
+      stored = await _isStored(name);
     } catch (e, s) {
-      _logger.info('_getAtClientData', e, s);
-      print(s);
+      Error.throwWithStackTrace(
+        StateError(
+          'Keychain store "$name" could not be read back after its delete, '
+          'so it may still be stored: $e',
+        ),
+        s,
+      );
+    }
+    if (stored) {
+      throw StateError(
+        'Keychain store "$name" is still stored after its delete',
+      );
     }
   }
 
@@ -518,16 +556,22 @@ class KeychainStorage {
     }
   }
 
-  Future<void> _delete({required String keychainStoreName}) async {
+  /// Deletes the store [keychainStoreName], on Windows with the segments its
+  /// header names, and with [clearingLegacySegments] every legacy segment
+  /// stored from index 0 up as well.
+  Future<void> _delete({
+    required String keychainStoreName,
+    bool clearingLegacySegments = false,
+  }) async {
     final store = await _getBiometricStorageFile(keychainStoreName);
     if (!isWindows) {
       await store.delete();
       return;
     }
 
-    // NOTE: a segment that cannot be deleted is logged and the header deleted
-    // regardless, so the entry reads as absent; the segments left under the
-    // current prefix start at 0, where the next delete or write finds them.
+    // NOTE: the header is deleted even when a segment cannot be, and that
+    // failure thrown after it; segments are deleted from the top down, so any
+    // left run unbroken from index 0.
     final currentPrefix = '${keychainStoreName}_segment';
     var currentCount = 0;
     String? legacyPrefix;
@@ -553,6 +597,7 @@ class KeychainStorage {
         s,
       );
     }
+    (Object, StackTrace)? segmentFailure;
     try {
       await _deleteSegmentsFrom(currentPrefix, 0, atLeast: currentCount);
       // NOTE: every store's legacy header names the same segments, so one
@@ -564,16 +609,19 @@ class KeychainStorage {
           await _deleteSegmentRange(legacyPrefix, 0, legacyCount);
         }
       }
+      // NOTE: only a clear, which deletes every store of keys, deletes legacy
+      // segments that no header names.
+      if (clearingLegacySegments) {
+        await _deleteSegmentsFrom(await _legacySegmentPrefix(), 0);
+      }
     } catch (e, s) {
-      _logger.severe(
-        'Failed to delete the Windows keychain segments of '
-        '"$keychainStoreName"',
-        e,
-        s,
-      );
+      segmentFailure = (e, s);
     }
 
     await store.delete();
+    if (segmentFailure != null) {
+      Error.throwWithStackTrace(segmentFailure.$1, segmentFailure.$2);
+    }
   }
 
   /// Deletes the Windows segments `<prefix>_<first>` upward: each below
