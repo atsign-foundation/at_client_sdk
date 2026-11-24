@@ -2,9 +2,11 @@ Feature: Builds of one principal started together leave one live client
 
   A process holds at most one live client per (Atsign, enrollment). A build
   claims its Atsign and enrollment once it has read its keys, before it
-  opens its data store or a connection, so a second build of the same
-  principal, started before the first has finished, is refused at once
-  rather than built beside it.
+  opens its data store or a connection. A build started while another for
+  the same principal is live or being built is refused at once rather than
+  built beside it. A build that reads a retrofitted enrollment before the
+  retrofitting build has claimed it builds beside that one, and whichever
+  of the two files second is refused as it files.
 
   Races: two builds of one principal at once are the case this covers; the
   claim is taken in the same step as the live-client check. Replay: a build
