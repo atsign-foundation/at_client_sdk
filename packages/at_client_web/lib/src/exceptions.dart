@@ -183,7 +183,8 @@ class PortalSessionOfflineException extends AtException {
       : super('$atSign did not come online (${state.cause?.name})');
 
   @override
-  String toString() => 'PortalSessionOfflineException: $message';
+  String toString() => 'PortalSessionOfflineException: $message'
+      '${state.error == null ? '' : ': ${state.error}'}';
 }
 
 /// Thrown by `portalSession` for keys that carry ML-DSA-65 signing or

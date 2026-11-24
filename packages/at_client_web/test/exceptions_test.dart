@@ -185,4 +185,21 @@ void main() {
     expect(SessionClosedException().message, sessionClosedMessage);
     expect(maxErrorMessageLength, 128);
   });
+
+  test('the offline exception keeps the state error in its text', () {
+    final withError = PortalSessionOfflineException(
+        '@alice',
+        AtConnectionState.offline(AtConnectionCause.unreachable,
+            error: StateError('sentinel-detail')));
+    expect(withError.toString(), endsWith(': Bad state: sentinel-detail'),
+        reason: 'the state error follows the cause, as it did on trunk');
+
+    final withoutError = PortalSessionOfflineException(
+        '@alice', AtConnectionState.offline(AtConnectionCause.unreachable));
+    expect(withoutError.toString(), isNot(contains('sentinel')));
+    expect(
+        withoutError.toString(),
+        'PortalSessionOfflineException: @alice did not come online '
+        '(unreachable)');
+  });
 }
