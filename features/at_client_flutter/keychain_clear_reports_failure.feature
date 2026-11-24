@@ -39,3 +39,9 @@ Feature: Clearing the keychain throws what the keychain throws
     Given a keychain whose delete of the AtKeys entry completes but leaves it stored
     When the app calls deleteAllAtKeysData
     Then it throws, after also trying to delete the legacy-named store
+
+  @race
+  Scenario: A read in flight while the keychain is cleared does not bring the cleared keys back
+    Given a keychain holding keys only under the legacy store name, and a read that has read the legacy store but not yet moved it to the current name
+    When the app clears the keychain, and the read then finishes
+    Then the keychain holds no keys under either name

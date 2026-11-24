@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client_flutter/src/keychain/keychain_storage.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
 import 'package:biometric_storage/biometric_storage.dart';
@@ -313,5 +315,33 @@ void main() {
       reason: 'the second failure is logged: ${warning.error}',
     );
     expect(warning.message, contains('"$legacy"'));
+  });
+
+  test('A read in flight while the keychain is cleared does not bring the '
+      'cleared keys back', () async {
+    held[legacy] = entry;
+    final legacyReadHoldingKeys = Completer<void>();
+    final storage = keychain(
+      reading: {
+        legacy: () async {
+          final stored = held[legacy];
+          if (stored != null && !legacyReadHoldingKeys.isCompleted) {
+            legacyReadHoldingKeys.complete();
+          }
+          return stored;
+        },
+      },
+    );
+
+    final clear = storage.writing(() async {
+      await legacyReadHoldingKeys.future;
+      await storage.deleteAllAtKeysData();
+    });
+    final read = storage.readAtKeysData();
+    await clear;
+    await read;
+
+    expect(held[current], isNull, reason: 'no keys under the current name');
+    expect(held[legacy], isNull, reason: 'no keys under the legacy name');
   });
 }
