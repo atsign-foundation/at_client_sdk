@@ -34,24 +34,20 @@ final _logger = AtSignLogger('BridgeEntry');
 /// opened: the client's own for keys, the passkey session's, which also
 /// closes its vault, for a passkey.
 Future<Session> _openSession(SessionOptions options,
-    {SessionTransport? keysTransport,
-    SessionTransportOptions? passkeyTransport,
-    OpenPasskeySession? passkeyOpen}) async {
+    {SessionTransport? keysTransport, OpenPasskeySession? passkeyOpen}) async {
   final (AtClient client, Future<void> Function() stop) = switch (options) {
     KeysSessionOptions() => await _openKeys(options, keysTransport),
-    PasskeySessionOptions() =>
-      await _openPasskey(options, passkeyTransport, passkeyOpen),
+    PasskeySessionOptions() => await _openPasskey(options, passkeyOpen),
   };
   return sessionOver(client, stop, options);
 }
 
-/// [_openSession] with the transport, and the passkey login, left to the
+/// [_openSession] with the keys transport and the passkey login left to the
 /// caller, so a test can drive the real openers over fakes. No barrel
 /// exports it.
 @visibleForTesting
 final Future<Session> Function(SessionOptions options,
     {SessionTransport? keysTransport,
-    SessionTransportOptions? passkeyTransport,
     OpenPasskeySession? passkeyOpen}) openJsSession = _openSession;
 
 /// The [Session] [options] describes over [client], whose [stop] ends what
@@ -90,10 +86,9 @@ Future<(AtClient, Future<void> Function())> _openKeys(
 
 Future<(AtClient, Future<void> Function())> _openPasskey(
     PasskeySessionOptions options,
-    [SessionTransportOptions? transport,
-    OpenPasskeySession? login]) async {
+    [OpenPasskeySession? login]) async {
   final session = await (login ?? browserPasskeyOpener)(
-      options, transport ?? SessionTransportOptions(root: options.rootDomain));
+      options, SessionTransportOptions(root: options.rootDomain));
   return (session.client, session.stop);
 }
 
