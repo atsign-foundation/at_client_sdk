@@ -199,7 +199,7 @@ surface.
 ### D-38 — the compile target
 
 **Problem.** The trunk build script takes no argument: it always runs both compilers, warns and exits 0 when the
-dart2wasm build fails unless `WASM_REQUIRED=1`, and writes `at_client.js`. On trunk the web release ships the dart2js bundle only, and no workflow publishes the bridge at all. The target is
+dart2wasm build fails unless `WASM_REQUIRED=1`, and writes `at_client.js`. On trunk no workflow publishes the bridge. The target is
 therefore implicit in whatever the script last ran, and a failed wasm build can leave a dart2js-only artifact ([D-38](../../architecture/decisions.md)).
 
 **Options considered.**
@@ -212,9 +212,8 @@ therefore implicit in whatever the script last ran, and a failed wasm build can 
 - A `--target` flag with `dart2js` as the default (chosen).
 
 **Decision and why.** `tool/build.sh` takes `--target dart2js|dart2wasm`; `dart2js` is the default, `dart2wasm` is
-strict with no silent fallback, and an unknown target exits 1. The release workflow takes the target as a dispatch
-input, reads it through `env:`, tags a wasm release distinctly and attests every asset. The deciding argument is that
-the source is already target-agnostic, so the cost is in the build and release plumbing, not in the bridge.
+strict with no silent fallback, and an unknown target exits 1. The deciding argument is that the entry already
+compiles under both compilers (`test/web/compile_test.dart`), so the cost is in the build script, not in the bridge.
 
 **Cost.** Two release targets to keep green, and a wasm release is a separate prerelease under its own tag and
 advisory (OQ-16), so it does not replace the default.
