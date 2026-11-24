@@ -1096,14 +1096,34 @@ void main() {
       await network.close();
     });
 
-    test('a close whose stop failed can be tried again', () async {
+    test('a close whose stop failed returns the same failure when called again',
+        () async {
       client.stopFailure = StateError('boom');
-      await expectLater(session.close(), throwsA(isA<StateError>()));
 
-      await session.close();
-      await session.close();
+      final first = session.close();
+      Object? firstError;
+      try {
+        await first;
+        fail('the first close should have failed');
+      } on StateError catch (e) {
+        firstError = e;
+      }
 
-      expect(client.stops, 2);
+      final second = session.close();
+      final third = session.close();
+      expect(second, same(first));
+      expect(third, same(first));
+
+      for (final later in [second, third]) {
+        Object? error;
+        try {
+          await later;
+        } on StateError catch (e) {
+          error = e;
+        }
+        expect(error, same(firstError));
+      }
+      expect(client.stops, 1);
     });
 
     test('cancels every active watch, none twice once cancelled', () async {

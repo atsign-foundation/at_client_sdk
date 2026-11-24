@@ -122,7 +122,7 @@ Feature: create opens a session and close ends it
     When close is called
     Then the online and offline listeners are still removed and the failure is logged
 
-  Scenario: a close whose stop failed can be tried again
+  Scenario: a close whose stop failed returns the same failure when called again
     Given a session whose stop fails on the first close
-    When close is called, rejects, and is called again twice
-    Then the second close stops the client, the third is a no-op, and stop ran twice in all
+    When close is called, rejects, and is called twice more
+    Then each later close returns that same failed future and stop ran once in all

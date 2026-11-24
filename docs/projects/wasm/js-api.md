@@ -510,7 +510,7 @@ const client = await AtClient.create({
 
 | Area | In the alpha |
 | --- | --- |
-| Session | `create` opens a keys-file session (`portalSession`); `close`; secure context required |
+| Session | `create` opens a keys-file session (`portalSession`); `close` stops the client and every subscription, with no time bound of its own beyond the client's `stop()`, and a close whose stop failed is final: every later `close` rejects with that same failure; secure context required |
 | Collections | `collection<T>(name, { type, eventSource, expiration })` returns `Collection<T>` with `create`, `get`, `list`, `query`, `update`, `share`, `remove`, `watch`. `query` takes a `{ path, op, value }[]`; there is no fluent builder, `orderByPath` or `limit` |
 | `watch` | `AsyncIterable<JsEvent<T>>`; `updated` carries `type`, `id`, `owner` only; an unrecognised kind arrives as `unknown`; a stream error rejects one `next()` and the stream continues (`overflow` if buffered events exceed the queue limit) |
 | Notifications | `notify`, `subscribe(regex?)` returns an `AsyncIterable<AtNotification>`; a stream error rejects one `next()` (`overflow` if buffered events exceed the queue limit) |

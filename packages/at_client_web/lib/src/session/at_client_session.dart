@@ -614,12 +614,17 @@ class AtClientSession implements Session {
     }
   }
 
+  /// Stops the client and every subscription. The first call starts the
+  /// teardown; every later call, concurrent or sequential, returns that same
+  /// future, whether it succeeded or failed, so nothing re-runs and a close
+  /// whose stop failed stays failed.
+  ///
+  /// A keys session's close makes no time bound of its own: it awaits the
+  /// client's `stop()`, whatever that takes. A passkey session's close is
+  /// bounded by D-30's vault settle, the client's stop plus 10 seconds plus
+  /// `AtServerAtKeysIo.lockWaitBound`.
   @override
-  Future<void> close() => _closing ??= _tearDown().catchError((Object e) {
-        // A failed teardown may be tried again; the next close() re-runs it.
-        _closing = null;
-        throw e;
-      });
+  Future<void> close() => _closing ??= _tearDown();
 
   Future<void> _tearDown() async {
     _closed = true;
