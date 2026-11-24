@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_commons/atsign.dart';
@@ -22,8 +23,8 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// once it has.
   final Map<Atsign, Completer<void>> _updates = {};
 
-  /// The zone key under which an update records the Atsigns it is changing
-  /// on this store.
+  /// The zone key under which a change carries the updates of this store it
+  /// runs inside.
   final Object _updating = Object();
 
   @visibleForTesting
@@ -67,7 +68,9 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
     _internal[key] = atKeys;
   }
 
-  /// Literal mirror to write as there is no need to flush to memory.
+  /// Replaces the keys held for [atsign] with [atKeys]; unlike the file,
+  /// keychain and server-held stores, it does not first check that nothing
+  /// held is lost.
   @override
   FutureOr<void> flush(Atsign atsign, AtKeys atKeys) {
     _internal[atsign.toAtsign()] = atKeys;
@@ -78,34 +81,60 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
   /// leaves the stored keys as they were.
   ///
   /// Updates of one Atsign run one at a time, and an update started from
-  /// inside a change on the same Atsign throws [StateError].
+  /// inside a change on the same Atsign, while that change's update runs,
+  /// throws [StateError]. A change must not wait on an update of this store
+  /// that waits, in turn, on the change's own Atsign.
   ///
-  /// Stored keys that record no Atsign are given [atsign] before the copy is
-  /// made; keys that record one keep it.
+  /// The copy of keys that record no Atsign records [atsign]. Keys that record
+  /// another Atsign keep it, where the file, keychain and server-held stores
+  /// refuse them.
   @override
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
     final key = atsign.toAtsign();
-    final changing = Zone.current[_updating] as Set<Atsign>? ?? const {};
-    if (changing.contains(key)) {
+    final enclosing = Zone.current[_updating] as List<_Change>? ?? const [];
+    if (enclosing.any((change) => change.live && change.atsign == key)) {
       throw StateError('an update for $key was started from inside a change '
           'to $key on the same store');
     }
     final before = _updates[key]?.future;
     final ended = _updates[key] = Completer<void>();
+    final change = _Change(key);
     try {
       await before;
-      final stored = await read(atsign.toString());
-      stored.atsign ??= key;
-      final copy = AtKeys.fromJson(stored.toJson())..atsign = stored.atsign;
+      final copy = _copy(await read(atsign.toString()), key);
       final changed = await runZoned(() => mutate(copy), zoneValues: {
-        _updating: {...changing, key}
+        _updating: [...enclosing, change]
       });
       if (changed == false) return;
       await flush(atsign, copy);
     } finally {
+      change.live = false;
       ended.complete();
       if (identical(_updates[key], ended)) _updates.remove(key);
     }
   }
+
+  /// A copy of [stored] that shares nothing with it and records [atsign] when
+  /// [stored] records no Atsign, leaving [stored] as it was.
+  static AtKeys _copy(AtKeys stored, Atsign atsign) {
+    final had = stored.atsign;
+    final Map<String, dynamic> json;
+    try {
+      stored.atsign = had ?? atsign;
+      json = stored.toJson();
+    } finally {
+      stored.atsign = had;
+    }
+    return AtKeys.fromJson(jsonDecode(jsonEncode(json)) as Map<String, dynamic>)
+      ..atsign = had ?? atsign;
+  }
+}
+
+/// One update's change on an [InMemoryAtKeysIo], live until that update ends.
+class _Change {
+  _Change(this.atsign);
+
+  final Atsign atsign;
+  bool live = true;
 }

@@ -126,6 +126,133 @@ void main() {
     });
 
     test(
+        'when an update starts while the second of two queued updates is '
+        'running, then it waits for the second to end', () async {
+      final io = holding();
+      final secondRunning = Completer<void>();
+      final release = Completer<void>();
+      var thirdRan = false;
+
+      final first = io.update(alice, (keys) {
+        keys.addKey(symmetricKey('first'));
+        return true;
+      });
+      final second = io.update(alice, (keys) async {
+        secondRunning.complete();
+        await release.future;
+        keys.addKey(symmetricKey('second'));
+        return true;
+      });
+      await secondRunning.future;
+      final third = io.update(alice, (keys) {
+        thirdRan = true;
+        keys.addKey(symmetricKey('third'));
+        return true;
+      });
+      await pumpEventQueue();
+
+      expect(thirdRan, isFalse,
+          reason: 'the third update waits for the second, which is running');
+      release.complete();
+      await Future.wait([first, second, third]);
+      final read = await io.read('@alice');
+      for (final keyId in ['first', 'second', 'third']) {
+        expect(read.atSignKeysForKeyId(keyId), isNotEmpty, reason: keyId);
+      }
+    });
+
+    test(
+        'when a change on @alice calls update on @bob, whose change calls '
+        'update on @alice, then that innermost update throws StateError',
+        () async {
+      final io = holding();
+      final bob = '@bob'.toAtsign();
+      await io.write('@bob', legacyAtKeys(atsign: bob));
+      var innermostRan = false;
+
+      await io.update(alice, (_) async {
+        await io.update(bob, (_) async {
+          await expectLater(
+              io.update(alice, (_) {
+                innermostRan = true;
+                return true;
+              }),
+              throwsA(isA<StateError>()));
+          return false;
+        });
+        return false;
+      });
+
+      expect(innermostRan, isFalse);
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test(
+        'when a change schedules an update on the same Atsign that starts after '
+        'its own update has ended, then that update runs', () async {
+      final io = holding();
+      var outerEnded = false;
+      final later = Completer<void>();
+
+      await io.update(alice, (_) {
+        Timer(const Duration(milliseconds: 1), () {
+          later.complete(Future.sync(() {
+            expect(outerEnded, isTrue,
+                reason: 'control: the update that scheduled this has ended');
+            return io.update(alice, (keys) {
+              keys.addKey(symmetricKey('later'));
+              return true;
+            });
+          }));
+        });
+        return false;
+      });
+      outerEnded = true;
+      await later.future;
+
+      expect((await io.read('@alice')).atSignKeysForKeyId('later'), isNotEmpty);
+    }, timeout: const Timeout(Duration(seconds: 5)));
+
+    test(
+        'when an update edits a nested metadata value and returns false, then '
+        'a read holds the value as it was', () async {
+      final io = holding(legacyAtKeys(atsign: alice)
+        ..metadata['extra'] = <String, dynamic>{'n': 1});
+
+      await io.update(alice, (keys) {
+        (keys.metadata['extra'] as Map)['n'] = 2;
+        return false;
+      });
+
+      expect((await io.read('@alice')).metadata['extra'], {'n': 1});
+    });
+
+    test(
+        'when an update adds a key and returns true, then a read holds '
+        'everything the store held besides', () async {
+      AtKeys held() => legacyAtKeys(atsign: alice)
+        ..addKey(symmetricKey('held'))
+        ..recordEnrollmentSnapshot(_enrollment,
+            namespaces: {'wavi': 'rw'}, appName: 'app', deviceName: 'device')
+        ..addKey(symmetricKey('enrolled', enrollmentId: _enrollment))
+        ..metadata['note'] = 'kept';
+      final io = holding(held());
+
+      await io.update(alice, (keys) {
+        keys.addKey(symmetricKey('added'));
+        return true;
+      });
+
+      final read = await io.read('@alice');
+      expect(read, held()..addKey(symmetricKey('added')),
+          reason: 'the stored keys keep their flat fields, materials and '
+              'metadata');
+      final snapshot = read.enrollmentInfo(_enrollment)!;
+      expect(snapshot.namespaces, {'wavi': 'rw'});
+      expect(snapshot.appName, 'app');
+      expect(snapshot.deviceName, 'device');
+    });
+
+    test(
         'when an update adds a key to keys that record no Atsign, then a read '
         'holds the key and records @alice', () async {
       final io = holding(AtKeys()..addKey(symmetricKey('held')));
@@ -138,6 +265,33 @@ void main() {
       final read = await io.read('@alice');
       expect(read.atSignKeysForKeyId('added'), isNotEmpty);
       expect(read.atsign, alice);
+    });
+
+    test(
+        'when an update on typed keys that record no Atsign returns false, then '
+        'the change is handed keys that record @alice and a read records no '
+        'Atsign', () async {
+      final io = holding(AtKeys()..addKey(symmetricKey('held')));
+      Atsign? handed;
+
+      await io.update(alice, (keys) {
+        handed = keys.atsign;
+        return false;
+      });
+
+      expect(handed, alice);
+      expect((await io.read('@alice')).atsign, isNull);
+    });
+
+    test(
+        'when an update on typed keys that record no Atsign throws, then a '
+        'read records no Atsign', () async {
+      final io = holding(AtKeys()..addKey(symmetricKey('held')));
+
+      await expectLater(
+          io.update(alice, (_) => throw _Refused()), throwsA(isA<_Refused>()));
+
+      expect((await io.read('@alice')).atsign, isNull);
     });
 
     test(
@@ -230,5 +384,8 @@ void _updateContract(Future<WrittenAtKeysIo> Function() holdingAlice) {
     expect(read.atsign, alice);
   });
 }
+
+/// The enrollment `legacyAtKeys` records.
+const _enrollment = '352b78c8-4b6f-4d07-a9cf-5466512ffa44';
 
 class _Refused implements Exception {}
