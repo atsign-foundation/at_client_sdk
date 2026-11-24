@@ -436,13 +436,12 @@ class EnrollmentSubmitter {
 
   /// Handles an APKAM-authenticated self-enrollment (the PQ retrofit).
   ///
-  /// Serialised per keyfile by [_serializedPerKeyfile] only where the process
-  /// sets [retrofitSerializer], as at_client_cli does in its auth command and
-  /// in `CliKeys.fileFor`, and the store is a `FileAtKeysIo`. There the
-  /// critical section spans the whole check → mint → submit → persist
-  /// sequence, so two processes sharing one keyfile cannot both mint.
-  /// Elsewhere both may send a request, and the second to file is refused
-  /// and revokes its enrollment.
+  /// Serialised per keyfile by [_serializedPerKeyfile] only when
+  /// [retrofitSerializer] is set and covers the store, as
+  /// `fileRetrofitSerializer` covers a `FileAtKeysIo`. There the critical
+  /// section spans the whole check → mint → submit → persist sequence, so two
+  /// processes sharing one keyfile cannot both mint. Elsewhere both may send
+  /// a request, and the second to file is refused and revokes its enrollment.
   ///
   /// The new enrollment's keys are filed through the store's
   /// [WrittenAtKeysIo.update], on a fresh read, so material another writer
@@ -648,21 +647,12 @@ class EnrollmentSubmitter {
           // NOTE: update may run this again on a fresh read; only the last
           // run counts.
           filed = keys;
-          // Persist into the SAME keyfile: the new credentials land as typed
-          // materials tagged with the new enrollment id, while the legacy
-          // flat fields — frozen by the keyfile's never-lose contract — keep
-          // carrying the original enrollment's.
           keys.fileApkamMaterial(
               enrollmentId: newEnrollmentId,
               algorithm: materialAlgo,
               publicKey: apkamPublic,
               privateKey: apkamPrivate);
-          // Filed, not merely advertised. An enrollment whose `_apsk` names a
-          // key its keyfile does not hold signs with something else, and the
-          // next start's SigningKeyMinting finds the in-use algorithm
-          // missing, mints a SECOND key and republishes — orphaning the key
-          // this record already published and unverifying whatever was
-          // signed against it.
+          // NOTE: an advertised signing key is filed, not only advertised.
           if (signing != null) {
             keys.fileSigningMaterial(
                 enrollmentId: newEnrollmentId,
@@ -670,8 +660,6 @@ class EnrollmentSubmitter {
                 publicKey: signing.publicKey,
                 privateKey: signing.privateKey);
           }
-          // Whatever the metadataBuilder filed (the X-Wing key package's two
-          // halves), re-tagged with the enrollment id it now belongs to.
           keys.adoptMaterials(constructionKeys.keys,
               enrollmentId: newEnrollmentId);
           return true;
