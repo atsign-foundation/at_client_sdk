@@ -500,24 +500,41 @@ Planned first release: `@atsign/at_client_web@0.1.0-alpha.1`, dist-tag `alpha`, 
 Browser only.
 
 ```ts
+// a keys-file session
 const client = await AtClient.create({
   atSign: '@alice',
   namespace: 'wavi',      // required; the one grant name
   keys: atKeys,           // .atKeys JSON, string or parsed object
   rootDomain: 'root.example.org:9002',  // optional, passed through unchanged
 });
+
+// a passkey session; keys is not read
+const client = await AtClient.create({
+  atSign: '@alice',
+  namespace: 'wavi',      // required; the one grant name
+  passkey: true,
+  rpId: 'example.org',    // required with passkey: the relying party id
+  rpName: 'Wavi',         // required with passkey: its display name
+  rootDomain: 'root.example.org:9002',  // optional, passed through unchanged
+});
 ```
+
+**Create options.** `create` takes `atSign` and `namespace` in both forms, `keys` for a
+keys-file session, and `passkey: true` with `rpId` and `rpName` (both non-empty strings) for
+a passkey session. A missing or mistyped option, a `passkey` that is not a boolean, or an
+empty `rpId` or `rpName`, rejects with `invalid_argument` naming the option and never its
+value.
 
 | Area | In the alpha |
 | --- | --- |
-| Session | `create` opens a keys-file session (`portalSession`); `close` stops the client and every subscription, with no time bound of its own beyond the client's `stop()`, and a close whose stop failed is final: every later `close` rejects with that same failure; secure context required |
+| Session | `create` opens a keys-file session (`portalSession`) or, with `passkey: true`, a passkey session (`passkeyLogin`); `close` stops the client and every subscription, with no time bound of its own beyond the client's `stop()`, and a close whose stop failed is final: every later `close` rejects with that same failure; secure context required |
 | Collections | `collection<T>(name, { type, eventSource, expiration })` returns `Collection<T>` with `create`, `get`, `list`, `query`, `update`, `share`, `remove`, `watch`. `query` takes a `{ path, op, value }[]`; there is no fluent builder, `orderByPath` or `limit` |
 | `watch` | `AsyncIterable<JsEvent<T>>`; `updated` carries `type`, `id`, `owner` only; an unrecognised kind arrives as `unknown`; a stream error rejects one `next()` and the stream continues (`overflow` if buffered events exceed the queue limit) |
 | Notifications | `notify`, `subscribe(regex?)` returns an `AsyncIterable<AtNotification>`; a stream error rejects one `next()` (`overflow` if buffered events exceed the queue limit) |
 | Pairing | `otp`, `pendingEnrollments`, `approve`, `deny`, only on a session whose enrollment holds `__manage` rw |
 | Status | `status` and `onStatus(cb) => off` |
 | Notify key | `notify(key, value)` takes `{ key, namespace?, sharedWith, sharedBy?, public?, cached?, noNamespace? }`. The key is sent as `<key>.<namespace>` with `namespace` or, when that is left out, the session's. `noNamespace: true` sends the key as `<key>` with no namespace, and a `namespace` given beside it is ignored; the key name is checked either way. `public: true` and `cached: true` reject with `bad_key`. A flag that is not a boolean rejects with `bad_key` |
-| Not in the alpha | `storage`, `waitUntilCaughtUp`, `isInSync`, `notificationStatus`, `retry`, passkey sign-in, onboarding and enrollment of new browsers |
+| Not in the alpha | `storage`, `waitUntilCaughtUp`, `isInSync`, `notificationStatus`, `retry`, onboarding and enrollment of new browsers |
 
 **Status shape.** `ConnectionStatus` is one of `'connecting'`, `'connected'`,
 `'waiting:network'`, `'waiting:server'`, `'waiting:auth'`. `status` is the latest state;
@@ -532,6 +549,8 @@ The client reconnects by itself and exposes no retry.
 
 **Keys.** The plaintext `.atKeys` JSON, or the flat shape `AtKeys.fromJson` accepts, opens a
 session. Documents whose key fields are self-encrypted are not decrypted in the browser.
+With `passkey: true`, `create` opens the passkey the browser holds for the atSign instead,
+and `keys` is not read.
 
 **Lost notifications.** A notification sent while the tab is closed or reloading is never
 delivered to it.
@@ -634,12 +653,12 @@ land. Until then no adapter operation validates data against a schema.
 | `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
-| `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, or an invalid `address.owner`; the message names the parameter and never its value, at most 128 characters on one line |
+| `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, an invalid `address.owner`, or a missing or mistyped `create` option such as `passkey`, `rpId` or `rpName`; the message names the parameter and never its value, at most 128 characters on one line |
 | `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); `UnsupportedOperationException` (`create` on a page that is not a secure context); or an `UnsupportedError`, mapped by its type alone: its text is never read or shown, and the message is always `the operation is not supported here` (the passkey setup lock raises one on a browser without `navigator.locks`) |
 | `bad_key` | `InvalidKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
 | `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
 
-When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation.
+When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation. For a passkey session `rpId` and `rpName` take the place of `keys` in that order.
 
 ---
 

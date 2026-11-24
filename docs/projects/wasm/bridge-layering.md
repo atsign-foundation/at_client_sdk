@@ -48,9 +48,20 @@ releases it: `AtClient.stop()` for a keys session, `PasskeySession.stop()` for a
 session, which closes the passkey's vault once the client has stopped (D-30). The session's
 `close()` awaits that recorded stop. Nothing is renamed and no public type is added.
 
+`BridgeEntry.create` builds `PasskeySessionOptions` when the call asks for passkey sign-in
+(`passkey: true` with `rpId` and `rpName`) and `KeysSessionOptions` otherwise. Both arms take
+their transport as an argument: `_openKeys` a `SessionTransport`, by default
+`sessionTransport` over the options' root, and `_openPasskey` a `SessionTransportOptions`, by
+default the options' root. The passkey login is an argument too, by default `passkeyLogin`.
+`openJsSession` hands the same private function those transports and the login, so a test
+drives the real arms over fakes; no barrel exports it.
+
 ```dart
 // private to lib/src/js/bridge.dart
-Future<Session> _openSession(SessionOptions options);
+Future<Session> _openSession(SessionOptions options,
+    {SessionTransport? keysTransport,
+    SessionTransportOptions? passkeyTransport,
+    OpenPasskeySession? passkeyOpen});
 ```
 
 `close()` rules:
