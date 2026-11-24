@@ -246,7 +246,6 @@
   waiting up to 5 minutes between attempts. Any other answer that doesn't let
   the client in, such as AT0011, waits the same way and leaves
   `client.connection` as it was.
-- feat: `ownGrantsOf` is now exported from `package:at_client/at_client.dart`.
 
 ## 4.0.0
 

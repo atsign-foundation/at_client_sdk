@@ -23,11 +23,6 @@ Future<Set<String>> authorisedNamespacesOf(AtClient atClient,
 /// is the access granted on it, such as `rw`. It is empty when the atServer
 /// returns no record for this client's enrollment id.
 ///
-/// Each call lists the atServer's enrollment roster, so a caller that needs
-/// the answer more than once keeps it. It reads this client's grants alone,
-/// which `EnrollmentService.fetchEnrollmentRequests` leaves to the caller to
-/// pick out of the roster by `AtClient.enrollmentId`.
-///
 /// Throws when the enrollment record cannot be read.
 Future<Map<String, dynamic>?> ownGrantsOf(AtClient atClient) async {
   final enrollmentId = atClient.enrollmentId;
