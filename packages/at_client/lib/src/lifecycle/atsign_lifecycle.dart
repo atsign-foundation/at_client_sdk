@@ -560,14 +560,20 @@ extension AtsignLifecycle on Atsign {
     final signingAlgo =
         SigningAlgoType.values.asNameMap()[apkam.algorithm.toString()];
     if (signingAlgo == null) {
-      // NOTE: the id and the algorithm are escaped here, since the message
-      // keeps only the first line of the error's text.
-      throw AtKeysUnusableException.noAuthenticationKeypair(this,
-          source: keys.describeSource(this),
-          error: AtKeyNotFoundException('pending enrollment '
-              '"${clipForMessage(enrollmentId, quote: '"')}" signs with '
-              '"${clipForMessage(apkam.algorithm, quote: '"')}", which this '
-              'build cannot sign with; resume it with a build that can'));
+      final reason = 'pending enrollment '
+          '"${clipForMessage(enrollmentId, quote: '"', maxLength: 36)}" '
+          'signs with '
+          '"${clipForMessage(apkam.algorithm, quote: '"', maxLength: 30)}", '
+          'which this build cannot sign with; resume it with a build that '
+          'can';
+      final source = keys.describeSource(this);
+      throw AtKeysUnusableException(
+          'The keys for $this in ${theAtKeysStore(source)} cannot be used to '
+          'authenticate: $reason.',
+          atSign: this,
+          cause: AtKeysUnusableCause.noAuthenticationKeypair,
+          source: source,
+          error: AtKeyNotFoundException(reason));
     }
     return PendingEnrollment(
         atSign: this,

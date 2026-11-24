@@ -381,10 +381,13 @@ void main() {
 
     final filedJson = jsonEncode((await filed.read(atSign)).toJson());
 
-    /// A store holding the filed request with both halves of its pending
-    /// APKAM keypair tagged as [algorithm].
-    Future<WrittenAtKeysIo> signingWith(String algorithm) async {
-      final json = jsonDecode(filedJson) as Map<String, dynamic>;
+    /// A store holding the filed request under [id], with both halves of its
+    /// pending APKAM keypair tagged as [algorithm].
+    Future<WrittenAtKeysIo> signingWith(String algorithm,
+        {String id = enrollmentId}) async {
+      final json = jsonDecode(
+              filedJson.replaceAll(jsonEncode(enrollmentId), jsonEncode(id)))
+          as Map<String, dynamic>;
       void retag(Object? node) {
         if (node is Map) {
           if ((node['role'] ==
@@ -406,7 +409,11 @@ void main() {
       return store;
     }
 
-    final unknown = await signingWith('mldsa87');
+    const unknownAlgorithm = 'future-9c4e1a7b3f05d268';
+    expect(SigningAlgoType.values.map((a) => a.name),
+        isNot(contains(unknownAlgorithm)),
+        reason: 'the control: no SigningAlgoType has the fixture\'s name');
+    final unknown = await signingWith(unknownAlgorithm);
     expect(
         (await unknown.read(atSign))
             .keysForEnrollment(enrollmentId)
@@ -415,9 +422,10 @@ void main() {
                 m.status == CryptographicMaterialStatus.pending)
             .single
             .algorithm,
-        'mldsa87',
-        reason: 'the control: the pending request now signs with an '
-            'algorithm no SigningAlgoType names');
+        unknownAlgorithm,
+        reason: 'the control: the pending request now signs with the '
+            'fixture\'s name');
+    final before = jsonEncode((await unknown.read(atSign)).toJson());
 
     await expectLater(
         resume(unknown),
@@ -431,8 +439,12 @@ void main() {
                 'message',
                 'The keys for $atSign in the AtKeys store (a test location) '
                     'cannot be used to authenticate: pending enrollment '
-                    '"$enrollmentId" signs with "mldsa87", which this build '
-                    'cannot sign with; resume it with a build that can.')));
+                    '"$enrollmentId" signs with "$unknownAlgorithm", which '
+                    'this build cannot sign with; resume it with a build '
+                    'that can.')));
+    expect(jsonEncode((await unknown.read(atSign)).toJson()), before,
+        reason: 'the refusal leaves the request in the store for a build '
+            'that knows the algorithm');
 
     await expectLater(
         resume(await signingWith('ml"dsa\n87')),
@@ -441,10 +453,50 @@ void main() {
             'message',
             allOf(
                 isNot(contains('\n')),
-                contains(r'signs with "ml\\"dsa\\u000a87"'),
+                contains(r'signs with "ml\"dsa\u000a87", which'),
                 endsWith('resume it with a build that can.')))),
-        reason: 'a name holding a newline and a quote is quoted escaped, on '
-            'one line that still ends with the instruction');
+        reason: 'a name holding a newline and a quote is quoted, escaped '
+            'once, on one line that still ends with the instruction');
+
+    const quotedId = 'e\n"one';
+    expect(
+        (await resume(
+                await signingWith(SigningAlgoType.rsa2048.name, id: quotedId)))
+            ?.enrollmentId,
+        quotedId,
+        reason: 'the control: the request filed under an id holding a '
+            'newline and a quote resumes');
+    await expectLater(
+        resume(await signingWith(unknownAlgorithm, id: quotedId)),
+        throwsA(isA<AtKeysUnusableException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+                isNot(contains('\n')),
+                contains(r'pending enrollment "e\u000a\"one" signs with'),
+                endsWith('resume it with a build that can.')))),
+        reason: 'an id holding a newline and a quote is quoted, escaped once, '
+            'on one line that still ends with the instruction');
+
+    final longId = 'e' * 100;
+    final longAlgorithm = 'future-${'a' * 100}';
+    await expectLater(
+        resume(await signingWith(longAlgorithm, id: longId)),
+        throwsA(isA<AtKeysUnusableException>()
+            .having(
+                (e) => e.message,
+                'message',
+                allOf(
+                    contains('pending enrollment "${'e' * 36}..." signs with '
+                        '"future-${'a' * 23}...", which'),
+                    endsWith('resume it with a build that can.')))
+            .having(
+                (e) => (e.error as AtKeyNotFoundException).message.length,
+                'the reason\'s length',
+                lessThanOrEqualTo(maxMessageTextLength))),
+        reason: 'a long id and a long name are clipped so the reason fits in '
+            'the characters a message quotes, and still ends with the '
+            'instruction');
     expect(connections, isEmpty, reason: 'no connection is opened');
     expect(finder.asked, isEmpty, reason: 'no atDirectory is asked');
   });
