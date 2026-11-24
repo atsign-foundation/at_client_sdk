@@ -276,10 +276,17 @@ void main() {
   });
 
   group('readers that could export what a read returns', () {
-    // A read result holds the derived APKAM private key. Only these files
-    // serialise AtKeys: the key file writer, the stripping paths and the
-    // in-process pending-enrollment handshake. A new one must be audited.
+    // A read result holds the derived APKAM private key, so only audited files
+    // may serialise AtKeys. A new one must be audited and listed here.
     test('only the audited files serialise a keys value', () {
+      const audited = {
+        'lib/src/lifecycle/pending_enrollment.dart',
+        'lib/src/passkey/at_keys_document.dart',
+        'lib/src/passkey/at_server_at_keys_io.dart',
+        'lib/src/passkey/passkey_custody.dart',
+        'at_auth/lib/src/keys/io/file_io.dart',
+        'at_auth/lib/src/keys/io/memory_io.dart',
+      };
       final serialises =
           RegExp(r'([kK]eys|stored|held|existing|restored|retrofitted|snapshot)'
               r'\w*\)?\.toJson\(\)');
@@ -293,13 +300,13 @@ void main() {
           }
         }
       }
-      expect(found, {
-        'lib/src/lifecycle/pending_enrollment.dart',
-        'lib/src/passkey/at_keys_document.dart',
-        'lib/src/passkey/at_server_at_keys_io.dart',
-        'lib/src/passkey/passkey_custody.dart',
-        'at_auth/lib/src/keys/io/file_io.dart',
-      });
+      expect(found.difference(audited), isEmpty,
+          reason: 'every file that serialises a keys value is audited');
+      for (final path in audited) {
+        final local = path.startsWith('at_auth/') ? '../$path' : path;
+        expect(File(local).existsSync(), isTrue,
+            reason: 'every audited file exists: $path');
+      }
     });
   });
 }
