@@ -216,8 +216,8 @@ passwordless `sudo`, and remove what they create.
 
 A systemd credential is a read-only, per-service copy that disappears at stop.
 That suits a key, but it can't carry the atKeys document itself, because the
-client writes to its keys while running: `flush` and `update` file namespace
-keys, signing keys and retrofit results.
+client writes to its keys while running: `update` files namespace keys,
+signing keys and retrofit results.
 
 **Re-measure note on the flipped-byte row.** The original result came from a
 run of [`probes/systemd_load_credential_encrypted.sh`](probes/systemd_load_credential_encrypted.sh)
