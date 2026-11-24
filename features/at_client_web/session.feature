@@ -150,3 +150,8 @@ Feature: create opens a session and close ends it
     Given a session whose stop fails on the first close
     When close is called, rejects, and is called twice more
     Then each later close returns that same failed future and stop ran once in all
+
+  Scenario: the entry installs one global whose only member is create
+    Given the bridge entry module
+    When its main is called
+    Then the global __atsignAtClientWeb is created with only create
