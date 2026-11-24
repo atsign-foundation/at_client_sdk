@@ -1038,6 +1038,48 @@ void main() {
           isNotNull);
     });
   });
+
+  group('Given a store whose update returns without running the change', () {
+    test(
+        'when a self-enrollment files its keys, then it revokes the '
+        'enrollment it created and throws AtEnrollmentException', () async {
+      final keysIo = _NeverRunsTheChangeKeysIo();
+      await keysIo.write(atSign, legacyKeys());
+      final sent = <String>[];
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestFor(AtAuthSession(
+                atSign: atSign,
+                rootDomain: const AtRootDomain('127.0.0.1', 1),
+                atKeysIo: keysIo,
+                enrollmentId: 'legacy-1')),
+            answeringAfter(() async {}, sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('could not be written'),
+                  contains('new-123 it created was revoked'))));
+    });
+  });
+}
+
+/// An in-memory keyfile whose [update] returns without running the change.
+class _NeverRunsTheChangeKeysIo extends InMemoryAtKeysIo {
+  // ignore: invalid_use_of_visible_for_testing_member
+  _NeverRunsTheChangeKeysIo();
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {}
 }
 
 /// An in-memory keyfile whose [update] runs the change twice, each time on a

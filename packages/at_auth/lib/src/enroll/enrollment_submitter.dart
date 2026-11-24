@@ -641,7 +641,7 @@ class EnrollmentSubmitter {
       }
 
       final signing = request.advertisedSigningKey;
-      late AtKeys filed;
+      AtKeys? filed;
       try {
         await keysIo.update(request.atSign.toAtsign(), (keys) {
           // NOTE: update may run this again on a fresh read; only the last
@@ -664,6 +664,10 @@ class EnrollmentSubmitter {
               enrollmentId: newEnrollmentId);
           return true;
         });
+        if (filed == null) {
+          throw StateError('${keysIo.runtimeType}.update returned without '
+              'running its change, so nothing was filed');
+        }
       } catch (e) {
         // NOTE: an approved enrollment whose keys were not saved is revoked;
         // revoking needs `__manage`, which a scoped parent may not hold.
