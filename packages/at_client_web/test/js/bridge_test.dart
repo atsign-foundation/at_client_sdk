@@ -15,17 +15,17 @@ import 'package:at_client/at_client.dart'
         AtNoCredentialException,
         AtOpenRefusedException,
         Atsign;
-import 'package:at_client/passkey.dart' show PasskeySession;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
-import 'package:at_client_web/src/session/session_transport_options.dart';
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
+
+import 'bridge_test_helpers.dart';
 
 /// A [ItemCollection] that records each call and answers what it is
 /// told to.
@@ -212,46 +212,6 @@ class _FakeSession implements Session {
   }
 }
 
-/// What a promise settled with: a value or a rejection.
-sealed class _Settled {}
-
-class _Resolved extends _Settled {
-  _Resolved(this.value);
-  final JSAny? value;
-}
-
-class _Rejected extends _Settled {
-  _Rejected(this.reason);
-  final JSAny? reason;
-
-  String get code => (reason! as JSObject)['code'].dartify()! as String;
-  String get message => (reason! as JSObject)['message'].dartify()! as String;
-  Object? field(String name) => (reason! as JSObject)[name].dartify();
-}
-
-Future<_Settled> _settle(JSAny? promise) {
-  final done = Completer<_Settled>();
-  (promise! as JSObject).callMethod(
-      'then'.toJS,
-      ((JSAny? v) => done.complete(_Resolved(v))).toJS,
-      ((JSAny? r) => done.complete(_Rejected(r))).toJS);
-  return done.future;
-}
-
-Future<JSAny?> _resolved(JSAny? promise) async {
-  final settled = await _settle(promise);
-  if (settled is _Rejected) {
-    fail('rejected with ${settled.code}: ${settled.message}');
-  }
-  return (settled as _Resolved).value;
-}
-
-Future<_Rejected> _rejected(JSAny? promise) async {
-  final settled = await _settle(promise);
-  if (settled is _Resolved) fail('resolved with ${settled.value}');
-  return settled as _Rejected;
-}
-
 /// Data with [levels] nested containers, the data object itself being the
 /// first. Built in a loop, never by literal nesting.
 Map<String, Object?> _nested(int levels) {
@@ -261,13 +221,6 @@ Map<String, Object?> _nested(int levels) {
   }
   return inner! as Map<String, Object?>;
 }
-
-JSObject _obj(Map<String, Object?> map) => map.jsify()! as JSObject;
-
-JSAny? _call(JSObject target, String name, [List<JSAny?> args = const []]) =>
-    args.isEmpty
-        ? target.callMethod(name.toJS)
-        : target.callMethodVarArgs(name.toJS, args);
 
 /// A JS object built by `JSON.parse`, so it can carry a `__proto__` key.
 JSObject _json(String text) =>
@@ -288,47 +241,6 @@ class _ThrowingConnectionClient extends Fake implements AtClient {
 
   @override
   AtConnection get connection => throw failure;
-}
-
-/// A client whose session builds.
-class _QuietClient extends Fake implements AtClient {
-  @override
-  final AtConnection connection = AtConnection(
-      atSign: '@alice', attempt: (_) async => AtConnectionState.online());
-}
-
-/// A passkey session whose [stop] is recorded and can be held open.
-class _GatedPasskeySession extends Fake implements PasskeySession {
-  _GatedPasskeySession(this.client);
-
-  @override
-  final AtClient client;
-
-  var stops = 0;
-  Completer<void>? stopGate;
-
-  @override
-  Future<void> stop() async {
-    stops++;
-    if (stopGate case final gate?) await gate.future;
-  }
-}
-
-/// Records the options and transport the passkey arm hands the login, and
-/// opens [session].
-class _RecordingPasskeyLogin {
-  _RecordingPasskeyLogin(this.session);
-
-  final _GatedPasskeySession session;
-  final seen = <PasskeySessionOptions>[];
-  final transports = <SessionTransportOptions>[];
-
-  Future<PasskeySession> call(
-      PasskeySessionOptions options, SessionTransportOptions transport) async {
-    seen.add(options);
-    transports.add(transport);
-    return session;
-  }
 }
 
 void main() {
@@ -361,7 +273,8 @@ void main() {
       };
 
   Future<JSObject> create([Map<String, Object?>? o]) async =>
-      (await _resolved(_call(api, 'create', [_obj(o ?? opts())])))! as JSObject;
+      (await resolved(invoke(api, 'create', [jsObject(o ?? opts())])))!
+          as JSObject;
 
   group('the bridge has no passkey entry points', () {
     test('only create is exposed', () {
@@ -429,8 +342,8 @@ void main() {
         'evil.com/path?sentinel=1:443',
         'bad host sentinel',
       ]) {
-        final r = await _rejected(_call(api, 'create', [
-          _obj(opts({'rootDomain': bad}))
+        final r = await rejected(invoke(api, 'create', [
+          jsObject(opts({'rootDomain': bad}))
         ]));
 
         expect(r.code, 'invalid_argument');
@@ -447,7 +360,7 @@ void main() {
         opts({'rootDomain': 'a:b:c'}),
         opts({'keys': 5}),
       ]) {
-        final r = await _rejected(_call(api, 'create', [_obj(bad)]));
+        final r = await rejected(invoke(api, 'create', [jsObject(bad)]));
         expect(r.code, 'invalid_argument');
       }
       expect(opened, isEmpty);
@@ -455,8 +368,8 @@ void main() {
 
     test('invalid or empty atSign rejects naming atSign', () async {
       for (final bad in ['', '   ', '@a@b-sentinel', '@alice sentinel']) {
-        final r = await _rejected(_call(api, 'create', [
-          _obj(opts({'atSign': bad}))
+        final r = await rejected(invoke(api, 'create', [
+          jsObject(opts({'atSign': bad}))
         ]));
         expect(r.code, 'invalid_argument');
         expect(r.message, contains('atSign'));
@@ -467,8 +380,8 @@ void main() {
 
     test('invalid or empty namespace rejects naming namespace', () async {
       for (final bad in ['', '   ', 'a.b-sentinel', 'a b sentinel']) {
-        final r = await _rejected(_call(api, 'create', [
-          _obj(opts({'namespace': bad}))
+        final r = await rejected(invoke(api, 'create', [
+          jsObject(opts({'namespace': bad}))
         ]));
         expect(r.code, 'invalid_argument');
         expect(r.message, contains('namespace'));
@@ -480,7 +393,7 @@ void main() {
     test('credential-less keys reject with bad_key', () async {
       openFailure = AtNoCredentialException('@alice');
 
-      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
 
       expect(r.code, 'bad_key');
     });
@@ -498,12 +411,12 @@ void main() {
           'keys': notJson
         }),
       ]) {
-        final r = await _rejected(_call(api, 'create', [_obj(bad)]));
+        final r = await rejected(invoke(api, 'create', [jsObject(bad)]));
         expect(r.code, 'bad_key', reason: '$bad');
         expect(r.message, isNot(contains('sentinel')));
       }
-      final r = await _rejected(_call(api, 'create', [
-        _obj(opts({'namespace': 5, 'keys': notJson}))
+      final r = await rejected(invoke(api, 'create', [
+        jsObject(opts({'namespace': 5, 'keys': notJson}))
       ]));
       expect(r.code, 'invalid_argument');
       expect(r.message, contains('namespace'));
@@ -511,8 +424,8 @@ void main() {
     });
 
     test('keys that are not JSON reject with bad_key', () async {
-      final r = await _rejected(_call(api, 'create', [
-        _obj(opts({'keys': 'not json sentinel-9'}))
+      final r = await rejected(invoke(api, 'create', [
+        jsObject(opts({'keys': 'not json sentinel-9'}))
       ]));
 
       expect(r.code, 'bad_key');
@@ -521,8 +434,8 @@ void main() {
 
     test('an atKeys document the options refuse rejects with bad_key',
         () async {
-      final r = await _rejected(_call(api, 'create', [
-        _obj(opts({
+      final r = await rejected(invoke(api, 'create', [
+        jsObject(opts({
           'keys': {'version': 999}
         }))
       ]));
@@ -541,21 +454,21 @@ void main() {
         ('keys', 'keys')
       ]) {
         final o = opts()..remove(drop);
-        final r = await _rejected(_call(api, 'create', [_obj(o)]));
+        final r = await rejected(invoke(api, 'create', [jsObject(o)]));
         expect(r.code, 'invalid_argument');
         expect(r.message, contains(name));
       }
       for (final name in ['atSign', 'namespace', 'rootDomain', 'keys']) {
         for (final bad in <Object?>[5, true, <Object?>[]]) {
-          final r = await _rejected(_call(api, 'create', [
-            _obj(opts({name: bad}))
+          final r = await rejected(invoke(api, 'create', [
+            jsObject(opts({name: bad}))
           ]));
           expect(r.code, 'invalid_argument', reason: name);
           expect(r.message, contains(name));
         }
       }
       for (final bad in [null, 'x'.toJS, <JSAny?>[].toJS, (() {}).toJS]) {
-        final r = await _rejected(_call(api, 'create', [bad]));
+        final r = await rejected(invoke(api, 'create', [bad]));
         expect(r.code, 'invalid_argument');
         expect(r.message, contains('opts'));
       }
@@ -565,7 +478,7 @@ void main() {
     test('create rejects with unsupported outside a secure context', () async {
       secure = false;
 
-      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
       expect(r.code, 'unsupported');
       expect(r.message, 'a secure context (HTTPS) is required');
       expect(opened, isEmpty);
@@ -574,7 +487,7 @@ void main() {
     test('rejects with the code of a typed exception', () async {
       openFailure = AtEnrollmentException('denied');
 
-      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
 
       expect(r.code, 'enrollment_denied');
     });
@@ -582,7 +495,7 @@ void main() {
     test('a rejection is a plain object with only code and message', () async {
       openFailure = AtEnrollmentException('denied');
 
-      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
 
       final reason = r.reason! as JSObject;
       expect(
@@ -596,7 +509,7 @@ void main() {
         () async {
       openFailure = StateError('sentinel-secret-5');
 
-      final r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
 
       expect(r.code, 'internal');
       expect(r.message, 'internal error');
@@ -608,7 +521,7 @@ void main() {
         () async {
       openFailure =
           ArgumentError.value('sentinel-secret-arg', 'root', 'bad root');
-      var r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      var r = await rejected(invoke(api, 'create', [jsObject(opts())]));
       expect(r.code, 'internal');
       expect(r.message, 'internal error');
       expect(r.message, isNot(contains('sentinel')));
@@ -617,7 +530,7 @@ void main() {
           '@alice',
           AtConnectionState.refused(AtConnectionCause.revoked,
               error: StateError('sentinel-server-detail')));
-      r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      r = await rejected(invoke(api, 'create', [jsObject(opts())]));
       expect(r.code, 'pkam_refused');
       expect(r.message, isNot(contains('sentinel')));
 
@@ -625,7 +538,7 @@ void main() {
           '@alice',
           AtConnectionState.offline(AtConnectionCause.unreachable,
               error: StateError('sentinel-socket-detail')));
-      r = await _rejected(_call(api, 'create', [_obj(opts())]));
+      r = await rejected(invoke(api, 'create', [jsObject(opts())]));
       expect(r.code, 'offline');
       expect(r.message, isNot(contains('sentinel')));
     });
@@ -662,15 +575,15 @@ void main() {
       });
 
       test('create with the passkey options opens a passkey session', () async {
-        final passkey = _GatedPasskeySession(_QuietClient())
+        final passkey = GatedPasskeySession(PasskeyClient())
           ..stopGate = Completer<void>();
-        final login = _RecordingPasskeyLogin(passkey);
+        final login = RecordingPasskeyLogin(passkey);
         final bridge = createJSInteropWrapper(BridgeEntry(
             open: (o) => openJsSession(o, passkeyOpen: login.call),
             isSecureContext: () => true));
 
         final result =
-            await _resolved(_call(bridge, 'create', [_obj(passkeyOpts())]))
+            await resolved(invoke(bridge, 'create', [jsObject(passkeyOpts())]))
                 as JSObject;
 
         final passkeyOptions = login.seen.single;
@@ -689,7 +602,7 @@ void main() {
 
         var closed = false;
         final closing =
-            _resolved(_call(result, 'close')).then((_) => closed = true);
+            resolved(invoke(result, 'close')).then((_) => closed = true);
         await Future<void>.delayed(Duration.zero);
         expect(closed, isFalse,
             reason: "close awaits the passkey session's stop");
@@ -704,27 +617,27 @@ void main() {
           'naming the option', () async {
         for (final name in ['atSign', 'namespace', 'rpId', 'rpName']) {
           final o = passkeyOpts()..remove(name);
-          final r = await _rejected(_call(api, 'create', [_obj(o)]));
+          final r = await rejected(invoke(api, 'create', [jsObject(o)]));
           expect(r.code, 'invalid_argument');
           expect(r.message, contains(name));
         }
         for (final name in ['atSign', 'namespace', 'rpId', 'rpName']) {
           for (final bad in <Object?>[5, true, <Object?>[]]) {
-            final r = await _rejected(_call(api, 'create', [
-              _obj(passkeyOpts({name: bad}))
+            final r = await rejected(invoke(api, 'create', [
+              jsObject(passkeyOpts({name: bad}))
             ]));
             expect(r.code, 'invalid_argument', reason: name);
             expect(r.message, contains(name));
           }
-          final empty = await _rejected(_call(api, 'create', [
-            _obj(passkeyOpts({name: '   '}))
+          final empty = await rejected(invoke(api, 'create', [
+            jsObject(passkeyOpts({name: '   '}))
           ]));
           expect(empty.code, 'invalid_argument', reason: name);
           expect(empty.message, contains(name));
         }
         for (final bad in <Object?>[5, 'yes', <Object?>[]]) {
-          final r = await _rejected(_call(api, 'create', [
-            _obj(passkeyOpts({'passkey': bad}))
+          final r = await rejected(invoke(api, 'create', [
+            jsObject(passkeyOpts({'passkey': bad}))
           ]));
           expect(r.code, 'invalid_argument');
           expect(r.message, contains('passkey'));
@@ -736,7 +649,7 @@ void main() {
 
   group('argument errors', () {
     const sentinel = 'sentinel-value-7f3a';
-    JSObject wrapped() => _obj({
+    JSObject wrapped() => jsObject({
           'inner': sentinel,
           'list': [sentinel]
         })
@@ -744,23 +657,23 @@ void main() {
 
     Future<void> expectNamed(JSAny? promise, String parameter,
         {String code = 'invalid_argument'}) async {
-      final r = await _rejected(promise);
+      final r = await rejected(promise);
       expect(r.code, code);
       expect(r.message, contains(parameter));
       expect(r.message, isNot(contains(sentinel)));
     }
 
     test('options name the parameter without its value', () async {
-      await expectNamed(_call(api, 'create', [wrapped()]), 'atSign');
-      await expectNamed(_call(api, 'create', [sentinel.toJS]), 'opts');
+      await expectNamed(invoke(api, 'create', [wrapped()]), 'atSign');
+      await expectNamed(invoke(api, 'create', [sentinel.toJS]), 'opts');
       await expectNamed(
-          _call(api, 'create', [
-            _obj(opts({'atSign': wrapped()}))
+          invoke(api, 'create', [
+            jsObject(opts({'atSign': wrapped()}))
           ]),
           'atSign');
       await expectNamed(
-          _call(api, 'create', [
-            _obj(opts({'keys': 5}))
+          invoke(api, 'create', [
+            jsObject(opts({'keys': 5}))
           ]),
           'keys');
     });
@@ -768,40 +681,40 @@ void main() {
     test('session calls name the parameter without its value', () async {
       final s = await create();
       await expectNamed(
-          _call(s, 'notify', [
-            _obj({'key': wrapped()}),
+          invoke(s, 'notify', [
+            jsObject({'key': wrapped()}),
             'v'.toJS
           ]),
           'key',
           code: 'bad_key');
-      await expectNamed(_call(s, 'notify', [sentinel.toJS, 'v'.toJS]), 'key',
+      await expectNamed(invoke(s, 'notify', [sentinel.toJS, 'v'.toJS]), 'key',
           code: 'bad_key');
       await expectNamed(
-          _call(s, 'notify', [
-            _obj({'key': 'k', 'namespace': wrapped()}),
+          invoke(s, 'notify', [
+            jsObject({'key': 'k', 'namespace': wrapped()}),
             'v'.toJS
           ]),
           'namespace',
           code: 'bad_key');
       await expectNamed(
-          _call(s, 'notify', [
-            _obj({'key': 'k', 'public': sentinel}),
+          invoke(s, 'notify', [
+            jsObject({'key': 'k', 'public': sentinel}),
             'v'.toJS
           ]),
           'public',
           code: 'bad_key');
       await expectNamed(
-          _call(s, 'notify', [
-            _obj({'key': 'k'}),
+          invoke(s, 'notify', [
+            jsObject({'key': 'k'}),
             wrapped()
           ]),
           'value');
-      await expectNamed(_call(s, 'approve', [wrapped()]), 'id');
-      await expectNamed(_call(s, 'collection', ['c'.toJS, wrapped()]), 'type');
+      await expectNamed(invoke(s, 'approve', [wrapped()]), 'id');
+      await expectNamed(invoke(s, 'collection', ['c'.toJS, wrapped()]), 'type');
       await expectNamed(
-          _call(s, 'collection', [
+          invoke(s, 'collection', [
             'c'.toJS,
-            _obj({'type': 't', 'expiration': sentinel})
+            jsObject({'type': 't', 'expiration': sentinel})
           ]),
           'expiration');
     });
@@ -813,16 +726,16 @@ void main() {
     setUp(() async => s = await create());
 
     test('notify maps the key fields', () async {
-      final key = _obj({
+      final key = jsObject({
         'key': 'note',
         'namespace': 'other',
         'sharedWith': '@bob',
         'sharedBy': '@carol'
       });
 
-      await _resolved(_call(s, 'notify', [key, 'hello'.toJS]));
-      await _resolved(_call(s, 'notify', [
-        _obj({'key': 'plain'}),
+      await resolved(invoke(s, 'notify', [key, 'hello'.toJS]));
+      await resolved(invoke(s, 'notify', [
+        jsObject({'key': 'plain'}),
         'v'.toJS
       ]));
 
@@ -836,12 +749,13 @@ void main() {
     });
 
     test('notify maps the public, cached and noNamespace flags', () async {
-      await _resolved(_call(s, 'notify', [
-        _obj({'key': 'k', 'public': true, 'cached': true, 'noNamespace': true}),
+      await resolved(invoke(s, 'notify', [
+        jsObject(
+            {'key': 'k', 'public': true, 'cached': true, 'noNamespace': true}),
         'v'.toJS
       ]));
-      await _resolved(_call(s, 'notify', [
-        _obj({'key': 'k', 'public': false}),
+      await resolved(invoke(s, 'notify', [
+        jsObject({'key': 'k', 'public': false}),
         'v'.toJS
       ]));
 
@@ -855,14 +769,14 @@ void main() {
 
     test('bridge notify passes noNamespace as given and refuses a non-boolean',
         () async {
-      await _resolved(_call(s, 'notify', [
-        _obj({'key': 'k', 'noNamespace': true}),
+      await resolved(invoke(s, 'notify', [
+        jsObject({'key': 'k', 'noNamespace': true}),
         'v'.toJS
       ]));
       expect(session.keysSeen.single.noNamespace, isTrue);
 
-      final r = await _rejected(_call(s, 'notify', [
-        _obj({'key': 'k', 'noNamespace': 'yes'}),
+      final r = await rejected(invoke(s, 'notify', [
+        jsObject({'key': 'k', 'noNamespace': 'yes'}),
         'v'.toJS
       ]));
 
@@ -871,8 +785,8 @@ void main() {
     });
 
     test('notify rejects a value that is not a string', () async {
-      final r = await _rejected(_call(s, 'notify', [
-        _obj({'key': 'k'}),
+      final r = await rejected(invoke(s, 'notify', [
+        jsObject({'key': 'k'}),
         5.toJS
       ]));
 
@@ -881,14 +795,14 @@ void main() {
     });
 
     test('notify resolves true when delivered and false when not', () async {
-      final key = _obj({'key': 'rpc', 'sharedWith': '@alice'});
+      final key = jsObject({'key': 'rpc', 'sharedWith': '@alice'});
 
       expect(
-          (await _resolved(_call(s, 'notify', [key, 'ping'.toJS]))).dartify(),
+          (await resolved(invoke(s, 'notify', [key, 'ping'.toJS]))).dartify(),
           isTrue);
       session.delivered = false;
       expect(
-          (await _resolved(_call(s, 'notify', [key, 'ping'.toJS]))).dartify(),
+          (await resolved(invoke(s, 'notify', [key, 'ping'.toJS]))).dartify(),
           isFalse);
       expect(session.values, ['ping', 'ping']);
     });
@@ -896,8 +810,8 @@ void main() {
     test('a failing call rejects with the code of its exception', () async {
       session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
-      final r = await _rejected(_call(s, 'notify', [
-        _obj({'key': 'rpc'}),
+      final r = await rejected(invoke(s, 'notify', [
+        jsObject({'key': 'rpc'}),
         'x'.toJS
       ]));
 
@@ -907,8 +821,8 @@ void main() {
     test('a mapped exception keeps its message', () async {
       session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
-      final r = await _rejected(_call(s, 'notify', [
-        _obj({'key': 'rpc'}),
+      final r = await rejected(invoke(s, 'notify', [
+        jsObject({'key': 'rpc'}),
         'x'.toJS
       ]));
 
@@ -919,7 +833,7 @@ void main() {
     test('subscribe delivers events and returns an unsubscribe function',
         () async {
       final seen = <Object?>[];
-      final unsubscribe = _call(s, 'subscribe', [
+      final unsubscribe = invoke(s, 'subscribe', [
         r'rpc\.req'.toJS,
         ((JSAny? event) => seen.add(event.dartify())).toJS
       ])! as JSFunction;
@@ -955,13 +869,13 @@ void main() {
         () async {
       final seen = <Object?>[];
       final errors = <Object?>[];
-      _call(s, 'subscribe', [
+      invoke(s, 'subscribe', [
         '.*'.toJS,
         ((JSAny? event) => seen.add(event.dartify())).toJS,
         ((JSAny? err) => errors.add(err.dartify())).toJS,
       ]);
 
-      await _resolved(_call(s, 'close'));
+      await resolved(invoke(s, 'close'));
       session.listeners.single((
         id: 'n2',
         from: '@bob',
@@ -980,13 +894,13 @@ void main() {
       // The `{code, message}` a failed subscribe answers with, in place of
       // the unsubscribe function.
       JSObject failed(JSAny? regex) {
-        final result = _call(s, 'subscribe', [regex, (() {}).toJS]);
+        final result = invoke(s, 'subscribe', [regex, (() {}).toJS]);
         expect(result.isA<JSFunction>(), isFalse);
         return result! as JSObject;
       }
 
       test('after close it answers {code: closed, message}', () async {
-        await _resolved(_call(s, 'close'));
+        await resolved(invoke(s, 'close'));
 
         final e = failed('x'.toJS);
 
@@ -1003,7 +917,7 @@ void main() {
       });
 
       test('the bridge hands the regex text to the session uncompiled', () {
-        _call(s, 'subscribe', ['['.toJS, (() {}).toJS]);
+        invoke(s, 'subscribe', ['['.toJS, (() {}).toJS]);
 
         expect(session.subscribedRegex, '[');
       });
@@ -1019,8 +933,8 @@ void main() {
       test(
           'subscribe with non-function callback returns {code: invalid_argument} without throwing',
           () {
-        for (final bad in [null, 5.toJS, _obj({})]) {
-          final r = _call(s, 'subscribe', ['x'.toJS, bad])! as JSObject;
+        for (final bad in [null, 5.toJS, jsObject({})]) {
+          final r = invoke(s, 'subscribe', ['x'.toJS, bad])! as JSObject;
           expect(r['code'].dartify(), 'invalid_argument');
           expect(r['message'].dartify() as String, contains('callback'));
         }
@@ -1029,11 +943,11 @@ void main() {
 
     test('close stops the session and later calls reject with closed',
         () async {
-      await _resolved(_call(s, 'close'));
+      await resolved(invoke(s, 'close'));
 
       expect(session.closed, isTrue);
-      final r = await _rejected(_call(s, 'notify', [
-        _obj({'key': 'k'}),
+      final r = await rejected(invoke(s, 'notify', [
+        jsObject({'key': 'k'}),
         'v'.toJS
       ]));
       expect(r.code, 'closed');
@@ -1041,7 +955,7 @@ void main() {
         (
           'notify',
           <JSAny?>[
-            _obj({'key': 'k'}),
+            jsObject({'key': 'k'}),
             'v'.toJS
           ]
         ),
@@ -1049,7 +963,7 @@ void main() {
           'collection',
           <JSAny?>[
             'c'.toJS,
-            _obj({'type': 't'})
+            jsObject({'type': 't'})
           ]
         ),
         ('otp', <JSAny?>[]),
@@ -1057,7 +971,7 @@ void main() {
         ('approve', <JSAny?>['e1'.toJS]),
         ('deny', <JSAny?>['e1'.toJS]),
       ]) {
-        expect((await _rejected(_call(s, method, args))).code, 'closed',
+        expect((await rejected(invoke(s, method, args))).code, 'closed',
             reason: method);
       }
     });
@@ -1065,7 +979,7 @@ void main() {
     group('subscribe errors', () {
       test('subscribe errors go to onError as {code, message}', () async {
         final seen = <Object?>[];
-        _call(s, 'subscribe', [
+        invoke(s, 'subscribe', [
           'x'.toJS,
           (() {}).toJS,
           ((JSAny? e) => seen.add(e.dartify())).toJS
@@ -1079,13 +993,13 @@ void main() {
       });
 
       test('subscribe with no onError does not throw', () {
-        _call(s, 'subscribe', ['x'.toJS, (() {}).toJS]);
+        invoke(s, 'subscribe', ['x'.toJS, (() {}).toJS]);
 
         expect(() => session.errorSink!(StateError('x')), returnsNormally);
       });
 
       test('a non-function onError answers a rejection object', () {
-        final r = _call(s, 'subscribe', ['x'.toJS, (() {}).toJS, 5.toJS])!
+        final r = invoke(s, 'subscribe', ['x'.toJS, (() {}).toJS, 5.toJS])!
             as JSObject;
 
         expect(r['message'].dartify() as String, contains('onError'));
@@ -1094,15 +1008,15 @@ void main() {
 
     group('status', () {
       test('status() reads the latest value', () {
-        expect(_call(s, 'status').dartify(), 'connecting');
+        expect(invoke(s, 'status').dartify(), 'connecting');
         session.statusNow = 'waiting:network';
-        expect(_call(s, 'status').dartify(), 'waiting:network');
+        expect(invoke(s, 'status').dartify(), 'waiting:network');
       });
 
       test('onStatus delivers changes and returns an off function', () {
         final seen = <Object?>[];
         final off =
-            _call(s, 'onStatus', [((JSAny? v) => seen.add(v.dartify())).toJS])!
+            invoke(s, 'onStatus', [((JSAny? v) => seen.add(v.dartify())).toJS])!
                 as JSFunction;
 
         session.statusListeners.single('connected');
@@ -1114,9 +1028,9 @@ void main() {
       });
 
       test('onStatus after close answers {code: closed}', () async {
-        await _resolved(_call(s, 'close'));
+        await resolved(invoke(s, 'close'));
 
-        final r = _call(s, 'onStatus', [(() {}).toJS])! as JSObject;
+        final r = invoke(s, 'onStatus', [(() {}).toJS])! as JSObject;
 
         expect(r['code'].dartify(), 'closed');
       });
@@ -1124,8 +1038,8 @@ void main() {
       test(
           'onStatus with non-function callback returns {code: invalid_argument} without throwing',
           () {
-        for (final bad in [null, 5.toJS, _obj({})]) {
-          final r = _call(s, 'onStatus', [bad])! as JSObject;
+        for (final bad in [null, 5.toJS, jsObject({})]) {
+          final r = invoke(s, 'onStatus', [bad])! as JSObject;
           expect(r['code'].dartify(), 'invalid_argument');
           expect(r['message'].dartify() as String, contains('callback'));
         }
@@ -1138,9 +1052,9 @@ void main() {
 
       setUp(() async {
         adapter = session.adapter;
-        c = (await _resolved(_call(s, 'collection', [
+        c = (await resolved(invoke(s, 'collection', [
           'tasks'.toJS,
-          _obj({'type': 'task', 'eventSource': 'both', 'expiration': 5000})
+          jsObject({'type': 'task', 'eventSource': 'both', 'expiration': 5000})
         ])))! as JSObject;
       });
 
@@ -1161,22 +1075,22 @@ void main() {
       });
 
       test('collection eventSource and expiration are optional', () async {
-        await _resolved(_call(s, 'collection', [
+        await resolved(invoke(s, 'collection', [
           'c'.toJS,
-          _obj({'type': 't'})
+          jsObject({'type': 't'})
         ]));
 
         expect(session.collectionArgs.last, ('c', 't', null, null));
       });
 
       test('collection create maps data, id and sharedWith', () async {
-        final item = (await _resolved(_call(c, 'create', [
-          _obj({
+        final item = (await resolved(invoke(c, 'create', [
+          jsObject({
             'title': 'a',
             'n': 2,
             'tags': ['x']
           }),
-          _obj({
+          jsObject({
             'id': 'i9',
             'sharedWith': ['@bob']
           })
@@ -1209,8 +1123,8 @@ void main() {
           }
         };
 
-        final item = (await _resolved(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        final item = (await resolved(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ])))! as JSObject;
 
         final data = item['data']! as JSObject;
@@ -1229,7 +1143,7 @@ void main() {
 
       test('a data key named __proto__ arrives as data, not a prototype',
           () async {
-        await _resolved(_call(
+        await resolved(invoke(
             c, 'create', [_json('{"__proto__": {"polluted": true}, "a": 1}')]));
 
         final (data, _, _) =
@@ -1239,18 +1153,18 @@ void main() {
 
       test('collection get defaults the owner to the session and resolves null',
           () async {
-        await _resolved(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        await resolved(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ]));
         expect(adapter.last, ('i1', '@alice'));
-        await _resolved(_call(c, 'get', [
-          _obj({'id': 'i1', 'owner': 'bob'})
+        await resolved(invoke(c, 'get', [
+          jsObject({'id': 'i1', 'owner': 'bob'})
         ]));
         expect(adapter.last, ('i1', '@bob'));
         adapter.missing = true;
         expect(
-            await _resolved(_call(c, 'get', [
-              _obj({'id': 'gone'})
+            await resolved(invoke(c, 'get', [
+              jsObject({'id': 'gone'})
             ])),
             isNull);
       });
@@ -1267,8 +1181,8 @@ void main() {
           ]
         );
 
-        final listed = (await _resolved(_call(c, 'list')))! as JSObject;
-        final queried = (await _resolved(_call(c, 'query', [
+        final listed = (await resolved(invoke(c, 'list')))! as JSObject;
+        final queried = (await resolved(invoke(c, 'query', [
           [
             {'path': 'a.b', 'op': '>=', 'value': 3},
             {'path': 'c', 'op': 'isNull'}
@@ -1292,8 +1206,8 @@ void main() {
           () async {
         adapter.item = {...adapter.item, 'data': _nested(65)};
 
-        final r = await _rejected(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        final r = await rejected(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ]));
 
         expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
@@ -1303,8 +1217,8 @@ void main() {
       test('tooDeep from collection item preserves id and owner', () async {
         adapter.item = {...adapter.item, 'data': _nested(65)};
 
-        final r = await _rejected(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        final r = await rejected(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ]));
 
         expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
@@ -1317,10 +1231,10 @@ void main() {
         adapter.item = {...adapter.item, 'data': _nested(64)};
         adapter.listing = (items: [adapter.item], unreadable: const []);
 
-        final got = (await _resolved(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        final got = (await resolved(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ])))! as JSObject;
-        final listed = (await _resolved(_call(c, 'list')))! as JSObject;
+        final listed = (await resolved(invoke(c, 'list')))! as JSObject;
 
         var levels = 0;
         JSAny? at = got['data'];
@@ -1337,35 +1251,35 @@ void main() {
           () async {
         adapter.item = {...adapter.item, 'data': _nested(100000)};
 
-        final r = await _rejected(_call(c, 'get', [
-          _obj({'id': 'i1'})
+        final r = await rejected(invoke(c, 'get', [
+          jsObject({'id': 'i1'})
         ]));
 
         expect(r.code, collectionErrorCode(CollectionFailure.tooDeep));
       });
 
       test('collection update, share and remove map their arguments', () async {
-        await _resolved(_call(c, 'update', [
-          _obj({'id': 'i1'}),
-          _obj({'a': 1})
+        await resolved(invoke(c, 'update', [
+          jsObject({'id': 'i1'}),
+          jsObject({'a': 1})
         ]));
         final (id, owner, data) =
             adapter.last! as (String, String, Map<String, dynamic>);
         expect((id, owner), ('i1', '@alice'));
         expect(data, {'a': 1});
-        await _resolved(_call(c, 'share', [
-          _obj({'id': 'i1', 'owner': '@alice'}),
+        await resolved(invoke(c, 'share', [
+          jsObject({'id': 'i1', 'owner': '@alice'}),
           ['@bob', '@carol'].jsify()
         ]));
         expect(adapter.last.toString(), '(i1, @alice, [@bob, @carol])');
-        final removed = await _resolved(_call(c, 'remove', [
-          _obj({'id': 'i1'}),
-          _obj({'cascade': true})
+        final removed = await resolved(invoke(c, 'remove', [
+          jsObject({'id': 'i1'}),
+          jsObject({'cascade': true})
         ]));
         expect(adapter.last, ('i1', '@alice', true));
         expect(removed, isNull);
-        await _resolved(_call(c, 'remove', [
-          _obj({'id': 'i1'})
+        await resolved(invoke(c, 'remove', [
+          jsObject({'id': 'i1'})
         ]));
         expect(adapter.last, ('i1', '@alice', false));
       });
@@ -1380,8 +1294,8 @@ void main() {
               {'op': 'update', 'recipient': '@bob', 'kind': 'Unknown'}
             ]);
 
-        final r = await _rejected(_call(c, 'share', [
-          _obj({'id': 'i1'}),
+        final r = await rejected(invoke(c, 'share', [
+          jsObject({'id': 'i1'}),
           ['@bob'].jsify()
         ]));
 
@@ -1436,7 +1350,7 @@ void main() {
         ];
         for (final (failure, message, kind, failures) in cases) {
           adapter.failure = failure;
-          final r = await _rejected(_call(c, 'list'));
+          final r = await rejected(invoke(c, 'list'));
           expect(r.code, collectionErrorCode(failure.kind));
           expect(r.message, message);
           expect(r.field('id'), failure.id);
@@ -1461,8 +1375,8 @@ void main() {
           ]
         );
         for (final result in [
-          await _resolved(_call(c, 'list')),
-          await _resolved(_call(c, 'query', [
+          await resolved(invoke(c, 'list')),
+          await resolved(invoke(c, 'query', [
             [
               {'path': 'a', 'op': 'isNull'}
             ].jsify()
@@ -1494,25 +1408,25 @@ void main() {
           CollectionFailure.tooDeep,
         ]) {
           adapter.failure = JsCollectionsError(kind);
-          expect((await _rejected(_call(c, 'list'))).code,
+          expect((await rejected(invoke(c, 'list'))).code,
               collectionErrorCode(kind));
         }
       });
 
       test('collection bad arguments reject naming the parameter', () async {
         for (final (promise, name) in [
-          (_call(c, 'get', ['i1'.toJS]), 'address'),
-          (_call(c, 'create', [5.toJS]), 'data'),
-          (_call(c, 'query', [5.toJS]), 'where'),
+          (invoke(c, 'get', ['i1'.toJS]), 'address'),
+          (invoke(c, 'create', [5.toJS]), 'data'),
+          (invoke(c, 'query', [5.toJS]), 'where'),
           (
-            _call(c, 'share', [
-              _obj({'id': 'i'}),
+            invoke(c, 'share', [
+              jsObject({'id': 'i'}),
               'x'.toJS
             ]),
             'atSigns'
           ),
         ]) {
-          final r = await _rejected(promise);
+          final r = await rejected(promise);
           expect(r.code, 'invalid_argument');
           expect(r.message, contains(name));
         }
@@ -1521,33 +1435,33 @@ void main() {
       test('collection data that is an array or too deep rejects naming data',
           () async {
         JSObject nested(int levels) {
-          var o = _obj({});
+          var o = jsObject({});
           for (var i = 0; i < levels; i++) {
-            o = _obj({'n': o});
+            o = jsObject({'n': o});
           }
           return o;
         }
 
-        final cyclic = _obj({});
+        final cyclic = jsObject({});
         cyclic['self'] = cyclic;
         for (final (promise, message) in [
           (
-            _call(c, 'create', [
+            invoke(c, 'create', [
               <JSAny?>[1.toJS].toJS
             ]),
             'an object'
           ),
           (
-            _call(c, 'update', [
-              _obj({'id': 'i1'}),
+            invoke(c, 'update', [
+              jsObject({'id': 'i1'}),
               <JSAny?>[1.toJS].toJS
             ]),
             'an object'
           ),
-          (_call(c, 'create', [nested(100)]), 'levels deep'),
-          (_call(c, 'create', [cyclic]), 'levels deep'),
+          (invoke(c, 'create', [nested(100)]), 'levels deep'),
+          (invoke(c, 'create', [cyclic]), 'levels deep'),
         ]) {
-          final r = await _rejected(promise);
+          final r = await rejected(promise);
           expect(r.code, 'invalid_argument');
           expect(r.message, contains('data'));
           expect(r.message, contains(message));
@@ -1559,7 +1473,7 @@ void main() {
           () async {
         final events = <Object?>[];
         final errors = <Object?>[];
-        final off = _call(c, 'watch', [
+        final off = invoke(c, 'watch', [
           ((JSAny? e) => events.add(e.dartify())).toJS,
           ((JSAny? e) => errors.add(e.dartify())).toJS
         ])! as JSFunction;
@@ -1583,7 +1497,7 @@ void main() {
       });
 
       test('collection watch needs a function and never throws', () {
-        final r = _call(c, 'watch', [5.toJS])! as JSObject;
+        final r = invoke(c, 'watch', [5.toJS])! as JSObject;
 
         expect(r['code'].dartify(), 'invalid_argument');
         expect(r['message'].dartify() as String, contains('onEvent'));
@@ -1592,19 +1506,19 @@ void main() {
       test(
           'collection operations and watch reject with closed after session close',
           () async {
-        await _resolved(_call(s, 'close'));
+        await resolved(invoke(s, 'close'));
 
         for (final (method, args) in [
           (
             'create',
             <JSAny?>[
-              _obj({'a': 1})
+              jsObject({'a': 1})
             ]
           ),
           (
             'get',
             <JSAny?>[
-              _obj({'id': 'i1'})
+              jsObject({'id': 'i1'})
             ]
           ),
           ('list', <JSAny?>[]),
@@ -1612,29 +1526,30 @@ void main() {
           (
             'update',
             <JSAny?>[
-              _obj({'id': 'i1'}),
-              _obj({'a': 2})
+              jsObject({'id': 'i1'}),
+              jsObject({'a': 2})
             ]
           ),
           (
             'share',
             <JSAny?>[
-              _obj({'id': 'i1'}),
+              jsObject({'id': 'i1'}),
               ['bob'].jsify()
             ]
           ),
           (
             'remove',
             <JSAny?>[
-              _obj({'id': 'i1'})
+              jsObject({'id': 'i1'})
             ]
           ),
         ]) {
-          expect((await _rejected(_call(c, method, args))).code, 'closed',
+          expect((await rejected(invoke(c, method, args))).code, 'closed',
               reason: method);
         }
 
-        final watchRes = _call(c, 'watch', [((JSAny? _) {}).toJS])! as JSObject;
+        final watchRes =
+            invoke(c, 'watch', [((JSAny? _) {}).toJS])! as JSObject;
         expect(watchRes['code'].dartify(), 'closed');
       });
 
@@ -1644,31 +1559,31 @@ void main() {
           (
             'get',
             <JSAny?>[
-              _obj({'id': 'i1', 'owner': '@a@b-sentinel'})
+              jsObject({'id': 'i1', 'owner': '@a@b-sentinel'})
             ]
           ),
           (
             'update',
             <JSAny?>[
-              _obj({'id': 'i1', 'owner': '@a@b-sentinel'}),
-              _obj({'a': 1})
+              jsObject({'id': 'i1', 'owner': '@a@b-sentinel'}),
+              jsObject({'a': 1})
             ]
           ),
           (
             'share',
             <JSAny?>[
-              _obj({'id': 'i1', 'owner': '@a@b-sentinel'}),
+              jsObject({'id': 'i1', 'owner': '@a@b-sentinel'}),
               ['@bob'].jsify()
             ]
           ),
           (
             'remove',
             <JSAny?>[
-              _obj({'id': 'i1', 'owner': '@a@b-sentinel'})
+              jsObject({'id': 'i1', 'owner': '@a@b-sentinel'})
             ]
           ),
         ]) {
-          final r = await _rejected(_call(c, method, args));
+          final r = await rejected(invoke(c, method, args));
           expect(r.code, 'invalid_argument', reason: method);
           expect(r.message, contains('owner'));
           expect(r.message, isNot(contains('sentinel')));
@@ -1690,21 +1605,21 @@ void main() {
           _jsConstruct('ArrayBuffer', [4.toJS]),
         ];
         for (final bad in nonPlain) {
-          final optRes = await _rejected(_call(c, 'create', [
-            _obj({'a': 1}),
+          final optRes = await rejected(invoke(c, 'create', [
+            jsObject({'a': 1}),
             bad
           ]));
           expect(optRes.code, 'invalid_argument');
           expect(optRes.message, contains('opts'));
 
-          final dataRes = await _rejected(_call(c, 'create', [
-            _obj({'nested': bad})
+          final dataRes = await rejected(invoke(c, 'create', [
+            jsObject({'nested': bad})
           ]));
           expect(dataRes.code, 'invalid_argument');
           expect(dataRes.message, contains('data'));
         }
-        final arrOpts = await _rejected(_call(c, 'create', [
-          _obj({'a': 1}),
+        final arrOpts = await rejected(invoke(c, 'create', [
+          jsObject({'a': 1}),
           <JSAny?>[].toJS
         ]));
         expect(arrOpts.code, 'invalid_argument');
@@ -1736,8 +1651,8 @@ void main() {
           await create();
           expect(opened.last.rootDomain, isNull);
 
-          await _resolved(_call(s, 'notify', [
-            _obj({'key': 'k'}),
+          await resolved(invoke(s, 'notify', [
+            jsObject({'key': 'k'}),
             'v'.toJS
           ]));
           final sentKey = session.keysSeen.last;
@@ -1755,29 +1670,29 @@ void main() {
             false
           ));
 
-          await _resolved(_call(s, 'collection', [
+          await resolved(invoke(s, 'collection', [
             'clean'.toJS,
-            _obj({'type': 't'})
+            jsObject({'type': 't'})
           ]));
           expect(session.collectionArgs.last, ('clean', 't', null, null));
 
-          await _resolved(_call(c, 'create', [
-            _obj({'a': 1}),
-            _obj({})
+          await resolved(invoke(c, 'create', [
+            jsObject({'a': 1}),
+            jsObject({})
           ]));
           final (_, createdId, createdShared) =
               adapter.last! as (Map<String, dynamic>, String?, List<String>);
           expect(createdId, isNull);
           expect(createdShared, isEmpty);
 
-          await _resolved(_call(c, 'get', [
-            _obj({'id': 'i1'})
+          await resolved(invoke(c, 'get', [
+            jsObject({'id': 'i1'})
           ]));
           expect(adapter.last, ('i1', '@alice'));
 
-          await _resolved(_call(c, 'remove', [
-            _obj({'id': 'i1'}),
-            _obj({})
+          await resolved(invoke(c, 'remove', [
+            jsObject({'id': 'i1'}),
+            jsObject({})
           ]));
           expect(adapter.last, ('i1', '@alice', false));
         } finally {
@@ -1790,7 +1705,7 @@ void main() {
 
     group('pairing', () {
       test('otp resolves the passcode', () async {
-        expect((await _resolved(_call(s, 'otp'))).dartify(), 'Z9Y8X7');
+        expect((await resolved(invoke(s, 'otp'))).dartify(), 'Z9Y8X7');
         expect(session.calls, ['otp']);
       });
 
@@ -1805,7 +1720,7 @@ void main() {
           )
         ];
 
-        final result = await _resolved(_call(s, 'pendingEnrollments'));
+        final result = await resolved(invoke(s, 'pendingEnrollments'));
 
         expect(result.dartify(), [
           {
@@ -1819,13 +1734,13 @@ void main() {
 
       test('pendingEnrollments with none pending resolves an empty array',
           () async {
-        expect((await _resolved(_call(s, 'pendingEnrollments'))).dartify(),
+        expect((await resolved(invoke(s, 'pendingEnrollments'))).dartify(),
             isEmpty);
       });
 
       test('approve and deny pass the id and resolve undefined', () async {
-        final approved = await _resolved(_call(s, 'approve', ['e1'.toJS]));
-        final denied = await _resolved(_call(s, 'deny', ['e2'.toJS]));
+        final approved = await resolved(invoke(s, 'approve', ['e1'.toJS]));
+        final denied = await resolved(invoke(s, 'deny', ['e2'.toJS]));
 
         expect(session.decided, ['approve e1', 'deny e2']);
         expect(approved, isNull);
@@ -1833,9 +1748,9 @@ void main() {
       });
 
       test('approve takes the id alone, whatever else is passed', () async {
-        await _resolved(_call(s, 'approve', [
+        await resolved(invoke(s, 'approve', [
           'e1'.toJS,
-          _obj({
+          jsObject({
             'namespaces': {'*': 'rw'}
           })
         ]));
@@ -1845,9 +1760,9 @@ void main() {
 
       test('approve and deny reject a non-string id', () async {
         for (final method in ['approve', 'deny']) {
-          expect((await _rejected(_call(s, method, [_obj({})]))).code,
+          expect((await rejected(invoke(s, method, [jsObject({})]))).code,
               'invalid_argument');
-          expect((await _rejected(_call(s, method, [5.toJS]))).code,
+          expect((await rejected(invoke(s, method, [5.toJS]))).code,
               'invalid_argument');
         }
         expect(session.decided, isEmpty);
@@ -1862,7 +1777,7 @@ void main() {
           ('approve', <JSAny?>['e1'.toJS]),
           ('deny', <JSAny?>['e1'.toJS]),
         ]) {
-          expect((await _rejected(_call(s, method, args))).code, 'unsupported',
+          expect((await rejected(invoke(s, method, args))).code, 'unsupported',
               reason: method);
         }
       });
@@ -1870,7 +1785,7 @@ void main() {
       test('an unknown id rejects with enrollment_denied', () async {
         session.failure = AtEnrollmentException('no enrollment e9');
 
-        expect((await _rejected(_call(s, 'approve', ['e9'.toJS]))).code,
+        expect((await rejected(invoke(s, 'approve', ['e9'.toJS]))).code,
             'enrollment_denied');
       });
     });
@@ -1930,7 +1845,7 @@ void main() {
       var stops = 0;
 
       final session =
-          await sessionOver(_QuietClient(), () async => stops++, options());
+          await sessionOver(PasskeyClient(), () async => stops++, options());
       expect(stops, 0);
 
       await session.close();
