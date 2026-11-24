@@ -152,9 +152,10 @@ class AtKeysAssurance {
   /// ⚠️ It does not answer "which enrollment does this keyfile authenticate
   /// as": that is the caller's to state, with
   /// `AtKeys.resolveAuthenticatingEnrollment()` for a cold start that has
-  /// nothing to state it from. This rule is a write-side invariant, and a
-  /// reader meeting a document with two live enrollments gets a refusal
-  /// from here rather than a silently chosen one.
+  /// nothing to state it from. One live enrollment per keyfile is held by the
+  /// writers, through [refuseSecondLiveEnrollment]: a document holding two
+  /// passes this check, and `AtKeys.resolveAuthenticatingEnrollment()` throws,
+  /// naming them, rather than choosing one.
   void validateKeyMaterials(List<CryptographicMaterial> materials) {
     final typesByEnrollment = <String,
         Set<(CryptographicMaterialRole, CryptographicMaterialAlgorithm)>>{};

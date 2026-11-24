@@ -483,7 +483,7 @@ class EnrollmentSubmitter {
       // A keyfile is retrofitted ONCE. Any active authentication material is
       // that retrofit, whatever algorithm it names — two live enrollments in
       // one keyfile leave no unique answer to which one it authenticates as,
-      // which the assurance invariants now refuse outright.
+      // so `AtKeys.addKey` refuses a second.
       //
       // Two cases, and the difference matters:
       //
