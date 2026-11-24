@@ -15,6 +15,7 @@ CLAUDE.md                                 @gkc @cconstab
 
 # Various important docs and tests
 /docs/sdk-shape.md                                               @gkc
+/features/at_client/notification_service_stop_is_final.feature   @gkc
 /tools/check_architecture.sh                                     @gkc
 /tests/released_envelope/                                        @gkc
 /tests/upgrade/                                                  @gkc
@@ -25,6 +26,7 @@ CLAUDE.md                                 @gkc @cconstab
 /packages/at_client/test/acceptance/architecture_guard_test.dart @gkc
 /packages/at_client/test/import_topology_test.dart               @gkc
 /packages/at_client/test/lifecycle/enroll_test.dart              @gkc
+/packages/at_client/test/notification_service_stop_test.dart     @gkc
 /packages/at_client/test/public_api_surface_test.dart            @gkc
 /packages/at_client/test/rollout_axis_pinning_test.dart          @gkc
 /packages/at_client/test/storage/                                @gkc
