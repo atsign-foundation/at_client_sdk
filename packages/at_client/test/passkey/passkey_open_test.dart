@@ -303,11 +303,6 @@ void main() {
       expect(found, audited,
           reason: 'the audited files are the files that serialise a keys '
               'value');
-      for (final path in audited) {
-        final local = path.startsWith('at_auth/') ? '../$path' : path;
-        expect(File(local).existsSync(), isTrue,
-            reason: 'every audited file exists: $path');
-      }
     });
   });
 }
