@@ -10,7 +10,8 @@ and both exported from `package:at_client/at_client.dart`.
 namespace joined by a dot, split at the **first** dot — `'jobs.my_app'` is the
 id `jobs` in the namespace `my_app`. Give it a dot: the namespace is what
 scopes the encryption key, so a dot-free value has nothing to encrypt under.
-The older `namespace:` parameter takes the same value and is deprecated.
+at_client 4.0 removed the older `namespace:` parameter; code that passed it
+now passes the same value as `idAndNamespace:`.
 
 **Which call answers which question:**
 

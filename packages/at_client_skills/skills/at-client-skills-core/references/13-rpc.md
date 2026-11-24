@@ -65,7 +65,8 @@ try {
 } on TimeoutException {
   // dart:async — no answer in time. Decide: retry, degrade, or give up.
 } on StoppedException {
-  // at_commons — our own client stopped; the answer is not coming.
+  // From the platform package's import — our own client stopped; the answer
+  // is not coming.
 }
 ```
 

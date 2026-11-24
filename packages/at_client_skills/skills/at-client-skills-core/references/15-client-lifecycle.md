@@ -284,7 +284,10 @@ await client.stop();
 - **Does not drain.** A sync round in flight is abandoned at its next step;
   what it had not pushed stays queued on the store for the next client that
   opens on it. If the writes must reach the atServer before the process ends,
-  wait until `isInSync()` answers true first.
+  first `await client.syncService.waitUntilCaughtUp(timeout: ...)`: it returns
+  once the push queue is empty, and the timeout bounds a sync that cannot
+  reach the atServer. Polling `isInSync()` instead is a race
+  ([11-sync.md](11-sync.md)).
 - **A push the atServer accepted just before the stop is pushed again.** The
   stop can land after the atServer commits a batch and before the client takes
   it off the queue, so the next client on that store pushes it again. A
@@ -297,7 +300,8 @@ await client.stop();
 
 **Shutdown checklist for a process:**
 
-1. Wait for `client.syncService.isInSync()` if pending writes matter.
+1. If pending writes matter,
+   `await client.syncService.waitUntilCaughtUp(timeout: ...)`.
 2. `await client.stop()` for every client the process opened.
 3. Close any storage you built without `closedByClient: true`.
 

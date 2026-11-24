@@ -141,7 +141,8 @@ try {
 } on TimeoutException {
   // dart:async — the wait gave up; sync itself carries on.
 } on StoppedException {
-  // at_commons — the sync service stopped, so catch-up is not coming.
+  // From the platform package's import — the sync service stopped, so
+  // catch-up is not coming.
 }
 ```
 

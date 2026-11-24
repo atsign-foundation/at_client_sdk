@@ -48,7 +48,8 @@ last release, and can change before it is final — and let them choose.
 ## 3. The smallest workaround
 
 When the gap is a type the platform package does not export, depend on the
-package that has it, with no version, and import only that type:
+package that has it, with no version, and import only that type from the
+library that declares it:
 
 ```sh
 dart pub add <package>
@@ -56,8 +57,13 @@ dart pub add <package>
 
 ```dart
 // Workaround for SDK gap <issue link>: remove when the platform package provides X.
-import 'package:<package>/<package>.dart' show X;
+import 'package:<package>/<library>.dart' show X;
 ```
+
+That is rarely the package's main library: the platform packages already
+re-export at_client, and at_client re-exports all of `at_commons.dart`. A
+missing at_commons type therefore lives in one of its other libraries, such
+as `package:at_commons/at_builders.dart`.
 
 Keep the workaround to that one import, so it is easy to find and remove.
 

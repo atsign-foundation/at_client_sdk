@@ -34,7 +34,9 @@ it: `dart run skills get --skill at-client-skills-core`.
 ## 1. Rules
 
 - **The package:** `flutter pub add at_client_flutter`, imported as
-  `package:at_client_flutter/at_client_flutter.dart`.
+  `package:at_client_flutter/at_client_flutter.dart`. Its helper library,
+  `package:at_client_flutter/extensions.dart`, adds `FileAtKeysIo.getAtsign()`
+  and is not in the main import.
 - **Where the posture slips:** the dialogs and `AtsignFlows` run at the
   posture of the preference the app hands them; one that names none runs at
   the SDK's default, `legacy`, and says nothing.
@@ -62,6 +64,9 @@ current if its screens read the manager, and `stop()`s it when done.
 **Flow 2 — the most common for returning developers:**
 
 ```dart
+import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_client_flutter/extensions.dart';   // FileAtKeysIo.getAtsign()
+
 final atKeysIo = await AtKeysFileDialog.show(context);          // FileAtKeysIo?
 if (atKeysIo == null) return;
 final atSign = atKeysIo.getAtsign();

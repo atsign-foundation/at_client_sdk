@@ -53,9 +53,9 @@
     {
       "id": 11,
       "prompt": "I'm using at_client in my app and I already have existing data stored with atClient.put() / atClient.get(). Can I migrate to AtCollection without breaking anything?",
-      "expected_output": "Acknowledges that no migration guide exists yet and that a future skill release will add one — a specific version number is NOT required. Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions. Advises caution until a migration guide is available.",
+      "expected_output": "Explains that AtCollection and raw put/get use the same underlying atServer keystore but with different key naming conventions, so existing put/get data does not appear in a collection and collection data does not appear in raw get queries. Gives the migration: read the existing data with the raw API and re-write it through AtCollection<T>, testing in a staging environment first. Advises caution rather than a blind migration. Does NOT promise a future migration guide.",
       "expectations": [
-        "Acknowledges no migration guide exists yet and that a future skill release will add one (no specific version number required)",
+        "Says existing put/get data does not appear in a collection by itself: it is read with the raw API and re-written through AtCollection<T>, tested in staging first",
         "Explains AtCollection and raw put/get share the same keystore but use different key naming conventions",
         "Advises caution rather than prescribing a blind migration"
       ]

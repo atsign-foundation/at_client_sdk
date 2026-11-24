@@ -9,7 +9,8 @@ All packages are published on pub.dev under the `atsign.org` publisher:
 
 ### One platform package — always needed
 
-An app depends on **one platform package** and imports only its barrel:
+An app depends on **one platform package** and imports only from it (its
+barrel, and any helper library its platform skill names):
 
 | App                                     | Add                 | Import                                             |
 | --------------------------------------- | ------------------- | -------------------------------------------------- |

@@ -74,7 +74,7 @@ The SDK's default is `legacy`, so a preference that names no posture encrypts
 the old way, and nothing tells you. See §9.
 
 **One platform package.** An app depends on `at_client_cli` or
-`at_client_flutter` and imports only its barrel (§2).
+`at_client_flutter` and imports only from that package (§2).
 
 **Upgrading an app from at_client 3.x?** When the code, its `pubspec.yaml`
 or the errors point to at_client 3.x, follow the upgrade guide — it is
@@ -87,8 +87,9 @@ What at_client 4.0 removed is in §16.
 
 ## 2. Package Map
 
-An app depends on **one platform package** and imports only its barrel. The
-platform package re-exports at_client's API and supplies a working default for
+An app depends on **one platform package** and imports only from it: its
+barrel, and any helper library its platform skill names. The platform package
+re-exports at_client's API and supplies a working default for
 everything that differs by platform (storage, transport, keys, logging).
 Install with `dart pub add` — it resolves the latest compatible version:
 
@@ -328,8 +329,11 @@ client opens) and `secondaryAddressFinder:`. The platform packages supply it.
 
 **Posture** is fixed when the preference is built: `legacy` (the default),
 `pqReady` (reads post-quantum, writes legacy) or `pqActive` (writes
-post-quantum). A new app goes straight to `pqActive`; each platform skill
-names where its preference is easy to leave out. An app already deployed on
+post-quantum). A new app goes straight to `pqActive`. The default comes back
+wherever a preference is left out: `CLIBase` with no `preference:`,
+`at_activate` with no `--posture`, a Flutter dialog or `AtsignFlows` call
+handed a preference with no posture. The platform skills say more. An app
+already deployed on
 legacy moves in two steps, through `pqReady`. Read
 [references/18-post-quantum.md](references/18-post-quantum.md) for the floor,
 writes right after open, offline writes, mixed fleets and approvers.
@@ -367,7 +371,8 @@ connected**: wait for `listening` before a notify you expect to receive.
   process: opening again while one is live throws `StateError` — `stop()` the
   previous client first.
 - `await client.stop()` stops sync, notifications and the connection. It does
-  **not** drain: wait for `isInSync()` first if the writes must land.
+  **not** drain: if the writes must land, first
+  `await client.syncService.waitUntilCaughtUp(timeout: ...)`.
 - Work the stop cuts short fails with `StoppedException` — not an
   `AtException`; catch it by type. A stopped client is not restarted — open
   the atsign again.

@@ -46,10 +46,10 @@
     {
       "id": 10,
       "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
-      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:, keys: KeychainAtKeysIo(), storage:) which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget.",
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:), passing keys or storage only to override the defaults (the keychain, and Hive in the app support directory), which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget.",
       "expectations": [
         "Shows AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(...)",
-        "Passes appName, deviceName, namespaces, preference, keys and storage to ApkamActivationDialog",
+        "Passes appName, deviceName, namespaces and preference to ApkamActivationDialog, with keys and storage only to override the defaults",
         "States the dialog waits for the manager's approval and hands back the enrolled AtClient",
         "Does not add a second PkamDialog or a _setupAtClient step",
         "Mentions the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget"
