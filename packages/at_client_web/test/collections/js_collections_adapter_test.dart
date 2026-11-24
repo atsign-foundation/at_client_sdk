@@ -70,7 +70,7 @@ void main() {
     expect(error, isA<AtException>());
     expect(error.kind, CollectionFailure.partialFailure);
     expect(errorCodeOf(error), 'COLLECTION_PARTIAL_FAILURE');
-    expect(error.message, isNotEmpty);
+    expect(error.message, 'partialFailure');
     expect(error.id, 'i');
     expect(error.owner, '@alice');
     expect(error.causeType, 'K');
@@ -84,6 +84,8 @@ void main() {
         return e;
       }
     })(), same(error));
+    expect(
+        error.toString(), 'JsCollectionsError(partialFailure): partialFailure');
   });
 
   late FakeAtServer server;
