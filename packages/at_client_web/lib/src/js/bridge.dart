@@ -92,12 +92,14 @@ Future<(AtClient, Future<void> Function())> _openPasskey(
     PasskeySessionOptions options,
     [SessionTransportOptions? transport,
     OpenPasskeySession? login]) async {
-  final session = await (login ?? _browserPasskeyOpener)(
+  final session = await (login ?? browserPasskeyOpener)(
       options, transport ?? SessionTransportOptions(root: options.rootDomain));
   return (session.client, session.stop);
 }
 
-Future<PasskeySession> _browserPasskeyOpener(
+/// The browser's passkey login, and the default a passkey session opens with:
+/// [passkeyLogin] over [transport] for [options].
+Future<PasskeySession> browserPasskeyOpener(
         PasskeySessionOptions options, SessionTransportOptions transport) =>
     passkeyLogin(
         atSign: options.atSign,

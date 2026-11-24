@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart'
     show
@@ -19,8 +20,11 @@ import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
+import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:at_client_web/src/session/web_passkey_entry.dart'
+    show openEntryHintStore;
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
@@ -241,6 +245,20 @@ class _ThrowingConnectionClient extends Fake implements AtClient {
 
   @override
   AtConnection get connection => throw failure;
+}
+
+/// A hint store whose first read fails before any passkey ceremony, so the
+/// browser's own login runs in a test, and that records its close.
+class _RefusingHintStore extends Fake implements IndexedDbHintStore {
+  final failure = StateError('the hint store read failed');
+
+  var closes = 0;
+
+  @override
+  Future<Uint8List?> credentialId(String atSign) async => throw failure;
+
+  @override
+  void close() => closes++;
 }
 
 void main() {
@@ -610,6 +628,30 @@ void main() {
         passkey.stopGate!.complete();
         await closing;
         expect(closed, isTrue);
+      });
+
+      test(
+          "create with the passkey options opens through the browser's passkey login",
+          () async {
+        final store = _RefusingHintStore();
+        var openedStores = 0;
+        final defaultOpen = openEntryHintStore;
+        openEntryHintStore = () async {
+          openedStores++;
+          return store;
+        };
+        addTearDown(() => openEntryHintStore = defaultOpen);
+
+        await expectLater(
+            openJsSession(PasskeySessionOptions(
+                atSign: 'alice',
+                namespace: 'wavi',
+                rpId: 'localhost',
+                rpName: 'test')),
+            throwsA(same(store.failure)));
+
+        expect(openedStores, 1, reason: 'the browser login opened its store');
+        expect(store.closes, 1, reason: 'the browser login closed its store');
       });
 
       test(
