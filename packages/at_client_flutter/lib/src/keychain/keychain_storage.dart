@@ -354,7 +354,8 @@ class KeychainStorage {
   /// is still stored after its delete, or the store cannot be read back. A
   /// store that holds nothing is not a failure. On Windows, a delete that the
   /// credential store refuses goes unseen when the entry then also reads as
-  /// absent.
+  /// absent, and a header that cannot be read or parsed leaves stored any
+  /// segment past a gap.
   Future<void> deleteAllAtKeysData() => _writes.synchronized(_deleteAll);
 
   Future<void> _deleteAll() async {
