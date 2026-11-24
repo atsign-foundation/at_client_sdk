@@ -68,8 +68,9 @@ Future<Session> _openSession(SessionOptions options,
 
 - A second call returns the same future and throws no new error.
 - A close made by a Dart caller while the session is still opening waits for the open to
-  settle, then stops what was opened. Through the bridge no such wait happens:
-  `BridgeEntry.create` returns the session only once it is open.
+  settle, then stops what was opened. Through the bridge that cannot happen:
+  `BridgeEntry.create` returns the session only once it is open, and a JS caller has no
+  session before that.
 - The longest it waits is D-30's. The passkey vault closes once the client has stopped, or
   after 10 seconds plus `AtServerAtKeysIo.lockWaitBound` (75 seconds by default) from when
   the client's stop begins, and `close()` also awaits the client's own `stop()`. D-40 adds no
