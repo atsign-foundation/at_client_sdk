@@ -1014,7 +1014,10 @@ void main() {
           isA<AtEnrollmentException>().having(
               (e) => e.message,
               'message',
-              allOf(contains('could not be written'),
+              allOf(
+                  contains('could not be written'),
+                  contains('no longer hold the authentication keypair they '
+                      'held before the request'),
                   contains('new-123 it created was revoked'))));
     });
   });
