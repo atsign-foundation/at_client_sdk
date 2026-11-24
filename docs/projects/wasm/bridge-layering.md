@@ -49,12 +49,12 @@ session, which closes the passkey's vault once the client has stopped (D-30). Th
 `close()` awaits that recorded stop. Nothing is renamed and no public type is added.
 
 `BridgeEntry.create` builds `PasskeySessionOptions` when the call asks for passkey sign-in
-(`passkey: true` with `rpId` and `rpName`) and `KeysSessionOptions` otherwise. Both arms take
-their transport as an argument: `_openKeys` a `SessionTransport`, by default
-`sessionTransport` over the options' root, and `_openPasskey` a `SessionTransportOptions`, by
-default the options' root. The passkey login is an argument too, by default `passkeyLogin`.
-`openJsSession` hands the same private function those transports and the login, so a test
-drives the real arms over fakes; no barrel exports it.
+(`passkey: true` with `rpId` and `rpName`) and `KeysSessionOptions` otherwise. The keys arm
+takes a `SessionTransport`, by default `keysTransport(options)` (`sessionTransport` over the
+options' root); the passkey arm takes the login, by default `browserPasskeyOpener`, which
+builds the `SessionTransportOptions` for the options' root and calls `passkeyLogin`.
+`openJsSession` lets a test pass that transport and that login to the same private
+function, so it drives the real arms over fakes; no barrel exports it.
 
 ```dart
 // private to lib/src/js/bridge.dart
@@ -65,10 +65,9 @@ Future<Session> _openSession(SessionOptions options,
 `close()` rules:
 
 - A second call returns the same future and throws no new error.
-- A close made by a Dart caller while the session is still opening waits for the open to
-  settle, then stops what was opened. Through the bridge that cannot happen:
-  `BridgeEntry.create` returns the session only once it is open, and a JS caller has no
-  session before that.
+- A close can only come after the open has settled, and then stops what was opened.
+  `AtClientSession` is constructed only after `portalSession`/`passkeyLogin` resolves, so no
+  caller, Dart or JS, holds a session while it is opening, and nobody can close one then.
 - The longest it waits is D-30's. The passkey vault closes once the client has stopped, or
   after 10 seconds plus `AtServerAtKeysIo.lockWaitBound` (75 seconds by default) from when
   the client's stop begins, and `close()` also awaits the client's own `stop()`. D-40 adds no

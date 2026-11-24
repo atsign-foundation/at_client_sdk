@@ -295,6 +295,10 @@ consumers still write `n/a` until the `@JSExport` facade exposes the adapter, an
 (a record written by the JS facade) stays expected-red until then. The adapter scope is
 set by D-27.
 
+**Status, 2026-11-24.** The `@JSExport` facade (`BridgeCollection`) now exposes
+`JsCollectionsAdapter`, which passes `type` as `writeTypeTag`, so JS writes carry the
+declared tag and T6.9 is no longer expected-red.
+
 **Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
 outright: it would force every JS app into a Dart build step, destroying the
 `npm install` story this entire project exists to deliver.
@@ -1079,6 +1083,10 @@ as `writeTypeTag`. It is exported from no library under `lib/`.
 - **Consequence:** T6.9 holds on the Dart side only; the facade that exposes the adapter
   is still to be built.
 
+**Status, 2026-11-24.** The facade that exposes the adapter is built: `BridgeCollection`
+in `lib/src/js/bridge.dart` hands `JsCollectionsAdapter` to JS, so T6.9 holds end to end,
+not on the Dart side only.
+
 ---
 
 ### D-28 — Concurrent writers are expected; each @keys write refuses a loss and stops (2026-11-16)
@@ -1549,4 +1557,4 @@ Live test L step 0a found every new passkey appended an unlock to one shared pub
 | 2026-11-20 | **D-29 accepted** (gkc, 2026-11-20, 'Accept all nine (Recommended)'), its text corrected to the code: the browser imports the 32 bytes HKDF derives under the seal-key label as a non-extractable AES-GCM key for encrypt and decrypt only, rather than creating a key, and the bytes pass through Dart memory first. Its row is D-34 in `docs/architecture/decisions.md`. |
 | 2026-11-20 | **Passkey HKDF labels kept as built** (gkc, 2026-11-20, 'Accept all nine (Recommended)'): the record id, pointer namespace, seal key and auth seed are derived with HKDF-SHA256, an empty salt and the info `<label>\|<canonical atSign>`, under the labels `at_auth/custody/<name>/v1`. Only builds that never reached trunk or a release derived with the earlier `atkeys-*` labels, so nothing moves. The 2026-10-31 row above and the key-sources profile are corrected to these labels, and the profile's `salt = userHandle` to the empty salt. Rejected: a `userHandle` salt, which no derivation call can obtain and which adds nothing the atSign in the info and the per-passkey PRF output do not already give. |
 | 2026-11-20 | **Passkey formats promised from the first stable release** (gkc, 2026-11-20, 'Accept all nine (Recommended)'): the passkey libraries of at_auth and at_client and the browser package carry no `@experimental` marker. From the first stable release of each, these are a compatibility promise, and a change needs a compatibility path: the HKDF labels; the sealed-record layout (`v: 2`, `alg`, `kdf`, `typ`, `iv`, `ct`, with the record's atSign and type in its authentication data); and the atServer record names (the `atkeys.<enrollmentId>.a.__e` document, the `_<lookupHex>.<ns>` pointer, the `atkeys-lock.<enrollmentId>.a.__e` lock and the `completion-due.<enrollmentId>.a.__e` record). Rejected: `@experimental`, which would license changing exactly these, and a changed label or name strands every Atsign onboarded with a passkey. |
-| 2026-11-23 | **Layer renames (D-45) were withdrawn on 2026-11-24, before merging.** Every trunk type name and file path stays as it was, and the path D-27 cites (`lib/src/collections/js_collections_adapter.dart`) still exists. |
+| 2026-11-24 | **Layer renames (D-45) were withdrawn on 2026-11-24, before merging.** Every trunk type name and file path stays as it was, and the path D-27 cites (`lib/src/collections/js_collections_adapter.dart`) still exists. |

@@ -239,10 +239,10 @@ packages/at_client_web/
 **What the alpha ships.** The bridge entry is `web/at_client_bridge_entry.dart`, compiled by
 the release build to `build/at_client_web.js`. It installs one global,
 `__atsignAtClientWeb`, whose only member is `create`; the session and collection objects
-it returns are `@JSExport` wrappers in `lib/src/js/bridge.dart`. The TypeScript wrapper is
-the npm package `packages/at_client_web` (`@atsign/at_client_web`), to be published only under
-the `alpha` dist-tag in [atsign-foundation/at_js](https://github.com/atsign-foundation/at_js)
-(`packages/at_client_web`). See [§5a](#5a-the-npm-api-alpha).
+it returns are `@JSExport` wrappers in `lib/src/js/bridge.dart`. The TypeScript wrapper —
+the `src/` + `dist/` tree in [§8](#8-npm-packaging) — now lives in the `at_js` repository
+as `packages/at_client_web` (`@atsign/at_client_web`), to be published only under the
+`alpha` dist-tag. See [§5a](#5a-the-npm-api-alpha).
 
 **Bridge releases.** The workflow that publishes the bundle as a prerelease ships separately from this change. The npm package pins a released tag and checksum.
 
@@ -325,12 +325,18 @@ object, and `CItem.type` (`:4726`) surfaces the tag as a discriminator.
 | **A — upstream `writeTypeTag`** (shipped) | An additive, non-breaking override on `AtCollection` that lets a caller supply the write-side tag directly, bypassing the `Type`-keyed lookup. |
 | **B — carrier-class shim** (fallback) | The facade pre-declares N Dart wrapper classes, each holding a `Map` with `toJson()`, and binds a declared tag to each via `registerFactory`. Verified mechanically viable: `CItem.toJson()` (`:4803-4816`) emits `{'type', 'obj'}` and the caller `jsonEncode`s it (`:1088`), which invokes `toJson()` on a non-primitive payload. Bounded by a fixed ceiling of concurrent tags per isolate. |
 
-**Status.** Route A is implemented upstream in at_client 4.1.0 (`AtClient.collection` and
-`AtCollection.subCollection` take an optional `writeTypeTag`, and reopening a namespace with
-a conflicting tag throws `ArgumentError`). The Dart-side adapter (§5.5) passes `type`
-straight through as `writeTypeTag`, and the `@JSExport` facade (`BridgeCollection`) now
-exposes that adapter, so records written by JS consumers carry their declared tag on the
-wire (T6.9).
+**Status, 2026-11-14.** Route A is implemented upstream in at_client 4.1.0 (unreleased):
+`AtClient.collection` and `AtCollection.subCollection` take an optional
+`writeTypeTag`, and `_resolveType` falls back to it before `n/a` when no factory is
+registered for the item's type. The same change adds a per-client reopen check: a
+namespace reopened on the same client so that a new item would be stamped with another
+tag throws `ArgumentError`. The Dart-side adapter
+(§5.5) passes `type` straight through as `writeTypeTag`, so records it writes carry the
+declared tag (T6.9). JS consumers get this once the `@JSExport` facade exposes the
+adapter; until then the gap above holds for them.
+
+**Status, 2026-11-24.** The §5.5 adapter passes `writeTypeTag` and `BridgeCollection`
+exposes the adapter to JS, so JS writes carry the declared tag.
 
 ### 5.3 The surface
 
@@ -708,6 +714,10 @@ bare `await`.
 > descriptions of one surface, and they will drift. **Author the wrapper once, in
 > TypeScript; generate both outputs from it.**
 
+The tree below describes the npm package `packages/at_client_web` in the
+[at_js](https://github.com/atsign-foundation/at_js) repository, not this one: the Dart
+bundle (`at_client.js`) is built here and shipped inside that package.
+
 ```
 src/                  # hand-written — the only facade source
   shim.ts             # Node globals; MUST be imported before the engine (see below)
@@ -937,7 +947,13 @@ Serving is not only headers — it is a release pipeline. This blocks any non-`0
   subtypes can ship in a minor version. The JS discriminated union's encoder and every
   documented consumer pattern must include a default/unknown branch, or a future
   upstream minor silently breaks JS consumers that pattern-matched exhaustively.
-- **Write-compatibility with typed Dart peers is wired through Route A** (§5.2). `AtClient.collection` supports `writeTypeTag`, `JsCollectionsAdapter` passes `type` through it, and `BridgeCollection` exposes the adapter so JS writes carry the declared `type` tag on the wire (see [§11](#11-open-questions) JS-7).
+- **Write-compatibility with typed Dart peers carries a residual risk** (§5.2). A typed
+  Dart peer reading a record written before the tag existed still sees `n/a` (an untagged
+  item is adopted on update), so a mixed JS+Dart fleet can still meet records that are not
+  typed. Route A is the mitigation: `AtClient.collection` supports `writeTypeTag`,
+  `JsCollectionsAdapter` passes `type` through it, and `BridgeCollection` exposes the
+  adapter, so JS writes carry the declared `type` tag on the wire (see
+  [§11](#11-open-questions) JS-7).
 
 ---
 
@@ -984,10 +1000,13 @@ project's preferred outcome; route B is bounded (a fixed ceiling of concurrent t
 achievable unilaterally in the facade. **Resolve on upstream's answer to the additive
 change; document the gap and ship read-compatibility in the meantime.**
 
-*Status:* upstream implemented Route A as `writeTypeTag` in at_client 4.1.0, together with
-a per-client reopen check in `AtClient.collection` that throws `ArgumentError`. The §5.5
-adapter adopts it and `BridgeCollection` now exposes the adapter to JS, so JS writes
-carry the declared `type` tag on the wire. Route B stays documented as the fallback.
+*Status, 2026-11-14:* upstream has implemented route A as `writeTypeTag` in at_client
+4.1.0 (unreleased), together with a per-client reopen check in
+`AtClient.collection` that throws `ArgumentError`. The §5.5 adapter adopts it; JS writes still stamp
+`n/a` until the facade exposes the adapter. Route B stays documented as the fallback.
+
+*Status, 2026-11-24:* the §5.5 adapter passes `writeTypeTag` and `BridgeCollection`
+exposes the adapter to JS, so JS writes carry the declared tag.
 
 **JS-8 — `AtClientManager`'s singleton blocks multi-instance JS clients.**
 `packages/at_client/lib/src/manager/at_client_manager.dart` holds a
