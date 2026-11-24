@@ -107,8 +107,10 @@ abstract interface class Session {
   /// Denies the pending request [id]; same throws as [approve].
   Future<void> deny(String id);
 
-  /// Stops the client and every subscription; concurrent calls await the same
-  /// teardown.
+  /// Stops the client and every subscription. The first call starts the
+  /// teardown; every later call, concurrent or sequential, returns that same
+  /// future, whether it succeeded or failed, so nothing re-runs and a close
+  /// whose teardown failed stays failed and returns the same error.
   Future<void> close();
 }
 
