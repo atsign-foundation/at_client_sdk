@@ -39,6 +39,53 @@ class _HeldOpenSqlite extends SqliteAtClientStorage with _HeldOpen {
       : super.under();
 }
 
+/// A client-closed storage that implements [AtClientStorage] without
+/// extending [AtClientStorageBase], over a memory storage, recording the
+/// attach, detach and close calls made on it.
+class _InterfaceOnlyStorage implements AtClientStorage {
+  _InterfaceOnlyStorage(String atSign)
+      : inner = InMemoryAtClientStorage(atSign: atSign);
+
+  final InMemoryAtClientStorage inner;
+  final List<String> calls = [];
+
+  @override
+  bool get closedByClient => true;
+
+  @override
+  Future<void> attach(AtClient owner) {
+    calls.add('attach');
+    return inner.attach(owner);
+  }
+
+  @override
+  Future<void> detach(AtClient owner) {
+    calls.add('detach');
+    return inner.detach(owner);
+  }
+
+  @override
+  Future<void> close() {
+    calls.add('close');
+    return inner.close();
+  }
+
+  @override
+  bool isHeldBy(AtClient client) => inner.isHeldBy(client);
+
+  @override
+  get keyStore => inner.keyStore;
+
+  @override
+  get syncQueue => inner.syncQueue;
+
+  @override
+  Future<void> forgetPrincipal() => inner.forgetPrincipal();
+
+  @override
+  Future<void> clear() => inner.clear();
+}
+
 /// A backend the tests run on.
 class _Backend {
   const _Backend(this.name, this.make, this.makeHeldOpen,
@@ -413,4 +460,27 @@ void main() {
       }
     });
   }
+
+  test(
+      'Given a client whose storage only implements AtClientStorage and is '
+      'closed by the client, when the client stops, then it detaches from the '
+      'storage and then closes it', () async {
+    const atSign = '@closeinterfaceonly';
+    final storage = _InterfaceOnlyStorage(atSign);
+    final client = await _clientOn(storage, atSign);
+    addTearDown(() async {
+      await client.stop();
+      await storage.inner.detach(client);
+      await storage.inner.close();
+    });
+
+    await client.stop();
+
+    expect(storage.calls, ['attach', 'detach', 'close'],
+        reason: 'stop() detaches from a storage that is not an '
+            'AtClientStorageBase, then closes it because the client owns it');
+    await expectLater(
+        storage.inner.attach(FakeClient(atSign, 'e2')), _closedRefusal(),
+        reason: 'the storage is closed, not only detached');
+  });
 }
