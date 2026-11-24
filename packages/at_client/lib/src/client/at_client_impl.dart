@@ -733,6 +733,11 @@ class AtClientImpl implements AtClient {
   /// Returns the client for `(currentAtSign, enrollmentId)`, building one only
   /// if this process has not built one already.
   ///
+  /// ⚠️ **Application code should not call this.** A client it builds has no
+  /// sync, notification or enrollment service until they are set, as
+  /// `buildAtClient` sets them. Open a client with `Atsign.open` or
+  /// `Atsign.activate`, `PendingEnrollment.client`, or `buildAtClient`.
+  ///
   /// ⚠️ **On a cache hit almost every argument here is ignored, silently.** The
   /// cache is static and keyed only by that pair, so a second call naming the
   /// same atSign and enrollment hands back the FIRST client — built with the
