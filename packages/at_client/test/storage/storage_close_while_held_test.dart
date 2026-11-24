@@ -12,16 +12,16 @@ import 'storage_contract.dart';
 import '../test_utils/no_keys.dart';
 import '../test_utils/transport.dart';
 
-/// Holds [openBackend] until [release] completes, and completes [reached]
+/// Holds [openBackend] until [proceed] completes, and completes [reached]
 /// once an attach is inside it.
 mixin _HeldOpen on AtClientStorageBase {
   final Completer<void> reached = Completer<void>();
-  final Completer<void> release = Completer<void>();
+  final Completer<void> proceed = Completer<void>();
 
   @override
   Future<void> openBackend() async {
     if (!reached.isCompleted) reached.complete();
-    await release.future;
+    await proceed.future;
     await super.openBackend();
   }
 }
@@ -94,6 +94,33 @@ Future<AtClient> _clientOn(AtClientStorage storage, String atSign) =>
         atKeysIo: noKeysFor(atSign),
         storage: storage);
 
+/// Runs [body] in a zone that calls [check] each time one of its callbacks
+/// returns, so [check] sees the state at every point another task could run.
+Future<T> _checkedAtEveryTurn<T>(
+        Future<T> Function() body, void Function() check) =>
+    Zone.current
+        .fork(
+            specification: ZoneSpecification(
+          run: <R>(Zone self, ZoneDelegate parent, Zone zone, R Function() f) {
+            final result = parent.run(zone, f);
+            check();
+            return result;
+          },
+          runUnary: <R, A>(Zone self, ZoneDelegate parent, Zone zone,
+              R Function(A) f, A arg) {
+            final result = parent.runUnary(zone, f, arg);
+            check();
+            return result;
+          },
+          runBinary: <R, A, B>(Zone self, ZoneDelegate parent, Zone zone,
+              R Function(A, B) f, A arg1, B arg2) {
+            final result = parent.runBinary(zone, f, arg1, arg2);
+            check();
+            return result;
+          },
+        ))
+        .run(body);
+
 /// Writes a record through [keyStore] and reads it back.
 Future<void> _answers(
     AtKeyValueStore<String, AtData, AtMetaData?> keyStore, String key,
@@ -117,7 +144,7 @@ void main() {
         return storage;
       }
 
-      FakeClient fake(String atSign, String enrollmentId) {
+      FakeClient fake(String atSign, String? enrollmentId) {
         final client = FakeClient(atSign, enrollmentId);
         fakes.add(client);
         return client;
@@ -216,7 +243,7 @@ void main() {
             reason: 'an attach still opening the backend holds the storage '
                 'as surely as one that has finished');
 
-        storage.release.complete();
+        storage.proceed.complete();
         final client = await building;
         expect(storage.isHeldBy(client), isTrue,
             reason: 'the attach completed with the client as owner');
@@ -240,6 +267,37 @@ void main() {
             reason: 'stop() closed the storage the client owns');
         await expectLater(storage.attach(fake(atSign, 'e2')), _closedRefusal(),
             reason: 'the storage is closed, not only detached');
+      });
+
+      test(
+          'Given a client that owns its storage, when a client of the same '
+          'principal attaches the moment the stop releases the storage, then '
+          'that attach is refused as closed and the stop completes', () async {
+        final atSign = '@closeownedgap${backend.name}';
+        final storage = make(atSign, closedByClient: true);
+        final client = await _clientOn(storage, atSign);
+        final latecomer = fake(atSign, null);
+        final testZone = Zone.current;
+        Future<void>? latecomerAttach;
+
+        final stopping = _checkedAtEveryTurn(client.stop, () {
+          if (latecomerAttach != null || storage.isHeldBy(client)) return;
+          latecomerAttach = testZone
+              .run<Future<void>>(() => storage.attach(latecomer))
+            ..ignore();
+        });
+
+        await expectLater(stopping, completes,
+            reason: 'a client\'s own stop() closes a storage it owns without '
+                'being refused');
+        expect(storage.isHeldBy(client), isFalse,
+            reason: 'the stop released the storage');
+        expect(latecomerAttach, isNotNull,
+            reason: 'the premise: the latecomer attached as soon as the stop '
+                'no longer held the storage');
+        await expectLater(latecomerAttach, _closedRefusal(),
+            reason: 'the stop dropped its claim and closed the storage in one '
+                'step, so no attach found it unheld and open');
       });
 
       test(

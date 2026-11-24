@@ -3,8 +3,8 @@ Feature: A storage a client still holds is not closed
   An AtClientStorage is held by one client at a time. Closing it while a
   client holds it would leave that client on a closed backend, so close()
   refuses until the client has stopped or detached, and closes nothing. A
-  client's own stop() detaches before it closes a storage it owns, so that
-  close is never refused.
+  client's own stop() detaches and closes a storage it owns in one step, so
+  that close is never refused.
 
   Races: a close() during an attach() still opening the backend is refused,
   and the attach completes with the backend open; a close() during a

@@ -1378,8 +1378,12 @@ class AtClientImpl implements AtClient {
     _storageReleased = true;
     _HeldDefect? defect;
     try {
-      await storage.detach(this);
-      if (storage.closedByClient) await storage.close();
+      if (storage is AtClientStorageBase) {
+        await storage.release(this);
+      } else {
+        await storage.detach(this);
+        if (storage.closedByClient) await storage.close();
+      }
     } on Exception catch (e) {
       _logger.warning('Error while releasing storage: $e');
     } on Error catch (e, stack) {
