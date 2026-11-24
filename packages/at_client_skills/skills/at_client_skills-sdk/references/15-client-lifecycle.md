@@ -287,8 +287,13 @@ final sub = client.notificationService
   wait for the final status (`waitForFinalDeliveryStatus: false`) reports a
   failure through `onError`; either way, a stop ends the status poll and the
   result says so.
-- `stopAllSubscriptions()` cancels every subscription and, by default, the
-  monitor. `stop()` on the client does this for you.
+- `stopAllSubscriptions()` stops the notification service for good: every
+  subscription ends, the monitor stops, and `subscribe()` and
+  `startListening()` then throw `StoppedException`. Its
+  `stopNotificationsListener` argument is deprecated and ignored. To pause
+  the monitor and keep the subscriptions, call `stopListening()`, then
+  `startListening()` to resume; to receive notifications after a stop, build
+  a new client. `stop()` on the client stops the service for you.
 
 ---
 
