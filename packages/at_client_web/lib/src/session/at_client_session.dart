@@ -604,8 +604,9 @@ class AtClientSession implements Session {
   /// is approved and holds `__manage` read-write. The primary enrollment,
   /// which has no record to read, holds it.
   ///
-  /// An enrollment the atServer does not know is refused; any other failure
-  /// reading the record reaches the caller unchanged.
+  /// An enrollment the atServer does not know, and a refusal from the
+  /// atServer reading it, are refused with that exception too; every other
+  /// failure reading the record reaches the caller unchanged.
   Future<void> _requireManage() async {
     _open();
     final id = _client.enrollmentId;
