@@ -21,6 +21,7 @@ import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
 
@@ -1785,6 +1786,38 @@ void main() {
         expect((await _rejected(_call(s, 'approve', ['e9'.toJS]))).code,
             'enrollment_denied');
       });
+    });
+  });
+
+  group('keysTransport', () {
+    test('builds the default keys transport for the options root', () {
+      final options = KeysSessionOptions(
+          atSign: '@alice',
+          namespace: 'tally',
+          keys: const {
+            '@alice': {'k': 'v'}
+          },
+          rootDomain: 'root.example:64');
+
+      final transport = keysTransport(options);
+
+      expect((
+        transport.root.rootDomain,
+        transport.root.rootPort
+      ), (
+        'root.example',
+        64
+      ), reason: "the transport carries the options' root");
+      final finderAtRoot = isA<HttpsSecondaryAddressFinder>()
+          .having((f) => f.host, 'host', 'root.example')
+          .having((f) => f.port, 'port', 64);
+      expect(transport.finder, finderAtRoot,
+          reason: 'Atsigns are looked up at that root over HTTPS');
+
+      final lookup = transport.lookUps(
+          atSign: '@alice', rootDomain: transport.root, authenticator: null);
+      expect(lookup.secondaryAddressFinder, finderAtRoot,
+          reason: 'the lookups factory falls back to that root as well');
     });
   });
 
