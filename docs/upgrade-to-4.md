@@ -88,7 +88,11 @@ dependencies:
 ```
 
 Import `package:at_client_flutter/at_client_flutter.dart` in place of
-`at_client.dart`, `at_auth.dart` and `at_client_io.dart`.
+`at_client.dart`, `at_auth.dart` and `at_client_io.dart`. The exception is an
+app that catches the keys stores' `AtKeysFileOverwriteException`,
+`AtKeysSourceAbsentException` or `AtKeysValidationException` by type: neither
+barrel exports them, so it imports `package:at_auth/at_auth.dart` and lists
+`at_auth` in its pubspec.
 
 ### A library that both a command-line program and a Flutter app use
 
@@ -834,8 +838,10 @@ a pending enrollment, and `saveSpp` takes a `Passcode`.
 **Checklist**
 
 - [ ] `at_client_flutter: ^2.0.0` replaces at_client and at_auth in
-      `pubspec.yaml`.
-- [ ] Every SDK import is `package:at_client_flutter/at_client_flutter.dart`.
+      `pubspec.yaml`; at_auth stays only for an app that catches the keys
+      stores' exceptions by type.
+- [ ] Every SDK import is `package:at_client_flutter/at_client_flutter.dart`,
+      and `package:at_auth/at_auth.dart` only for those exceptions.
 - [ ] `AuthService` and `FlutterEnrollmentService` calls are the dialogs, or
       `AtsignFlows`' `open`, `activate` and `enroll`.
 - [ ] Each dialog's result is read as the `AtClient` it returns.
