@@ -178,9 +178,10 @@ abstract class AtClientStorageBase implements AtClientStorage {
   @override
   Future<void> detach(AtClient owner) async => _drop(owner);
 
-  /// [detach] and then, when [closedByClient], [close], with nothing able to
-  /// run between them, so no [attach] finds a storage its client closes
-  /// unheld and still open.
+  /// Drops [owner]'s claim as this class's [detach] does, without calling an
+  /// override of it, and then, when [closedByClient], calls [close], with
+  /// nothing able to run between them, so no [attach] finds a storage its
+  /// client closes unheld and still open.
   ///
   /// When [owner] does not hold the storage nothing is dropped, and [close]
   /// closes it or refuses as it would after a [detach].
