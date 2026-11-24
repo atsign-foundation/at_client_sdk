@@ -87,6 +87,21 @@ class SessionKeysIo extends WrittenAtKeysIo {
     refusedFlushes++;
     throw StateError('a session key store takes no flushes ($atsign)');
   }
+
+  /// Runs [mutate] on a copy of the session's keys and hands a changed copy
+  /// to [flush], which throws, so no change reaches the session's keys.
+  ///
+  /// Session keys that record no Atsign are given the session's before the
+  /// copy is made; keys that record one keep it.
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final keys = await read(atsign.toString());
+    keys.atsign ??= _atSign.toAtsign();
+    final copy = AtKeys.fromJson(keys.toJson())..atsign = keys.atsign;
+    if (await mutate(copy) == false) return;
+    await flush(atsign, copy);
+  }
 }
 
 /// Opens an at_client for [atSign] on [keys], with in-memory storage and
