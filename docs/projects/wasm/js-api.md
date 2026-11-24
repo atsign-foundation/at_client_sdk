@@ -244,18 +244,9 @@ the npm package `packages/at_client_web` (`@atsign/at_client_web`), to be publis
 the `alpha` dist-tag in [atsign-foundation/at_js](https://github.com/atsign-foundation/at_js)
 (`packages/at_client_web`). See [§5a](#5a-the-npm-api-alpha).
 
-**Bridge releases.** A release is started by hand: run the workflow
-`at_client_web_bridge_release.yaml` (`workflow_dispatch`) from `trunk`. It builds only the
-dart2js bridge from `packages/at_client_web/dart-workspace.lock` and attaches
-`at_client_web.js` and `at_client_web.js.sha256` to a prerelease of this repository tagged
-`at_client_web-bridge-<first 12 characters of the commit SHA>`, with a build provenance
-attestation. The bundle is built in a read-only job and a separate job attests it and
-creates the prerelease. The npm package pins one such tag and checksum.
+**Bridge releases.** The workflow that publishes the bundle as a prerelease ships separately from this change. The npm package pins a released tag and checksum.
 
-The build runs `dart pub get --enforce-lockfile`, so it fails when the lock no longer
-matches the workspace's pubspecs. To regenerate it, run `dart pub get` at the repo root and
-copy the resulting `pubspec.lock` to `packages/at_client_web/dart-workspace.lock`. The
-workflow pins the Dart version (`dart-channel`), so the same lock builds the same bundle.
+PR CI checks that `packages/at_client_web/dart-workspace.lock` matches the workspace's pubspecs: it copies the lock to the repo root and runs `dart pub get --enforce-lockfile`. To regenerate it, run `dart pub get` at the repo root and copy the resulting `pubspec.lock` to `packages/at_client_web/dart-workspace.lock`.
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
 also serving Node. Now that the JS surface exposes the collection API via `BridgeCollection`
