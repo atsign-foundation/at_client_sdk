@@ -164,6 +164,21 @@ InvalidArgumentException _invalidArgument(String name, String type) =>
 InvalidArgumentException _missingArgument(String name) =>
     InvalidArgumentException.missing(name);
 
+/// The rejection for an [ArgumentError] a session options constructor throws,
+/// named by [ArgumentError.name]: every option it validates has its own
+/// rejection, a refused `.atKeys` document is a [InvalidKeyException], and
+/// any other [ArgumentError] is rethrown as it is.
+Never _rejectOption(ArgumentError e) => throw switch (e.name) {
+      'atSign' => _invalidArgument('atSign', 'a valid atSign'),
+      'namespace' =>
+        _invalidArgument('namespace', 'a non-empty namespace segment'),
+      'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
+      'keys' => InvalidKeyException(KeyRefusal.keysDocument),
+      'rpId' => _invalidArgument('rpId', 'a non-empty string'),
+      'rpName' => _invalidArgument('rpName', 'a non-empty string'),
+      _ => e,
+    };
+
 final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSAny _objectPrototype = _objectClass['prototype']!;
 final JSObject _arrayClass = globalContext['Array']! as JSObject;
@@ -661,15 +676,7 @@ class BridgeEntry {
             rpName: rpName,
             rootDomain: rootDomain);
       } on ArgumentError catch (e) {
-        throw switch (e.name) {
-          'atSign' => _invalidArgument('atSign', 'a valid atSign'),
-          'namespace' =>
-            _invalidArgument('namespace', 'a non-empty namespace segment'),
-          'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
-          'rpId' => _invalidArgument('rpId', 'a non-empty string'),
-          'rpName' => _invalidArgument('rpName', 'a non-empty string'),
-          _ => e,
-        };
+        _rejectOption(e);
       }
     }
     final keys = _keys(_own(object, 'keys'));
@@ -680,14 +687,7 @@ class BridgeEntry {
           keys: keys,
           rootDomain: rootDomain);
     } on ArgumentError catch (e) {
-      throw switch (e.name) {
-        'atSign' => _invalidArgument('atSign', 'a valid atSign'),
-        'namespace' =>
-          _invalidArgument('namespace', 'a non-empty namespace segment'),
-        'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
-        'keys' => InvalidKeyException(KeyRefusal.keysDocument),
-        _ => e,
-      };
+      _rejectOption(e);
     }
   }
 

@@ -519,6 +519,19 @@ void main() {
       expect(r.message, isNot(contains('sentinel')));
     });
 
+    test('an atKeys document the options refuse rejects with bad_key',
+        () async {
+      final r = await _rejected(_call(api, 'create', [
+        _obj(opts({
+          'keys': {'version': 999}
+        }))
+      ]));
+
+      expect(r.code, 'bad_key');
+      expect(r.message, 'keys is not a usable .atKeys document');
+      expect(opened, isEmpty);
+    });
+
     test(
         'create with missing or mistyped options rejects with invalid_argument naming the option',
         () async {
@@ -695,7 +708,7 @@ void main() {
           expect(r.code, 'invalid_argument');
           expect(r.message, contains(name));
         }
-        for (final name in ['rpId', 'rpName']) {
+        for (final name in ['atSign', 'namespace', 'rpId', 'rpName']) {
           for (final bad in <Object?>[5, true, <Object?>[]]) {
             final r = await _rejected(_call(api, 'create', [
               _obj(passkeyOpts({name: bad}))
