@@ -127,6 +127,12 @@ final sub = parentCollection.subCollection<Reply>(
 The `AtCollection` constructor validates this and throws `ArgumentError`
 before any I/O.
 
+**Raw keys have their own rule.** A key name passed to `atClient.put` cannot
+contain `@` or a space: the write throws `AtKeyException` ("Key cannot contain
+@"). Don't swallow it: a key that embeds an atsign, such as `log-@bob`, fails
+on every write, and a caught-and-dropped error turns that into data that is
+silently never saved.
+
 ---
 
 ## 7. `CAncestor.owner` Is Always Null on `CSubItemDeleted`

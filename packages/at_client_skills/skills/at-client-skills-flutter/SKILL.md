@@ -91,7 +91,8 @@ full, what each client state means, and the shared helpers.
 app) and `com.apple.security.files.user-selected.read-only` (to pick a
 `.atKeys` file) in **both** `DebugProfile.entitlements` and
 `Release.entitlements`; without them the app cannot reach its atServer, or
-`AtKeysFileDialog` throws. The reference has the XML.
+`AtKeysFileDialog` throws. The keychain needs no entitlement and no signing
+team. The reference has the XML.
 
 ---
 

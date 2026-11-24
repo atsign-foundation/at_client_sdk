@@ -98,6 +98,11 @@ Install with `dart pub add` — it resolves the latest compatible version:
 | Dart CLI / daemon / server / IoT | `at_client_cli` — `package:at_client_cli/at_client_cli.dart`         |
 | Flutter app                      | `at_client_flutter` — `package:at_client_flutter/at_client_flutter.dart` |
 
+A project with both Flutter apps and headless agents is two packages: the apps
+on `at_client_flutter`, the agents in a pure-Dart package on `at_client_cli`.
+Inside a Flutter package, `dart compile exe` refuses to build an agent, even
+one that imports no Flutter code: the package's dependencies have build hooks.
+
 Nothing else from the SDK, beyond any feature package the app adds
 (`at_contact`, `at_policy`, `at_telemetry`, `noports_core`; these are released
 separately, so check one resolves before building on it — see

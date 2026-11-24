@@ -74,6 +74,12 @@ throws:
 | `AtCredentialRefusedException`         | the atServer refused the keys               | no — a person |
 | `SecondaryNotFoundException`           | the atDirectory has no atServer for the atsign | no — a person |
 | `SecondaryServerConnectivityException` | the atServer was not reached in time        | yes           |
+| `FormatException` (`ArgParserException`) | a flag is missing or malformed, before anything connects | no — print the usage and exit |
+
+It can also throw what opening a client throws, such as
+`AtNoCredentialException` and `AtStorageInUseException`: core's lifecycle
+reference (section 1) lists them. Catch each in `main` and print one line and
+a non-zero exit, not a stack trace.
 
 `CLIBase` takes `lookUps:`; with none it uses `lookUpsFor` (§3).
 
