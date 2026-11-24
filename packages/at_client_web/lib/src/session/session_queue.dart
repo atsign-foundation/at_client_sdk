@@ -7,10 +7,11 @@ String openLock(String atSign, String enrollmentId) => '$atSign $enrollmentId';
 /// Runs [open] once every open started earlier under [lock] has ended,
 /// however it ended, and returns its result.
 ///
-/// Building a client checks for a live one and registers its own across
-/// awaits, so two opens running together would both pass the check. Every
-/// path that builds a client for an (atSign, enrollment) queues here, so
-/// they wait on each other whichever way they were started.
+/// Building a client is refused while another for the same (atSign,
+/// enrollment) is live or being built, so an open started while another runs
+/// would be refused even if that other one then failed. Every path that
+/// builds a client for an (atSign, enrollment) queues here, so they wait on
+/// each other whichever way they were started.
 Future<T> queuedOpen<T>(String lock, Future<T> Function() open) async {
   final previous = _opening[lock];
   final done = Completer<void>();

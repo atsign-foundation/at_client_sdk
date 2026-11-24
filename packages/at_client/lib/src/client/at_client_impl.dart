@@ -461,8 +461,7 @@ class AtClientImpl implements AtClient {
   /// it, and any caller that captured it earlier still holds it. Without this,
   /// naming the old id misses the cache and builds a **second** client for the
   /// same enrollment — a second connection, a second `_init`, a second startup
-  /// tail taking the same mint locks — which is then filed over the first,
-  /// leaving the original alive and unreachable.
+  /// tail taking the same mint locks — beside the first.
   ///
   /// A separate map rather than an alias entry in [atClientInstanceMap]: an
   /// alias would make one client look like two to the enrolled-client count in
@@ -470,6 +469,43 @@ class AtClientImpl implements AtClient {
   /// client" from "several".
   @visibleForTesting
   static final Map<String, String> supersededInstanceKeys = <String, String>{};
+
+  /// The instance keys claimed by a [create] still building, each to the
+  /// clients being built that claim it, so that a second build of that
+  /// principal is refused rather than built beside it.
+  ///
+  /// A key can have several claimants: a build that retrofits to a new
+  /// enrollment claims that enrollment's key even when another build, which
+  /// read the retrofitted keys first, claims it already. The key stays
+  /// claimed until every one of them has ended.
+  static final Map<String, Set<AtClientImpl>> _claimedByBuild =
+      <String, Set<AtClientImpl>>{};
+
+  /// Adds [building] to the claimants of [key].
+  static void _claim(String key, AtClientImpl building) => _claimedByBuild
+      .putIfAbsent(key, Set<AtClientImpl>.identity)
+      .add(building);
+
+  /// Removes [building] from the claimants of every key, and drops each key
+  /// left with none.
+  static void _releaseClaims(AtClientImpl building) {
+    for (final claimants in _claimedByBuild.values) {
+      claimants.remove(building);
+    }
+    _claimedByBuild.removeWhere((_, claimants) => claimants.isEmpty);
+  }
+
+  /// The refusal of a client for [atSign] as [enrollmentId] while another is
+  /// live or being built.
+  static StateError _liveOrBeingBuilt(String atSign, String? enrollmentId) {
+    final principal = enrollmentId == null
+        ? 'the primary enrollment'
+        : 'enrollment "${clipForMessage(enrollmentId, quote: '"')}"';
+    return StateError('A client for $atSign as $principal is already live or '
+        'being built. A process holds one client per Atsign and enrollment; '
+        'stop() the one there is, or let its build end, before building '
+        'another.');
+  }
 
   /// Follows [asked] through any supersessions to the key a client is actually
   /// filed under.
@@ -726,6 +762,12 @@ class AtClientImpl implements AtClient {
   /// [stop] removes a client from that cache when its teardown finishes, so a
   /// call after that builds a new client; a call while the teardown is still
   /// running throws a [StateError] rather than restarting it.
+  ///
+  /// Only a client that has finished building is handed back. A call made
+  /// while another is still building a client for the same principal throws
+  /// a [StateError] before it builds anything, and so does a build that, as
+  /// it finishes, finds another client already filed for its principal: it
+  /// stops the client it built first.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -744,6 +786,36 @@ class AtClientImpl implements AtClient {
     /// false, a caller naming no enrollment is handed the atSign's enrolled
     /// client if exactly one is cached.
     bool exactEnrollment = true,
+  }) =>
+      _create(currentAtSign, namespace, preferences,
+          remoteSecondary: remoteSecondary,
+          encryptionService: encryptionService,
+          atKeysIo: atKeysIo,
+          atLookUp: atLookUp,
+          lookUps: lookUps,
+          secondaryAddressFinder: secondaryAddressFinder,
+          enrollmentId: enrollmentId,
+          storage: storage,
+          exactEnrollment: exactEnrollment,
+          handsBackLive: true);
+
+  /// [create], which hands back a client already filed for the principal
+  /// only when [handsBackLive] is true, and otherwise refuses it with a
+  /// [StateError].
+  static Future<AtClientImpl> _create(
+    String currentAtSign,
+    String? namespace,
+    AtClientPreference preferences, {
+    RemoteSecondary? remoteSecondary,
+    EncryptionService? encryptionService,
+    required AtKeysIo atKeysIo,
+    AtLookUp? atLookUp,
+    required AtLookUpFactory lookUps,
+    required SecondaryAddressFinder secondaryAddressFinder,
+    String? enrollmentId,
+    required AtClientStorage storage,
+    required bool exactEnrollment,
+    required bool handsBackLive,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -776,6 +848,9 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
+      if (!handsBackLive) {
+        throw _liveOrBeingBuilt(currentAtSign, atClientImpl!.enrollmentId);
+      }
       // NOTE: before the storage check, which a client part way through its
       // teardown has already detached from.
       if (atClientImpl!._stopping != null) {
@@ -802,42 +877,58 @@ class AtClientImpl implements AtClient {
       // atKeysIo is only honored on first construction — the
       // extended AtKeys is meant to be born at construction and immutable
       // after, so a re-used cached client keeps its original key source.
-    } else {
-      atClientImpl = AtClientImpl._(
-        currentAtSign,
-        namespace,
-        preferences,
-        remoteSecondary: remoteSecondary,
-        encryptionService: encryptionService,
-        atKeysIo: atKeysIo,
-        atLookUp: atLookUp,
-        lookUps: lookUps,
-        secondaryAddressFinder: secondaryAddressFinder,
-        enrollmentId: enrollmentId,
-        storage: storage,
-      );
+      final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
+      atClientInstanceMap[filedKey] = atClientImpl;
+      return atClientInstanceMap[filedKey];
+    }
 
+    // NOTE: the check and the claim take no await between them.
+    if (_claimedByBuild.containsKey(cacheKey)) {
+      throw _liveOrBeingBuilt(currentAtSign, enrollmentId);
+    }
+    final built = AtClientImpl._(
+      currentAtSign,
+      namespace,
+      preferences,
+      remoteSecondary: remoteSecondary,
+      encryptionService: encryptionService,
+      atKeysIo: atKeysIo,
+      atLookUp: atLookUp,
+      lookUps: lookUps,
+      secondaryAddressFinder: secondaryAddressFinder,
+      enrollmentId: enrollmentId,
+      storage: storage,
+    );
+    _claim(cacheKey, built);
+    try {
       try {
-        await atClientImpl._init(atLookUp: atLookUp);
+        await built._init(atLookUp: atLookUp);
       } catch (_) {
         // NOTE: a client that failed to build holds nothing — not the timers
         // and connections _init got as far as starting, and not its claim on
         // the storage, which would otherwise refuse every later client.
-        atClientImpl._isStopped = true;
-        await atClientImpl._stopBackgroundProcesses();
-        await atClientImpl._releaseStorage();
-        await atClientImpl.localSecondary?.release();
+        built._isStopped = true;
+        await built._stopBackgroundProcesses();
+        await built._releaseStorage();
+        await built.localSecondary?.release();
         rethrow;
       }
-    }
 
-    // NOTE: not [cacheKey] — `_init` may have settled a different enrollment
-    // than the caller asked for, and filing under the requested id would leave
-    // the cache holding a client under an enrollment it no longer
-    // authenticates as.
-    final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
-    atClientInstanceMap[filedKey] = atClientImpl;
-    return atClientInstanceMap[filedKey];
+      // NOTE: not [cacheKey] — `_init` may have settled a different
+      // enrollment than the caller asked for, and filing under the requested
+      // id would leave the cache holding a client under an enrollment it no
+      // longer authenticates as.
+      final filedKey = instanceKey(currentAtSign, built.enrollmentId);
+      final holder = atClientInstanceMap[filedKey];
+      if (holder is AtClient && !holder.isStopped) {
+        await built.stop();
+        throw _liveOrBeingBuilt(currentAtSign, built.enrollmentId);
+      }
+      atClientInstanceMap[filedKey] = built;
+      return built;
+    } finally {
+      _releaseClaims(built);
+    }
   }
 
   AtClientImpl._(
@@ -2317,10 +2408,13 @@ class AtClientImpl implements AtClient {
         return;
       }
 
-      // NOTE: recorded before anything else, so a caller naming the id it
-      // captured earlier reaches THIS client rather than building a duplicate.
+      // NOTE: recorded and claimed before anything else, so a caller naming
+      // the id it captured earlier reaches THIS client, and a build of the
+      // new id is refused while this one runs, rather than either building a
+      // duplicate.
       supersededInstanceKeys[instanceKey(_atSign, id)] =
           instanceKey(_atSign, newId);
+      _claim(instanceKey(_atSign, newId), this);
       enrollmentId = newId;
       await _rederiveFromEnrollment(previousEnrollmentId: id);
       _logger
@@ -2464,3 +2558,27 @@ class AtClientImpl implements AtClient {
     return _preference;
   }
 }
+
+/// [AtClientImpl.create] for a caller that owns the client it is handed, as
+/// `buildAtClient` does: a client already filed for the principal is refused
+/// with a [StateError], like one still being built, rather than handed back.
+Future<AtClientImpl> createOwnedAtClient(
+  String atSign,
+  String? namespace,
+  AtClientPreference preference, {
+  required AtKeysIo atKeysIo,
+  AtLookUp? atLookUp,
+  required AtLookUpFactory lookUps,
+  required SecondaryAddressFinder secondaryAddressFinder,
+  String? enrollmentId,
+  required AtClientStorage storage,
+}) =>
+    AtClientImpl._create(atSign, namespace, preference,
+        atKeysIo: atKeysIo,
+        atLookUp: atLookUp,
+        lookUps: lookUps,
+        secondaryAddressFinder: secondaryAddressFinder,
+        enrollmentId: enrollmentId,
+        storage: storage,
+        exactEnrollment: true,
+        handsBackLive: false);

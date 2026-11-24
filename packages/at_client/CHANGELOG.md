@@ -1,3 +1,11 @@
+## 4.1.0-rc.2
+
+- fix: `buildAtClient` or `Atsign.open` calls for one Atsign and enrollment
+  started together leave one live client: the others throw `StateError`
+  instead of building a second beside it or, on the first's storage, being
+  handed the first's client and replacing its services. So does an
+  `AtClientImpl.create` call made while another builds that client.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and

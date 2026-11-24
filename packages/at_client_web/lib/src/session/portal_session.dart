@@ -146,9 +146,7 @@ Future<AtClient> portalSession({
   if (floorOfKeyMaterial(keys, enrollmentId) != null) {
     throw UnsupportedKeyMaterialException(normalized);
   }
-  // `buildAtClient` checks for a live client and registers its own across
-  // awaits, so two opens running together would both pass the check. It
-  // files clients by (atSign, enrollment), so that is what opens queue on.
+  // NOTE: opens for one (atSign, enrollment) must not overlap.
   return queuedOpen(openLock(normalized, enrollmentId), () async {
     if (prefs != null) _checkRoot(prefs, transport.root);
     return openOnline(

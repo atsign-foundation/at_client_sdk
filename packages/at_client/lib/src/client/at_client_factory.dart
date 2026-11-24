@@ -34,11 +34,15 @@ import 'package:at_lookup/at_lookup.dart';
 ///
 /// Throws a [StateError] when a client for [atSign] as the same principal
 /// (the enrollment the keys name, or the primary enrollment) is already
-/// live, rather than handing back one this caller does not own; [stop]
-/// releases it. Another enrollment of the atSign is another principal and
-/// builds beside it, given a store of its own. A failure while building leaves
-/// nothing behind — the part-built client is stopped, which unfiles it and
-/// releases its claim on [storage].
+/// live or being built, rather than handing back one this caller does not
+/// own or building a second beside it; [stop] releases a live one, and a
+/// build releases its principal when it ends, however it ends. A build
+/// refused as it files, finding another client filed for the principal
+/// first, stops the client it built, which closes [storage] when it was
+/// built with `closedByClient: true`. Another enrollment of the atSign is
+/// another principal and builds beside it, given a store of its own. A failure while building leaves nothing behind — the
+/// part-built client is stopped, which unfiles it and releases its claim on
+/// [storage].
 Future<AtClient> buildAtClient({
   required String atSign,
   required AtClientPreference preference,
@@ -70,7 +74,7 @@ Future<AtClient> buildAtClient({
         'Two clients cannot share one store; stop() that client first, or '
         'open this one on a store of its own.');
   }
-  final client = await AtClientImpl.create(
+  final client = await createOwnedAtClient(
     atSign,
     namespace,
     preference,
@@ -80,8 +84,7 @@ Future<AtClient> buildAtClient({
     secondaryAddressFinder: secondaryAddressFinder,
     enrollmentId: enrollmentId,
     storage: storage,
-    exactEnrollment: true,
-  ) as AtClientImpl;
+  );
   try {
     client.notificationService = notificationServiceBuilder == null
         ? await NotificationServiceImpl.create(client,

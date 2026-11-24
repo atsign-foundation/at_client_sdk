@@ -47,9 +47,17 @@ SecondaryAddressFinder get defaultAtDirectory =>
 
 /// A preference naming the atDirectory [defaultAtDirectory] is: port 1 on
 /// the loopback interface, where nothing listens.
-AtClientPreference loopbackPreference() => AtClientPreference()
-  ..rootDomain = InternetAddress.loopbackIPv4.address
-  ..rootPort = 1;
+///
+/// [authenticationKeyAlgorithm] and [dataSigningKeyAlgorithms] are the
+/// preference's own, its posture's when null.
+AtClientPreference loopbackPreference(
+        {SigningAlgoType? authenticationKeyAlgorithm,
+        Set<SigningAlgoType>? dataSigningKeyAlgorithms}) =>
+    AtClientPreference(
+        authenticationKeyAlgorithm: authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms: dataSigningKeyAlgorithms)
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = 1;
 
 /// An atDirectory that refuses every connection: a loopback port nothing
 /// listens on.

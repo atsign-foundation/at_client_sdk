@@ -186,8 +186,8 @@ extension AtsignLifecycle on Atsign {
   /// nothing.
   ///
   /// Refuses, as `buildAtClient` does, while a client for this atSign as the
-  /// same enrollment is live in this process; another enrollment of the
-  /// atSign opens beside it, given a store of its own.
+  /// same enrollment is live or being built in this process; another
+  /// enrollment of the atSign opens beside it, given a store of its own.
   Future<AtClient> open({
     required AtKeysIo keys,
     required AtClientPreference preference,

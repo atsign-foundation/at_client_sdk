@@ -8,7 +8,8 @@
 library;
 
 export 'package:at_client/src/client/at_client_factory.dart';
-export 'package:at_client/src/client/at_client_impl.dart';
+export 'package:at_client/src/client/at_client_impl.dart'
+    hide createOwnedAtClient;
 export 'package:at_client/src/client/at_client_spec.dart';
 export 'package:at_client/src/client/at_reachability.dart';
 export 'package:at_client/src/client/data_event.dart';
