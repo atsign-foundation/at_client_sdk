@@ -300,12 +300,9 @@ void main() {
           }
         }
       }
-      expect(found.difference(audited), isEmpty,
-          reason: 'every file that serialises a keys value is audited');
-      expect(audited.difference(found),
-          anyOf(isEmpty, equals({'at_auth/lib/src/keys/io/memory_io.dart'})),
-          reason: 'every audited file but the in-memory store serialises a '
-              'keys value');
+      expect(found, audited,
+          reason: 'the audited files are the files that serialise a keys '
+              'value');
       for (final path in audited) {
         final local = path.startsWith('at_auth/') ? '../$path' : path;
         expect(File(local).existsSync(), isTrue,
