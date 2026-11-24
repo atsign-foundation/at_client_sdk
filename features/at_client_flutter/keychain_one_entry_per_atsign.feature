@@ -9,8 +9,10 @@ Feature: The keychain holds one entry per Atsign
   another isolate is not excluded, since the keychain has no
   compare-and-swap. Replay: none; nothing is sent. DoS: none; the check
   looks through the entries the append already reads. Forgery and
-  impersonation: none; only the app on the device appends, and it already
-  holds the keys.
+  impersonation: keys may come from a keyfile the user imports, whose
+  metadata can name any Atsign. The refusals turn a misfiling into an
+  error, and nothing an entry names grants authority: keys authenticate
+  only as the Atsign that issued them.
 
   Scenario: Appending keys for an Atsign the keychain already holds is refused
     Given a keychain holding keys for @alice
