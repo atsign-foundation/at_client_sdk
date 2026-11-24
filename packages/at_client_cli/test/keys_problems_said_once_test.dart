@@ -711,6 +711,64 @@ void main() {
     expect(built, 0, reason: 'no connection is built');
   });
 
+  test(
+      'A program built on CLIBase reports a pending request whose signing '
+      'algorithm this build does not know, ending with the footer', () async {
+    final dir = Directory.systemTemp.createTempSync('keys_problems_cli_base_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final keysPath = '${dir.path}/keys/key.atKeys';
+    const algorithm = 'future-3b7d0e92a6c4f185';
+    await FileAtKeysIo(filePath: (_) => keysPath).write(
+        atSign,
+        AtKeys()
+          ..addKey(CryptographicMaterial(
+              keyId: 'apkam:e-1:1',
+              enrollmentId: 'e-1',
+              role: CryptographicMaterialRole.privateAuthentication,
+              algorithm: CryptographicMaterialAlgorithm.of(algorithm),
+              bytes: AtBytes.fromString(base64Encode(List.filled(32, 3))),
+              createdAt: DateTime.now().toUtc(),
+              status: CryptographicMaterialStatus.pending)));
+    final err = _Captured();
+    var built = 0;
+
+    await expectLater(
+        IOOverrides.runZoned(
+            () => CLIBase.fromCommandLineArgs([
+                  '-a', atSign, //
+                  '-k', keysPath,
+                  '-s', '${dir.path}/storage',
+                  '-r', '127.0.0.1:$unreachablePort',
+                  '--max-connect-attempts', '1',
+                  '--never-sync',
+                ], parser: CLIBase.createArgsParser(namespace: 'keys_test'),
+                    lookUps: (
+                        {required String atSign,
+                        required AtRootDomain rootDomain,
+                        required AtAuthenticator? authenticator,
+                        SecondaryAddressFinder? secondaryAddressFinder}) {
+                  built++;
+                  throw StateError('no connection was expected');
+                }),
+            stderr: () => err),
+        throwsA(isA<AtKeysUnusableException>().having((e) => e.cause, 'cause',
+            AtKeysUnusableCause.noAuthenticationKeypair)));
+    final lines = err.text
+        .replaceAll(RegExp(r'\x1b\[[0-9;]*[A-Za-z]'), '')
+        .replaceAll('\r', '\n')
+        .split('\n');
+    expect(
+        lines,
+        holdsOnceInOrder([
+          'The keys for $atSign in the AtKeys store ($keysPath) cannot be '
+              'used to authenticate: pending enrollment "e-1" signs with '
+              '"$algorithm", which this build cannot sign with; resume it '
+              'with a build that can.',
+          footer,
+        ]));
+    expect(built, 0, reason: 'no connection is built');
+  });
+
   test('A network failure still says to try again', () async {
     await FileAtKeysIo(filePath: (_) => defaultKeyfile())
         .write(atSign, randomLegacyKeys());

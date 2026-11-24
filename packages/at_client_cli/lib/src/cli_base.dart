@@ -365,11 +365,7 @@ class CLIBase {
       } on AtEnrollmentPendingException {
         rethrow;
       } on AtKeysUnusableException catch (e) {
-        reportKeysProblem(e,
-            absentHint: eitherKeysHint(
-                atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'),
-            keyfile: atKeysFilePathToUse,
-            passphraseGiven: _passphraseGiven);
+        _reportKeysProblem(e);
         rethrow;
       }
     }
@@ -407,6 +403,9 @@ class CLIBase {
           preference: config,
           lookUps: lookUpsToUse,
           secondaryAddressFinder: _atDirectory());
+    } on AtKeysUnusableException catch (e) {
+      _reportKeysProblem(e);
+      rethrow;
     } on AtException catch (e) {
       throw _reported(e);
     }
@@ -426,6 +425,14 @@ class CLIBase {
       throw _reported(e);
     }
   }
+
+  /// Writes [e] to stderr with [reportKeysProblem], for this program's atSign,
+  /// atDirectory and keyfile.
+  void _reportKeysProblem(AtKeysUnusableException e) => reportKeysProblem(e,
+      absentHint: eitherKeysHint(
+          atSign, '${atRootDomain.rootDomain}:${atRootDomain.rootPort}'),
+      keyfile: atKeysFilePathToUse,
+      passphraseGiven: _passphraseGiven);
 
   /// Whether the keyfile is opened with a passphrase.
   bool get _passphraseGiven => passPhrase?.isNotEmpty ?? false;

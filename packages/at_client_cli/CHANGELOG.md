@@ -1,3 +1,11 @@
+## 1.1.0-rc.2
+
+- fix: a `CLIBase` program resuming its keyfile's pending request reports
+  any keys it cannot use there as it does when opening them, ending with the
+  help line: keys it cannot read, keys recorded for another Atsign and, with
+  at_client 4.1.0-rc.2 or later, a request signed with an algorithm this
+  build does not know.
+
 ## 1.1.0-rc.1
 
 - feat: `at_activate cancel -a <atSign> -k <keyfile>` gives up the pending
