@@ -170,7 +170,7 @@ void main() {
       expect(orphan, allOf(isNotNull, isNot('primary')),
           reason: 'R1: the save the keyfile refused names the enrollment the '
               'atServer approved');
-      expect(keys.writes.take(2), ['update', 'flush refused'],
+      expect(keys.writes.take(2), ['update', 'update refused'],
           reason: 'R1: the write check before the request took its write, '
               'and the refusal came from the save after approval');
       expect(first.enrollmentId, 'primary',
@@ -330,7 +330,7 @@ void main() {
       expect(orphan, allOf(isNotNull, isNot(scopedId)),
           reason: 'R2: the save the keyfile refused names the enrollment the '
               'atServer approved');
-      expect(keys.writes.take(2), ['update', 'flush refused'],
+      expect(keys.writes.take(2), ['update', 'update refused'],
           reason: 'R2: the write check before the request took its write, '
               'and the refusal came from the save after approval');
       expect(first.enrollmentId, scopedId,
@@ -473,15 +473,17 @@ void main() {
 /// enrollment the keyfile authenticates as: the save a retrofit makes once
 /// the atServer has approved its request.
 ///
-/// Everything else passes through, the retrofit's write check among it, which
-/// is an `update` and is recorded in [writes] as one.
+/// That save is an `update`, and the refusal is thrown from inside its change
+/// once the change has run, so nothing is written. Everything else passes
+/// through, the retrofit's write check before its request among it, and every
+/// write is recorded in [writes].
 class _RefusesFirstRetrofitSave extends WrittenAtKeysIo {
   _RefusesFirstRetrofitSave(this._real);
 
   final FileAtKeysIo _real;
   bool _refused = false;
 
-  /// Each write in order: `update`, `flush`, or `flush refused`.
+  /// Each write in order: `update`, `update refused`, or `flush`.
   final List<String> writes = [];
 
   /// The enrollment the refused save would have named.
@@ -495,22 +497,23 @@ class _RefusesFirstRetrofitSave extends WrittenAtKeysIo {
 
   @override
   Future<void> update(
-      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) {
-    writes.add('update');
-    return _real.update(atsign, mutate);
-  }
+          Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) =>
+      _real.update(atsign, (keys) async {
+        final onDisk = keys.enrollmentToAuthenticateAs();
+        final changed = await mutate(keys);
+        final names = keys.enrollmentToAuthenticateAs();
+        if (changed && !_refused && names != onDisk) {
+          _refused = true;
+          refusedSaveNamed = names;
+          writes.add('update refused');
+          throw FileSystemException('this keyfile refuses one save', 'keyfile');
+        }
+        writes.add('update');
+        return changed;
+      });
 
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
-    final names = atKeys.enrollmentToAuthenticateAs();
-    final onDisk =
-        (await _real.read(atsign.toString())).enrollmentToAuthenticateAs();
-    if (!_refused && names != onDisk) {
-      _refused = true;
-      refusedSaveNamed = names;
-      writes.add('flush refused');
-      throw FileSystemException('this keyfile refuses one save', 'keyfile');
-    }
     writes.add('flush');
     await _real.flush(atsign, atKeys);
   }
