@@ -510,8 +510,8 @@ extension AtsignLifecycle on Atsign {
   /// [keys] are read as [open] reads them: keys that cannot be read, or that
   /// record another atSign, throw [AtKeysUnusableException] before any
   /// connection is opened, and a store holding nothing for this atSign gives
-  /// null. A pending enrollment that signs with an algorithm this build
-  /// cannot sign with throws [AtKeysUnusableException] too, with cause
+  /// null. A pending enrollment whose signing algorithm is one this build
+  /// does not know throws [AtKeysUnusableException] too, with cause
   /// [AtKeysUnusableCause.noAuthenticationKeypair], naming the enrollment and
   /// the algorithm.
   ///

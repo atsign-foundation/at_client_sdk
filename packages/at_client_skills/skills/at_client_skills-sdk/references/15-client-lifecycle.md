@@ -116,8 +116,9 @@ expiry too.
 `resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
 record another Atsign, throw `AtKeysUnusableException` before it connects, and
 an AtKeys store holding nothing for the Atsign gives null. A pending request
-that signs with an algorithm this build cannot sign with throws it too, cause
-`noAuthenticationKeypair` (at_client 4.1.0): resume it with a build that can.
+whose signing algorithm this build does not know throws it too, cause
+`noAuthenticationKeypair` (at_client 4.1.0): resume it with a build that
+knows it.
 
 ---
 
