@@ -18,7 +18,7 @@ import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
-import 'package:at_client_web/src/session/session_opener.dart';
+import 'package:at_client_web/src/session/session_options.dart';
 import 'package:test/test.dart';
 
 /// A [ItemCollection] that records each call and answers what it is

@@ -33,9 +33,7 @@ void main() {
       'lib/src/session/at_client_session.dart',
       'lib/src/collections/at_collection_adapter.dart',
       'lib/src/log_text.dart',
-      'lib/src/session/session_opener.dart',
-      'lib/src/session/keys_session_opener.dart',
-      'lib/src/session/passkey_session_opener.dart',
+      'lib/src/session/session_options.dart',
       'lib/src/session/session_namespace.dart',
     ]) {
       expect(_importsInterop(path), isFalse, reason: path);
@@ -43,27 +41,26 @@ void main() {
     }
   });
 
-  test('the session opener files import no browser-only library', () {
-    for (final path in [
-      'lib/src/session/session_opener.dart',
-      'lib/src/session/keys_session_opener.dart',
-      'lib/src/session/passkey_session_opener.dart',
-    ]) {
-      expect(_read(path), isNot(contains('at_lookup_web')), reason: path);
-      expect(_read(path), isNot(contains('web_passkey_entry')), reason: path);
-    }
+  test('the session options import no browser-only library', () {
+    final options = _read('lib/src/session/session_options.dart');
+    expect(options, isNot(contains('at_lookup_web')));
+    expect(options, isNot(contains('web_passkey_entry')));
   });
 
-  test('the bridge opens sessions only through the SessionOpener interface',
+  test('the bridge opens sessions through one private function and no opener',
       () {
     final bridge = _read('lib/src/js/bridge.dart');
-    for (final name in [
-      'session_transport',
-      'passkey_login',
-      'portalSession('
-    ]) {
-      expect(bridge, isNot(contains(name)), reason: name);
+    expect(
+        RegExp(r'Future<Session> _openSession\(').allMatches(bridge).length, 1);
+    for (final call in ['portalSession(', 'passkeyLogin(']) {
+      expect(RegExp(RegExp.escape(call)).allMatches(bridge).length, 1,
+          reason: call);
     }
+    expect(bridge, isNot(contains('SessionOpener')));
+    expect([
+      for (final f in Directory('lib/src/session').listSync().whereType<File>())
+        if (f.path.contains('opener')) f.path
+    ], isEmpty);
   });
 
   test('only the session compiles the subscribe regex', () {

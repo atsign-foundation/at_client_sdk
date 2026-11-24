@@ -24,15 +24,6 @@ export 'package:at_client/passkey.dart'
 
 export 'at_client_web.dart';
 export 'src/exceptions.dart' show IndexedDbException, SetupLockTimeoutException;
-export 'src/session/keys_session_opener.dart' show KeysSessionOpener;
-export 'src/session/passkey_session_opener.dart' show PasskeySessionOpener;
-export 'src/session/session_opener.dart'
-    show
-        KeysSessionOptions,
-        OpenedSession,
-        PasskeySessionOptions,
-        SessionOpener,
-        SessionOptions;
 export 'src/session/session_transport.dart';
 export 'src/session/web_passkey_entry.dart'
     show clearPrfMiss, onboardNewAtSign, passkeyLogin, prfSupported;

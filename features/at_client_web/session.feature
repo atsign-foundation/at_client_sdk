@@ -112,22 +112,6 @@ Feature: create opens a session and close ends it
     When notify, subscribe, onStatus, collection, otp, pendingEnrollments, approve or deny is called on the session, or any operation on a collection it opened
     Then each throws SessionClosedException, an AtException; at_client's StoppedException never reaches the caller
 
-  Scenario: a router sends each kind to its opener
-    Given create options of the keys kind and of the passkey kind
-    When the router opens each
-    Then the keys options go to the keys opener and the passkey options go to the passkey opener
-    And an opener given options of another kind rejects naming options
-
-  Scenario: a wrap that fails stops the opened session and rethrows its error
-    Given an opener that opens a session and a wrap step that throws
-    When the session is opened through the wrap
-    Then the opened session is stopped once and the wrap error is thrown unchanged
-
-  Scenario: a stop that fails during that cleanup leaves the wrap error
-    Given an opener whose session stop throws and a wrap step that throws
-    When the session is opened through the wrap
-    Then the wrap error, not the stop error, is thrown
-
   Scenario: the session close awaits the opener stop
     Given a session whose opener supplied its own stop
     When close is called

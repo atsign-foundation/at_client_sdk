@@ -1024,6 +1024,22 @@ void main() {
   });
 
   group('close', () {
+    test('the session close awaits the opener stop', () async {
+      final gate = Completer<void>();
+      var stopped = false;
+      final own = AtClientSession(client, namespace: 'app', stop: () async {
+        await gate.future;
+        stopped = true;
+      });
+      var closed = false;
+      final closing = own.close().then((_) => closed = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(closed, isFalse);
+      gate.complete();
+      await closing;
+      expect((stopped, closed, client.stops), (true, true, 0));
+    });
+
     test('stops the client once', () async {
       await session.close();
       await session.close();

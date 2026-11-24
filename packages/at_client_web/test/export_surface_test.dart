@@ -106,6 +106,25 @@ void main() {
     expect(files, isNot(contains('src/keys/web_crypto_passkey.dart')));
   });
 
+  test('no opener type, session option type or open seam is exported', () {
+    for (final name in [
+      'SessionOpener',
+      'KeysSessionOpener',
+      'PasskeySessionOpener',
+      'RoutingSessionOpener',
+      'OpenedSession',
+      'OpenJsSession',
+      'SessionOptions',
+      'KeysSessionOptions',
+      'PasskeySessionOptions',
+    ]) {
+      for (final MapEntry(:key, :value) in sources.entries) {
+        expect(value, isNot(matches(RegExp('\\b$name\\b'))),
+            reason: '$key names $name');
+      }
+    }
+  });
+
   test('no exported file is named like a fake or a test helper', () {
     final named = RegExp(r'fake|_fakes|testing');
     for (final file in files) {

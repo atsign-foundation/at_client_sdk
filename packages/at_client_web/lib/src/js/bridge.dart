@@ -4,13 +4,16 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
-    show AtSignLogger, Atsign, InvalidAtSignException;
+    show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:web/web.dart' as web;
 
 import '../collections/at_collection_adapter.dart';
 import '../exceptions.dart';
-import '../session/session_opener.dart';
-import '../session/web_session_openers.dart';
+import '../session/portal_session.dart';
+import '../session/session_options.dart';
+import '../session/session_transport.dart';
+import '../session/session_transport_options.dart';
+import '../session/web_passkey_entry.dart';
 import 'error_codes.dart';
 import '../session/at_client_session.dart';
 
@@ -19,19 +22,45 @@ typedef OpenJsSession = Future<Session> Function(SessionOptions options);
 
 final _logger = AtSignLogger('BridgeEntry');
 
-/// The browser's [OpenJsSession]: opens through [webSessionOpener] and wraps
-/// the client; a failure to wrap stops what was opened.
-Future<Session> _openSession(SessionOptions options) => openWrapped<Session>(
-    _opener,
-    options,
-    (opened) => AtClientSession(opened.client,
-        namespace: options.namespace,
-        isNavigatorOnline: () => web.window.navigator.onLine,
-        networkChanges: _networkChanges(),
-        warn: _logger.warning,
-        stop: opened.stop));
+/// The browser's [OpenJsSession], and the only place a session is opened: a
+/// keys session on [portalSession] over [sessionTransport], a passkey session
+/// on [passkeyLogin]. The session's `close()` awaits the stop of what was
+/// opened: the client's own for keys, the passkey session's, which also
+/// closes its vault, for a passkey.
+Future<Session> _openSession(SessionOptions options) async {
+  final (AtClient client, Future<void> Function() stop) = switch (options) {
+    KeysSessionOptions() => await _openKeys(options),
+    PasskeySessionOptions() => await _openPasskey(options),
+  };
+  return AtClientSession(client,
+      namespace: options.namespace,
+      isNavigatorOnline: () => web.window.navigator.onLine,
+      networkChanges: _networkChanges(),
+      warn: _logger.warning,
+      stop: stop);
+}
 
-final SessionOpener _opener = webSessionOpener();
+Future<(AtClient, Future<void> Function())> _openKeys(
+    KeysSessionOptions options) async {
+  final client = await portalSession(
+      atSign: options.atSign,
+      app: options.namespace,
+      keys: options.keys,
+      transport:
+          sessionTransport(SessionTransportOptions(root: options.rootDomain)));
+  return (client, client.stop);
+}
+
+Future<(AtClient, Future<void> Function())> _openPasskey(
+    PasskeySessionOptions options) async {
+  final session = await passkeyLogin(
+      atSign: options.atSign,
+      app: options.namespace,
+      rpId: options.rpId,
+      rpName: options.rpName,
+      transport: SessionTransportOptions(root: options.rootDomain));
+  return (session.client, session.stop);
+}
 
 /// An event each time the browser goes online or offline, so a session's
 /// `waiting:network` and `waiting:server` follow it.

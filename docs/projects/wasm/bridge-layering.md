@@ -24,7 +24,7 @@ flowchart TD
   JS["JS caller (at_js)"] --> B["Bridge: lib/src/js/ (JS shapes, error codes)"]
   B --> S["Session: lib/src/session/ (domain rules)"]
   S --> C["Collections adapter: lib/src/collections/"]
-  S --> O["SessionOpener: KeysSessionOpener, PasskeySessionOpener"]
+  S --> O["Bridge _openSession: portalSession, passkeyLogin"]
   C --> AC["at_client: AtCollection"]
   O --> AC2["at_client: AtClient"]
   X["lib/src/exceptions.dart"] -.-> B
@@ -36,7 +36,7 @@ flowchart TD
 |---|---|---|---|
 | Bridge | `lib/src/js/` (`bridge.dart`, `error_codes.dart`) | The only file in the bridge that touches `dart:js_interop`. `BridgeEntry`, `BridgeSession`, `BridgeCollection`. Shape checks (plain object, own property, string, function, array, finite number, depth), the converters `_toDart`, `_toJs`, `_toRejection`. | Closed-state checks, regex compilation, namespace folding, id lowercasing, key parsing, any rule about what an atSign may do. |
 | Session | `lib/src/session/` (`at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the opener's stop. `SessionBoundCollection`, `ReceivedNotification`, `JsEnrollment`. | Any `dart:js_interop` type in the session interface or its domain rules (platform helpers under `lib/src/session/web_*.dart` keep their own), any error code. |
-| Opening | `lib/src/session/` (`session_opener.dart`, `keys_session_opener.dart`, `passkey_session_opener.dart`) | `SessionOpener` (interface), `KeysSessionOpener`, `PasskeySessionOpener`, sealed `SessionOptions` (`KeysSessionOptions`, `PasskeySessionOptions`), `OpenedSession`. The options validate themselves, including the root domain, which they parse once from its `host` or `host:port` text; the bridge only checks that it is a string. | Anything the bridge needs to know about transports. The bridge no longer imports `portal_session`, `session_transport` or the transport options. |
+| Opening | `lib/src/js/bridge.dart` (`_openSession`, behind the `OpenJsSession` seam); `lib/src/session/session_options.dart` | One private function opens a keys session on `portalSession` or a passkey session on `passkeyLogin` and hands `AtClientSession` the stop that `close()` awaits. The sealed `SessionOptions` (`KeysSessionOptions`, `PasskeySessionOptions`) validate themselves, including the root domain, which they parse once from its `host` or `host:port` text; the bridge only checks that it is a string. Nothing here is exported from the package barrels. | An exported opener family. |
 | Collections adapter | `lib/src/collections/at_collection_adapter.dart` | `ItemCollection` (the eight operations) and `AtCollectionAdapter` over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. | Codes and message text. |
 | Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each extending `AtException` (`EnrollmentInFlightException` through `AtEnrollmentException`, itself an `AtException`): `InvalidArgumentException`, `SessionClosedException`, `UnsupportedOperationException`, `InvalidKeyException`, `ManageAccessRequiredException`, `EnrollmentInFlightException`, `SessionOfflineException`, `UnsupportedKeyMaterialException`, `SetupLockTimeoutException`, `IndexedDbException` and `CollectionException`. Trunk names `UnsupportedKeyMaterialException`, `SetupLockTimeoutException` and `IndexedDbException` keep their names and move into this one file; the trunk name `PortalSessionOfflineException` stays as a deprecated typedef alias of `SessionOfflineException`; the trunk name `JsCollectionsError` becomes `CollectionException`, with no alias. | Code mapping, which stays in the bridge. |
 | Contract manifest | release asset `bridge-manifest.json` | A `schemaVersion`, every exported method and every error code, generated from the Dart constants and identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against `bridge.ref`, and fails when its TypeScript types or code list disagree. | Anything written by hand. |
@@ -44,24 +44,13 @@ flowchart TD
 
 ## Opening a session (D-40)
 
-The shape, as a sketch; member names are not fixed until the code lands.
-
-```dart
-sealed class SessionOptions {}                       // KeysSessionOptions, PasskeySessionOptions
-abstract interface class SessionOpener {
-  Future<OpenedSession> open(SessionOptions options);
-}
-final class OpenedSession {                          // what every opener returns
-  AtClient get client;
-  Future<void> stop();                               // close() awaits this
-}
-```
-
-`KeysSessionOpener` is today's `portalSession`; `PasskeySessionOpener` is today's
-`passkeyLogin`. They are renamed as a pair rather than wrapped. A failure after the opener
-has returned stops the opened session before it is rethrown, so a passkey's vault is never
-left open. Validation runs first, in a fixed order, before any side effect, and rejects with
-an argument error without echoing a value.
+There is no public opener type. `BridgeEntry` takes an `OpenJsSession` (`Future<Session> Function(SessionOptions)`),
+a test seam that is in no barrel; its default, the private `_openSession` in `lib/src/js/bridge.dart`, switches on
+the sealed `SessionOptions`: `KeysSessionOptions` go to `portalSession` over `sessionTransport`, `PasskeySessionOptions`
+to `passkeyLogin`. The session's `close()` awaits the stop recorded at open: the client's own `stop()` for keys, the
+passkey session's (which also closes its vault) for a passkey. A keys session's close is bounded only by the client's
+`stop()`; the bridge adds no bound of its own. Validation runs first, in a fixed order, before any side effect, and
+rejects with an argument error without echoing a value.
 
 ## Rename table (D-45)
 
@@ -73,9 +62,6 @@ proposed here.
 
 | Layer | Today | Proposed | Why |
 |---|---|---|---|
-| Opening | portalSession | KeysSessionOpener | Opens with an .atKeys file |
-| Opening | passkeyLogin | PasskeySessionOpener | Sibling of KeysSessionOpener |
-| Opening | AtClient + stop (unnamed) | OpenedSession | What every opener returns |
 | Opening | PortalSessionOfflineException | SessionOfflineException | Drop "portal" |
 | Collection | JsCollectionsAdapter | AtCollectionAdapter | Adapts AtCollection to ItemCollection |
 | Collection | JsItem, JsItemAddress, JsListing, JsWhereClause, JsEvent | Item, ItemAddress, ItemListing, WhereClause, CollectionEvent | Drop Js; match at_js names |
@@ -107,14 +93,14 @@ be released. The names also do not say they are alternatives to each other.
   between two entry points.
 - Rename the pair and put one interface in front of them (chosen).
 
-**Decision and why.** One `SessionOpener` returning `OpenedSession` (the client and its stop), with
-`KeysSessionOpener` and `PasskeySessionOpener`; `close()` awaits the opener's stop. The deciding argument is
+**Decision and why.** One private bridge function, behind the `OpenJsSession` seam, opens either kind and records the
+stop; `close()` awaits it. No opener type is public. The deciding argument is
 teardown: one place waits for the stop, so a passkey's vault is never left open when a later step fails (see
 [Opening a session](#opening-a-session-d-40)). The cost is that both trunk names change; `at_client_web` is 0.1.0
 and `publish_to: none`, so the rename is internal to its call sites and tests, and `lib/at_client_web_web.dart` must
 keep its exports working.
 
-**Would reopen if.** A third opening path appears that does not fit `SessionOptions`, or one opener cannot expose a
+**Would reopen if.** A third opening path appears that does not fit `SessionOptions`, or the one function cannot record a
 single stop. **[reconstructed: confirm]**
 
 ### D-41 — one exceptions file
