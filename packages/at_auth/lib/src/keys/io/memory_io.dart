@@ -54,7 +54,7 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
     if (_internal.containsKey(key)) {
       throw AtKeysFileOverwriteException(
           'Keys for $atsign are already loaded; write is create-only — '
-          'flush persists mutations');
+          'use update to change them');
     }
     _internal[key] = atKeys;
   }

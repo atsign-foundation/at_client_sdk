@@ -45,9 +45,10 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
 
   /// Persists [atKeys] as the complete new state for [atsign].
   ///
-  /// Use it only for a keyset that was not read from this store, such as the
-  /// keys an enrollment's approval completed. Key material is added to keys
-  /// already stored through [update], never by [read], mutate and [flush].
+  /// Use it only for a keyset that was not read from this store, such as a
+  /// pending enrollment's keys once its approval completes them. Key material
+  /// is added to keys already stored through [update], never by [read],
+  /// mutate and [flush].
   /// Implementations backed by durable storage must not lose data: when a
   /// target already exists, validate that everything in it is preserved in
   /// [atKeys] (see [AtKeysAssurance.validateMapUpdate]), then rewrite. When
@@ -75,9 +76,7 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
   /// running concurrently both read the same state, and the second [flush]
   /// presents a candidate missing the first's addition. [flush] is right to
   /// refuse it — nothing may be lost — so the outcome is a thrown assurance
-  /// exception and one addition silently gone. A client's start does exactly
-  /// this today, firing the namespace-key seeding and the conveyed-key filing
-  /// as sibling unawaited tasks.
+  /// exception and one addition silently gone.
   ///
   /// Implementations backed by a lockable store take the lock across all three
   /// steps. The default here does not — it is read/mutate/flush — which is no
