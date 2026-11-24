@@ -156,9 +156,6 @@ jobs:
       - name: Check that at_client_web is correctly formatted
         run: dart format . -o none --set-exit-if-changed
 
-      - name: Build at_client_bridge_entry
-        run: tool/build.sh at_client_bridge_entry
-
       - name: Run at_client_web VM tests
         run: dart test --concurrency=1
 

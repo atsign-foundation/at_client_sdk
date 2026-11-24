@@ -237,7 +237,7 @@ packages/at_client_web/
 ```
 
 **What the alpha ships.** The bridge entry is `web/at_client_bridge_entry.dart`, compiled by
-`tool/build.sh` to `build/at_client_web.js`. It installs one global,
+the release build to `build/at_client_web.js`. It installs one global,
 `__atsignAtClientWeb`, whose only member is `create`; the session and collection objects
 it returns are `@JSExport` wrappers in `lib/src/js/bridge.dart`. The TypeScript wrapper is
 the npm package `packages/at_client_web` (`@atsign/at_client_web`), to be published only under
