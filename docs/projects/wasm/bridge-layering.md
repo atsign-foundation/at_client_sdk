@@ -38,7 +38,7 @@ flowchart TD
 | Collections adapter | `lib/src/collections/` | The collections adapter over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. Its names stay as they are on trunk until the collections interface is typed (see D-45, withdrawn, in the Reasoning). | Codes and message text. |
 | Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each to extend `AtException`: `PortalSessionOfflineException`, `UnsupportedKeyMaterialException`, `JsCollectionsError`, `SetupLockTimeoutException` and `IndexedDbException`, all on trunk today, move into this one file. | Code mapping, which stays in the bridge. |
 | Contract manifest | release asset `bridge-manifest.json` | A `schemaVersion`, every exported method and every error code, generated from the Dart constants and identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against `bridge.ref`, and fails when its TypeScript types or code list disagree. | Anything written by hand. |
-| Build target | `tool/build.sh` | `--target dart2js\|dart2wasm`: `dart2js` by default; `dart2wasm` is strict, with no silent fallback; an unknown target exits 1. A release target is not part of D-38 (see its Reasoning). | A target chosen by which entry name is passed. |
+| Build target | `tool/build.sh` | `--target dart2js\|dart2wasm`: `dart2js` by default; `dart2wasm` is strict, with no silent fallback; an unknown target exits 1. The `--target` flag of D-38 is implemented by the release PR, not this one, and a release target is not part of D-38 (see its Reasoning). | A target chosen by which entry name is passed. |
 
 ## Opening a session (D-40)
 
@@ -56,8 +56,9 @@ Future<Session> _openSession(SessionOptions options);
 `close()` rules:
 
 - A second call returns the same future and throws no new error.
-- A call made while the session is still opening waits for the open to settle, then stops
-  what was opened.
+- A close made by a Dart caller while the session is still opening waits for the open to
+  settle, then stops what was opened. Through the bridge no such wait happens:
+  `BridgeEntry.create` returns the session only once it is open.
 - The longest it waits is D-30's. The passkey vault closes once the client has stopped, or
   after 10 seconds plus `AtServerAtKeysIo.lockWaitBound` (75 seconds by default) from when
   the client's stop begins, and `close()` also awaits the client's own `stop()`. D-40 adds no
