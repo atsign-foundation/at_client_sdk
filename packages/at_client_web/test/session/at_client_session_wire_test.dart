@@ -56,24 +56,29 @@ void main() {
               'encryptedAPKAMSymmetricKey': wrapped,
             })}';
 
-    /// This session's own enrollment record, holding [grants].
-    String own(Map<String, String> grants) =>
-        record(ownId, 'approved', app: 'wavi', namespaces: grants);
+    /// The atServer's `enroll:fetch` answer for this session's own enrollment:
+    /// its record with [status], holding [grants].
+    String ownRecord(Map<String, String> grants,
+            {String status = 'approved'}) =>
+        'data:${jsonEncode({
+              'appName': 'wavi',
+              'deviceName': 'Phone',
+              'namespace': grants,
+              'status': status,
+            })}';
 
     const managing = {'wavi': 'rw', '__manage': 'rw'};
 
-    /// The atServer's answers: the session's own record for an unfiltered
-    /// listing, [pending] for the pending filter, then [verbs] by command.
+    /// The atServer's answers: the session's own record for its own
+    /// `enroll:fetch`, [pending] for the pending listing, then [verbs] by
+    /// command.
     void serve(
         {Map<String, String> grants = managing,
         String pending = '',
         String? Function(String command)? verbs}) {
       wire.answer = (command) {
-        if (command.startsWith('enroll:list')) {
-          return command.contains('pending')
-              ? 'data:{$pending}'
-              : 'data:{${own(grants)}}';
-        }
+        if (command.startsWith('enroll:fetch')) return ownRecord(grants);
+        if (command.startsWith('enroll:list')) return 'data:{$pending}';
         return verbs?.call(command);
       };
     }
@@ -95,6 +100,115 @@ void main() {
       'no __manage grant': {'wavi': 'rw'},
       'a read-only __manage grant': {'wavi': 'rw', '__manage': 'r'},
     };
+
+    group('manage access', () {
+      /// Runs the check through [AtClientSession.pendingEnrollments], which
+      /// needs nothing beyond it, and answers whether it was allowed.
+      Future<bool> allowed(
+          {required String Function(String command) fetch}) async {
+        wire.answer = (command) {
+          if (command.startsWith('enroll:fetch')) return fetch(command);
+          if (command.startsWith('enroll:list')) return 'data:{}';
+          return null;
+        };
+        try {
+          await session.pendingEnrollments();
+          return true;
+        } on ManageAccessRequiredException {
+          return false;
+        }
+      }
+
+      test(
+          'A session whose approved enrollment holds __manage read-write is allowed',
+          () async {
+        wire.commands.clear();
+        final result =
+            await allowed(fetch: (_) => ownRecord({...managing, '*': 'r'}));
+
+        expect(result, isTrue);
+        final fetches =
+            wire.commands.where((c) => c.startsWith('enroll:fetch'));
+        expect(fetches, hasLength(1));
+        expect(fetches.single, contains(ownId));
+      });
+
+      test('The primary enrollment is allowed with no server call', () async {
+        await session.close();
+        final primary = await portalSession(
+            atSign: '@alice',
+            app: 'wavi',
+            keys: classicalAtKeys(enrollmentId: 'primary'),
+            transport: (
+              lookUps: wire.lookUps,
+              finder: FixedSecondaryAddressFinder('atserver.test', 1),
+              root: AtRootDomain.atsignDomain
+            ));
+        session = AtClientSession(primary, namespace: 'wavi');
+        wire.commands.clear();
+
+        final result = await allowed(fetch: (_) => fail('fetched'));
+
+        expect(result, isTrue);
+        expect(sent('enroll:fetch'), isFalse);
+      });
+
+      test(
+          'An enrollment the atServer does not list is refused with ManageAccessRequiredException',
+          () async {
+        wire.answer = (command) => command.startsWith('enroll:fetch')
+            ? throw KeyNotFoundException('no such enrollment')
+            : 'data:{}';
+        expect(await thrownBy(session.pendingEnrollments),
+            isA<ManageAccessRequiredException>());
+
+        wire.answer = (command) =>
+            command.startsWith('enroll:fetch') ? 'data:null' : 'data:{}';
+        expect(await thrownBy(session.pendingEnrollments),
+            isA<ManageAccessRequiredException>());
+      });
+
+      for (final status in EnrollmentStatus.values) {
+        final isApproved = status == EnrollmentStatus.approved;
+        test(
+            'status ${status.name} with __manage read-write is '
+            '${isApproved ? 'allowed' : 'refused'}', () async {
+          final result = await allowed(
+              fetch: (_) => ownRecord(managing, status: status.name));
+
+          expect(result, isApproved);
+        });
+      }
+
+      test('Only an approved enrollment is allowed, whatever it grants',
+          () async {
+        for (final status in EnrollmentStatus.values) {
+          final result = await allowed(
+              fetch: (_) => ownRecord(managing, status: status.name));
+
+          expect(result, status == EnrollmentStatus.approved,
+              reason: status.name);
+        }
+      });
+
+      for (final MapEntry(key: name, value: grants) in unmanaged.entries) {
+        test('an approved enrollment with $name is refused', () async {
+          expect(await allowed(fetch: (_) => ownRecord(grants)), isFalse);
+        });
+      }
+
+      test(
+          'A transport failure reading the record reaches the caller unchanged',
+          () async {
+        final failure = StateError('connection reset');
+        wire.answer = (command) =>
+            command.startsWith('enroll:fetch') ? throw failure : 'data:{}';
+
+        final error = await thrownBy(session.pendingEnrollments);
+
+        expect(error, same(failure));
+      });
+    });
 
     group('otp', () {
       test('otp requests and returns a passcode', () async {
@@ -134,7 +248,7 @@ void main() {
         serve(verbs: (c) => c.startsWith('otp:get') ? 'data:Z9Y8X7' : null);
 
         expect(await session.otp(), 'Z9Y8X7');
-        expect(sent('enroll:list'), isFalse);
+        expect(sent('enroll:fetch'), isFalse);
         expect(sent('otp:get'), isTrue);
       });
 
@@ -193,9 +307,9 @@ void main() {
       }
 
       test('a refusal is unsupported', () async {
-        wire.answer = (command) => command.contains('pending')
-            ? throw UnAuthorizedException('not allowed to list')
-            : 'data:{${own(managing)}}';
+        wire.answer = (command) => command.startsWith('enroll:fetch')
+            ? ownRecord(managing)
+            : throw UnAuthorizedException('not allowed to list');
 
         final error = await thrownBy(session.pendingEnrollments);
 
@@ -296,10 +410,8 @@ void main() {
             ? recordOf(id, status)
             : record(id, status, wrapped: wrapped);
         wire.answer = (command) async {
+          if (command.startsWith('enroll:fetch')) return ownRecord(managing);
           if (command.startsWith('enroll:list')) {
-            final filtered =
-                command.contains('pending') || command.contains('approved');
-            if (!filtered) return 'data:{${own(managing)}}';
             return 'data:{${[
               for (final id in pending) build(id, 'pending'),
               if (!command.contains('pending'))
@@ -342,11 +454,10 @@ void main() {
 
         await session.approve('e1');
 
-        final grantsReads = wire.commands.where((c) =>
-            c.startsWith('enroll:list') &&
-            !c.contains('pending') &&
-            !c.contains('approved'));
+        final grantsReads =
+            wire.commands.where((c) => c.startsWith('enroll:fetch'));
         expect(grantsReads, hasLength(1));
+        expect(grantsReads.single, contains(ownId));
       });
 
       test('approve of an id that is not pending is enrollment_denied',
@@ -454,7 +565,7 @@ void main() {
         final first = session.approve('e1');
         await reached.future;
         final lists =
-            wire.commands.where((c) => c.startsWith('enroll:list')).length;
+            wire.commands.where((c) => c.startsWith('enroll:fetch')).length;
         Object? caught;
         try {
           await session.approve('e1');
@@ -462,7 +573,7 @@ void main() {
           caught = e;
         }
         final listsAfter =
-            wire.commands.where((c) => c.startsWith('enroll:list')).length;
+            wire.commands.where((c) => c.startsWith('enroll:fetch')).length;
         gate.complete();
         await first;
 

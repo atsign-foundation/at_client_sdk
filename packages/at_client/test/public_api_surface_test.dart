@@ -270,9 +270,6 @@ const Set<String> _atClientBarrelExports = {
   // show-narrowed to EnrollmentConveyanceException: approve() throws it after
   // a server-side approval whose conveyance refused the advertised package.
   'package:at_client/src/enroll/enrollment_conveyance.dart',
-  // show-narrowed to ownGrantsOf: a platform package checks a session's
-  // enrollment grants (for example `__manage`) without reaching into src/.
-  'package:at_client/src/enroll/authorised_namespaces.dart',
   'package:at_client/src/secret_sharing/algo_ids.dart',
   'package:at_client/src/rpc/at_rpc.dart',
   'package:at_client/src/rpc/at_rpc_types.dart',

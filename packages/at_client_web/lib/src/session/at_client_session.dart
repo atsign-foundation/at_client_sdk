@@ -577,13 +577,28 @@ class AtClientSession implements Session {
   }
 
   /// Throws a [ManageAccessRequiredException] unless this session's enrollment
-  /// holds `__manage` read-write. The primary enrollment, which has no
-  /// grants to read, holds it.
+  /// is approved and holds `__manage` read-write. The primary enrollment,
+  /// which has no record to read, holds it.
+  ///
+  /// An enrollment the atServer does not know is refused; any other failure
+  /// reading the record reaches the caller unchanged.
   Future<void> _requireManage() async {
     _open();
-    final grants = await _managed(() => ownGrantsOf(_client));
-    if (grants != null &&
-        grants[EnrollmentConstants.enrollManageNamespace] != 'rw') {
+    final id = _client.enrollmentId;
+    if (id == null ||
+        id.isEmpty ||
+        id == EnrollmentConstants.primaryEnrollmentId) {
+      return;
+    }
+    final Enrollment? record;
+    try {
+      record = await _managed(() => _client.enrollments.fetch(id));
+    } on KeyNotFoundException {
+      throw ManageAccessRequiredException();
+    }
+    if (record == null ||
+        record.enrollmentStatus != EnrollmentStatus.approved ||
+        record.namespace?[EnrollmentConstants.enrollManageNamespace] != 'rw') {
       throw ManageAccessRequiredException();
     }
   }

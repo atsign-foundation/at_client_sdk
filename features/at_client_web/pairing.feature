@@ -42,6 +42,7 @@ Feature: An approving device enrolls another browser
     When otp is called
     Then the call is authorised and the passcode is returned
     And no enroll:list is sent
+    And no enroll:fetch is sent
 
   Scenario: otp requests and returns a passcode
     Given an open session with __manage rw access
