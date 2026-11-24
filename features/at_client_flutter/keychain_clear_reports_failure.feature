@@ -5,8 +5,11 @@ Feature: Clearing the keychain throws what the keychain throws
   reading each back after its delete, then throws the first failure: a
   delete the keychain refused, or a store that is still there, or cannot be
   read back, after its delete. So a clear that did not happen never reads as
-  done, except on Windows when the credential store fails a delete and also
-  hides the entry from a read. A store that holds nothing is not a failure.
+  done, except in two cases on Windows: when the credential store fails a
+  delete and also hides the entry from a read, and when the clear cannot
+  read or parse the entry's header, so it searches the segments from index
+  0, stops at the first absent one, and leaves stored any segment above
+  that gap. A store that holds nothing is not a failure.
 
   When both stores fail, the first failure is thrown and the second logged
   at warning. A failure to read the app's package name, which names both

@@ -4,10 +4,12 @@
 
 - fix: `KeychainStorage.deleteAllAtKeysData` now throws when it cannot clear
   the keychain, where it used to complete as if it had, and throws a failure
-  to read the app's package name before it deletes anything. On Windows, a
-  delete that the credential store refuses still goes unseen when the entry
-  then also reads as absent, and a clear also deletes the segments of a
-  legacy header that an earlier clear left behind.
+  to read the app's package name before it deletes anything. On Windows, two
+  failed clears still go unseen: one whose delete the credential store
+  refuses while the entry then reads as absent, and one that cannot read or
+  parse the entry's header, which leaves stored any segment past a gap. A
+  Windows clear also deletes the segments of a legacy header that an earlier
+  clear left behind.
 - fix: keys cleared from the keychain no longer come back when a read of
   keys stored under the pre-2.0.0 name was under way during the clear.
 
