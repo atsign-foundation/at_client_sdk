@@ -7,7 +7,7 @@
   error, or an `AtException` when a store, or on Windows a segment of one,
   is still there after its delete, or a store cannot be read back after it.
   It also throws a failure to read the app's package name before it deletes
-  anything. On Windows, two
+  anything. Await it to catch the failure. On Windows, two
   failed clears still go unseen: one whose delete the credential store
   refuses while the entry then reads as absent, and one that cannot read or
   parse the entry's header, which leaves stored any segment past a gap. A

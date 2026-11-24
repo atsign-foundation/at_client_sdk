@@ -279,6 +279,26 @@ void main() {
     expect(held, isEmpty);
   });
 
+  test('Given a Windows store whose header delete fails, when the keychain is '
+      'cleared, then that failure is thrown', () async {
+    KeychainStorage.isWindows = true;
+    held[current] = entry;
+    final failure = PlatformException(
+      code: 'WindowsError',
+      message: 'Access is denied.',
+    );
+    final storage = keychain(deleting: {current: (_) => Future.error(failure)});
+
+    final (error, _) = await thrownBy(storage.deleteAllAtKeysData);
+
+    expect(
+      identical(error, failure),
+      isTrue,
+      reason: 'the error the header delete threw is thrown: $error',
+    );
+    expectDeleted(legacy);
+  });
+
   test('Given only the legacy-named store fails to delete, when the keychain '
       'is cleared, then that failure is thrown', () async {
     final failure = PlatformException(code: 'SecurityError');
