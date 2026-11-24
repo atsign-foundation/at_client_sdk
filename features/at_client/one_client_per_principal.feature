@@ -1,14 +1,17 @@
 Feature: Builds of one principal started together leave one live client
 
   A process holds at most one live client per (Atsign, enrollment). A build
-  claims its principal before it does anything else, so a second build of
-  the same principal, started before the first has finished, is refused at
-  once rather than built beside it.
+  claims its Atsign and enrollment once it has read its keys, before it
+  opens its data store or a connection, so a second build of the same
+  principal, started before the first has finished, is refused at once
+  rather than built beside it.
 
   Races: two builds of one principal at once are the case this covers; the
-  claim is taken in the same step as the live-client check. Replay: the
-  refused build sends nothing, so racing builds never send the atServer two
-  enrollment requests for one principal. DoS: a claim is given up however
+  claim is taken in the same step as the live-client check. Replay: a build
+  refused at the claim sends nothing. A build refused as it files has
+  already run its startup, which for a retrofitting build includes its
+  enrollment request; a second retrofitting build of the same principal is
+  refused at the claim and sends none. DoS: a claim is given up however
   its build ends, so a failed build never blocks the next. Forgery and
   impersonation: the builds that race are the app's own, and it already
   holds the keys and both data stores.
