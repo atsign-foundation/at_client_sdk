@@ -1710,6 +1710,7 @@ void main() {
           _jsConstruct('Set'),
           _jsConstruct('RegExp', ['a'.toJS]),
           _jsConstruct('ArrayBuffer', [4.toJS]),
+          _jsConstruct('Error', ['bad'.toJS]),
         ];
         for (final bad in nonPlain) {
           final optRes = await rejected(invoke(c, 'create', [
@@ -1724,13 +1725,32 @@ void main() {
           ]));
           expect(dataRes.code, 'invalid_argument');
           expect(dataRes.message, contains('data'));
+
+          final clause = jsObject({'path': 'a', 'op': '=='});
+          clause['value'] = bad;
+          final whereRes = await rejected(invoke(c, 'query', [
+            [clause].toJS
+          ]));
+          expect(whereRes.code, 'invalid_argument');
+          expect(whereRes.message, contains('value'));
         }
+        final errOpts = jsObject({});
+        errOpts['id'] = _jsConstruct('Error', ['option'.toJS]);
+        final optionValueRes = await rejected(invoke(c, 'create', [
+          jsObject({'a': 1}),
+          errOpts
+        ]));
+        expect(optionValueRes.code, 'invalid_argument');
+        expect(optionValueRes.message, contains('id'));
+
         final arrOpts = await rejected(invoke(c, 'create', [
           jsObject({'a': 1}),
           <JSAny?>[].toJS
         ]));
         expect(arrOpts.code, 'invalid_argument');
         expect(arrOpts.message, contains('opts'));
+        expect(adapter.calls, isEmpty,
+            reason: 'no rejected argument reaches the collection');
       });
 
       test(

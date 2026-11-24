@@ -112,6 +112,13 @@ void main() {
             PasskeySessionOptions() => 'passkey',
           };
       expect(kind(_keysOptions()), 'keys');
+      expect(
+          kind(PasskeySessionOptions(
+              atSign: '@alice',
+              namespace: 'app',
+              rpId: 'example.com',
+              rpName: 'X')),
+          'passkey');
     });
   });
 }
