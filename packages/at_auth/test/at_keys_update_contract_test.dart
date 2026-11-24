@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -11,6 +13,21 @@ import 'test_utils/at_keys.dart';
 /// was handed, and one that returns true is stored.
 void main() {
   final alice = '@alice'.toAtsign();
+
+  group('Given a FileAtKeysIo holding keys for @alice', () {
+    late Directory dir;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('at_keys_update_contract');
+    });
+    tearDown(() => dir.delete(recursive: true));
+
+    _updateContract(() async {
+      final io = FileAtKeysIo(filePath: (_) => '${dir.path}/keys.atKeys');
+      await io.write('@alice', legacyAtKeys(atsign: alice));
+      return io;
+    });
+  });
 
   group('Given an InMemoryAtKeysIo holding keys for @alice', () {
     InMemoryAtKeysIo holding([AtKeys? keys]) =>
