@@ -86,9 +86,11 @@ void main() {
             'these are one store however many objects point at it');
 
     await first.stop();
-    await sameStore.attach(FakeClient('@releaseguard', 'e2'));
+    final owner = FakeClient('@releaseguard', 'e2');
+    await sameStore.attach(owner);
     expect(sameStore.isAttached, isTrue,
         reason: 'stop() closed the first storage, releasing the store');
+    await sameStore.detach(owner);
     await sameStore.close();
   });
 
@@ -99,7 +101,8 @@ void main() {
     final first = _GatedStorage('@race-loc', gate: gate);
     final second = _GatedStorage('@race-loc');
 
-    final firstAttach = first.attach(FakeClient('@race', 'e1'));
+    final owner = FakeClient('@race', 'e1');
+    final firstAttach = first.attach(owner);
     // first is now suspended inside openBackend(), still awaiting gate.
 
     await expectLater(
@@ -115,6 +118,7 @@ void main() {
     gate.complete();
     await firstAttach;
     expect(first.isAttached, isTrue);
+    await first.detach(owner);
     await first.close();
   });
 
@@ -124,7 +128,9 @@ void main() {
       () async {
     final closeGate = Completer<void>();
     final first = _GatedStorage('@closerace', closeGate: closeGate);
-    await first.attach(FakeClient('@closerace', 'e1'));
+    final owner = FakeClient('@closerace', 'e1');
+    await first.attach(owner);
+    await first.detach(owner);
 
     final closing = first.close();
     final second = _GatedStorage('@closerace');
@@ -137,24 +143,30 @@ void main() {
 
     closeGate.complete();
     await closing;
-    await second.attach(FakeClient('@closerace', 'e2'));
+    final secondOwner = FakeClient('@closerace', 'e2');
+    await second.attach(secondOwner);
     expect(second.isAttached, isTrue,
         reason: 'once close() has finished the location is free');
+    await second.detach(secondOwner);
     await second.close();
   });
 
   test('close() releases its location claim even when closeBackend() throws',
       () async {
     final first = _GatedStorage('@closethrows', throwOnClose: true);
-    await first.attach(FakeClient('@closethrows', 'e1'));
+    final owner = FakeClient('@closethrows', 'e1');
+    await first.attach(owner);
+    await first.detach(owner);
 
     await expectLater(first.close, throwsA(isA<StateError>()));
 
     final second = _GatedStorage('@closethrows');
-    await second.attach(FakeClient('@closethrows', 'e2'));
+    final secondOwner = FakeClient('@closethrows', 'e2');
+    await second.attach(secondOwner);
     expect(second.isAttached, isTrue,
         reason: 'a failed closeBackend() must not leave the location claimed '
             'for the rest of the isolate');
+    await second.detach(secondOwner);
     await second.close();
   });
 
@@ -165,13 +177,17 @@ void main() {
         HiveAtClientStorage(atSign: '@twoplaces', storagePath: dir.path);
     final there =
         HiveAtClientStorage(atSign: '@twoplaces', storagePath: other.path);
-    await here.attach(FakeClient('@twoplaces', 'e1'));
-    await there.attach(FakeClient('@twoplaces', 'e2'));
+    final hereOwner = FakeClient('@twoplaces', 'e1');
+    final thereOwner = FakeClient('@twoplaces', 'e2');
+    await here.attach(hereOwner);
+    await there.attach(thereOwner);
     expect(here.isAttached && there.isAttached, isTrue,
         reason: 'different directories are different Hive instances, so two '
             'enrollments of one atSign keep separate stores');
     expect(here.location, isNot(equals(there.location)));
+    await here.detach(hereOwner);
     await here.close();
+    await there.detach(thereOwner);
     await there.close();
     other.deleteSync(recursive: true);
   });
@@ -179,12 +195,16 @@ void main() {
   test('two atSigns sharing one directory both open', () async {
     final a = HiveAtClientStorage(atSign: '@shareda', storagePath: dir.path);
     final b = HiveAtClientStorage(atSign: '@sharedb', storagePath: dir.path);
-    await a.attach(FakeClient('@shareda', 'e1'));
-    await b.attach(FakeClient('@sharedb', 'e1'));
+    final aOwner = FakeClient('@shareda', 'e1');
+    final bOwner = FakeClient('@sharedb', 'e1');
+    await a.attach(aOwner);
+    await b.attach(bOwner);
     expect(a.isAttached && b.isAttached, isTrue,
         reason: 'the box name derives from the atSign, so two atSigns under '
             'one directory are two boxes and share nothing');
+    await a.detach(aOwner);
     await a.close();
+    await b.detach(bOwner);
     await b.close();
   });
 
@@ -253,10 +273,12 @@ void main() {
     await client.stop();
 
     expect(injected.isAttached, isFalse, reason: 'stop() dropped the claim');
-    await injected.attach(FakeClient('@injected', null));
+    final owner = FakeClient('@injected', null);
+    await injected.attach(owner);
     expect(injected.isAttached, isTrue,
         reason: 'an injected store outlives the client that borrowed it - the '
             'caller owns its lifetime, so stop() must not have closed it');
+    await injected.detach(owner);
     await injected.close();
   });
 
@@ -329,9 +351,10 @@ void main() {
 
     final second =
         HiveAtClientStorage(atSign: '@closedbyclient', storagePath: dir.path);
+    final owner = FakeClient('@closedbyclient', 'e2');
     StateError? refused;
     try {
-      await second.attach(FakeClient('@closedbyclient', 'e2'));
+      await second.attach(owner);
     } on StateError catch (e) {
       refused = e;
     }
@@ -339,6 +362,7 @@ void main() {
         reason: 'the bundle said the client closes it, so stop() closed it and '
             'released the store rather than only detaching');
     expect(second.isAttached, isTrue);
+    await second.detach(owner);
     await second.close();
   });
 
@@ -368,9 +392,11 @@ void main() {
             'and the store is still held');
 
     await storage.close();
-    await second.attach(FakeClient('@borrowedopen', 'e2'));
+    final owner = FakeClient('@borrowedopen', 'e2');
+    await second.attach(owner);
     expect(second.isAttached, isTrue,
         reason: 'and closing it is what releases the store');
+    await second.detach(owner);
     await second.close();
   });
 }

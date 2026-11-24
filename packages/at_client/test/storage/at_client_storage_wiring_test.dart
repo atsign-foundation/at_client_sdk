@@ -31,8 +31,7 @@ void main() {
         reason: 'the queue LocalSecondary reads must be the one the storage '
             'owns, or a write and its push live in different queues');
 
-    await storage.close();
-    AtClientImpl.atClientInstanceMap.remove('@storagewire');
+    await client.stop();
     dir.deleteSync(recursive: true);
   });
 }

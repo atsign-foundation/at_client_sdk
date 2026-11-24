@@ -18,7 +18,7 @@ import 'storage_contract.dart' show FakeClient;
 /// atSign's store opens.
 void main() {
   late Directory root;
-  final opened = <HiveAtClientStorage>[];
+  final opened = <HiveAtClientStorage, FakeClient>{};
   final logs = RecordedLogs();
 
   setUpAll(() => logs.installOn());
@@ -26,7 +26,8 @@ void main() {
   setUp(() => root = Directory.systemTemp.createTempSync('stray_queue_'));
 
   tearDown(() async {
-    for (final s in opened) {
+    for (final MapEntry(key: s, value: owner) in opened.entries) {
+      await s.detach(owner);
       await s.close();
     }
     opened.clear();
@@ -38,13 +39,14 @@ void main() {
 
   Future<HiveAtClientStorage> open(String atSign, String directory) async {
     final s = HiveAtClientStorage(atSign: atSign, storagePath: directory);
-    opened.add(s);
-    await s.attach(FakeClient(atSign, 'e1'));
+    final owner = opened[s] = FakeClient(atSign, 'e1');
+    await s.attach(owner);
     return s;
   }
 
   Future<void> close(HiveAtClientStorage s) async {
-    opened.remove(s);
+    final owner = opened.remove(s);
+    if (owner != null) await s.detach(owner);
     await s.close();
   }
 

@@ -28,6 +28,7 @@ void main() {
     await first.attach(owner);
     await first.syncQueue.enqueue('b@sqlitedur', SyncQueueOp.updateAll, ts: 2);
     await first.syncQueue.enqueue('a@sqlitedur', SyncQueueOp.delete, ts: 1);
+    await first.detach(owner);
     await first.close();
 
     final second = make();
@@ -35,6 +36,7 @@ void main() {
     expect(second.syncQueue.peek(), ['a@sqlitedur', 'b@sqlitedur'],
         reason: 'pending pushes are durable and replay in timestamp order, '
             'which is what makes this a real backend rather than a cache');
+    await second.detach(owner);
     await second.close();
   });
 }

@@ -43,11 +43,30 @@ void runStorageContract(
     return s;
   }
 
+  final clients = <FakeClient>[];
+  FakeClient clientOf(String atSign, String? enrollmentId) {
+    final c = FakeClient(atSign, enrollmentId);
+    clients.add(c);
+    return c;
+  }
+
   tearDown(() async {
+    final failures = <(Object, StackTrace)>[];
     for (final s in opened) {
-      await s.close();
+      for (final c in clients) {
+        await s.detach(c);
+      }
+      try {
+        await s.close();
+      } catch (e, stack) {
+        failures.add((e, stack));
+      }
     }
     opened.clear();
+    clients.clear();
+    if (failures.isNotEmpty) {
+      Error.throwWithStackTrace(failures.first.$1, failures.first.$2);
+    }
   });
 
   final breaker = breakOpen;
@@ -57,7 +76,9 @@ void runStorageContract(
           () async {
         final atSign = '@${backend}c10';
         final first = storageFor(atSign);
-        await first.attach(FakeClient(atSign, 'e1'));
+        final owner = clientOf(atSign, 'e1');
+        await first.attach(owner);
+        await first.detach(owner);
         await first.close();
         final restore = breaker(atSign);
         if (restore == null) {
@@ -68,13 +89,13 @@ void runStorageContract(
 
         final s = storageFor(atSign);
         await expectLater(
-            s.attach(FakeClient(atSign, 'e1')), throwsA(isA<Exception>()));
+            s.attach(clientOf(atSign, 'e1')), throwsA(isA<Exception>()));
         // NOTE: an unhandled second report would arrive after the caller's,
         // and fails this test only if it lands before the test ends.
         await pumpEventQueue();
 
         restore();
-        await s.attach(FakeClient(atSign, 'e1'));
+        await s.attach(clientOf(atSign, 'e1'));
         await s.keyStore.put('k$atSign', AtData()..data = 'v');
         expect((await s.keyStore.get('k$atSign'))?.data, 'v',
             reason: 'the failure left nothing behind that stops a later open');
@@ -85,7 +106,7 @@ void runStorageContract(
   group('$backend: attach', () {
     test('the same client attaching twice is a no-op', () async {
       final s = storageFor('@${backend}c1') as AtClientStorageBase;
-      final owner = FakeClient('@${backend}c1', 'e1');
+      final owner = clientOf('@${backend}c1', 'e1');
       await s.attach(owner);
       await s.attach(owner);
       expect(s.isAttached, isTrue);
@@ -94,9 +115,9 @@ void runStorageContract(
     test('a different client is refused, and the message names the holder',
         () async {
       final s = storageFor('@${backend}c2');
-      await s.attach(FakeClient('@${backend}c2', 'e1'));
+      await s.attach(clientOf('@${backend}c2', 'e1'));
       expect(
-          () => s.attach(FakeClient('@${backend}c2', 'e2')),
+          () => s.attach(clientOf('@${backend}c2', 'e2')),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
               contains('is held by @${backend}c2|e1'))),
           reason: 'two clients on one store is the silent sharing this '
@@ -106,10 +127,10 @@ void runStorageContract(
     test('after detach the same principal attaches again as a new instance',
         () async {
       final s = storageFor('@${backend}c3') as AtClientStorageBase;
-      final first = FakeClient('@${backend}c3', 'e1');
+      final first = clientOf('@${backend}c3', 'e1');
       await s.attach(first);
       await s.detach(first);
-      await s.attach(FakeClient('@${backend}c3', 'e1'));
+      await s.attach(clientOf('@${backend}c3', 'e1'));
       expect(s.isAttached, isTrue,
           reason: 'a restart within the process is the legitimate reuse');
     });
@@ -117,10 +138,10 @@ void runStorageContract(
     test('after detach a different principal is refused until forgetPrincipal',
         () async {
       final s = storageFor('@${backend}c4') as AtClientStorageBase;
-      final first = FakeClient('@${backend}c4', 'e1');
+      final first = clientOf('@${backend}c4', 'e1');
       await s.attach(first);
       await s.detach(first);
-      final second = FakeClient('@${backend}c4', 'e2');
+      final second = clientOf('@${backend}c4', 'e2');
       expect(
           () => s.attach(second),
           throwsA(isA<StateError>().having((e) => e.message, 'message',
@@ -135,7 +156,7 @@ void runStorageContract(
 
     test('forgetPrincipal refuses while attached', () async {
       final s = storageFor('@${backend}c5');
-      await s.attach(FakeClient('@${backend}c5', 'e1'));
+      await s.attach(clientOf('@${backend}c5', 'e1'));
       expect(() => s.forgetPrincipal(), throwsA(isA<StateError>()));
     });
   });
@@ -143,7 +164,7 @@ void runStorageContract(
   group('$backend: data', () {
     test('a write is readable through the keystore and the queue', () async {
       final s = storageFor('@${backend}c6');
-      await s.attach(FakeClient('@${backend}c6', 'e1'));
+      await s.attach(clientOf('@${backend}c6', 'e1'));
       await s.syncQueue.enqueue('k@${backend}c6', SyncQueueOp.updateAll);
       await s.keyStore.put('k@${backend}c6', AtData()..data = 'v');
       expect(s.syncQueue.size, 1);
@@ -153,7 +174,7 @@ void runStorageContract(
     test('clear empties the queue and the keystore, and forgets the principal',
         () async {
       final s = storageFor('@${backend}c7') as AtClientStorageBase;
-      final first = FakeClient('@${backend}c7', 'e1');
+      final first = clientOf('@${backend}c7', 'e1');
       await s.attach(first);
       await s.syncQueue.enqueue('k@${backend}c7', SyncQueueOp.updateAll);
       await s.keyStore.put('k@${backend}c7', AtData()..data = 'v');
@@ -164,7 +185,7 @@ void runStorageContract(
           reason: 'a queue carrying another test\'s entries is what '
               'poisoned the functional pack');
       expect(await s.keyStore.exists('k@${backend}c7'), isFalse);
-      await s.attach(FakeClient('@${backend}c7', 'e2'));
+      await s.attach(clientOf('@${backend}c7', 'e2'));
       expect(s.isAttached, isTrue,
           reason: 'clear also forgets the principal, so the next holder need '
               'not be the last');
@@ -173,24 +194,52 @@ void runStorageContract(
     test('a holder that clears and keeps writing is stamped again on detach',
         () async {
       final s = storageFor('@${backend}c8');
-      final first = FakeClient('@${backend}c8', 'e1');
+      final first = clientOf('@${backend}c8', 'e1');
       await s.attach(first);
       await s.clear();
       await s.syncQueue.enqueue('k@${backend}c8', SyncQueueOp.updateAll);
       await s.detach(first);
-      expect(() => s.attach(FakeClient('@${backend}c8', 'e2')),
+      expect(() => s.attach(clientOf('@${backend}c8', 'e2')),
           throwsA(isA<StateError>()),
           reason: 'clear cannot license inheriting what was written after it');
     });
   });
 
   group('$backend: close', () {
-    test('close is idempotent and drops the claim', () async {
-      final s = storageFor('@${backend}c9') as AtClientStorageBase;
-      await s.attach(FakeClient('@${backend}c9', 'e1'));
+    test('a second close returns, and the storage stays closed', () async {
+      final s = storageFor('@${backend}c9');
+      final owner = clientOf('@${backend}c9', 'e1');
+      await s.attach(owner);
+      await s.detach(owner);
       await s.close();
       await s.close();
-      expect(s.isAttached, isFalse);
+      await expectLater(
+          s.attach(owner),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('closed and cannot be reopened'))),
+          reason: 'the first close closed it, and the second changed nothing');
+    });
+
+    test(
+        'when a client holds the storage, then close is refused and the '
+        'keystore still answers', () async {
+      final atSign = '@${backend}c11';
+      final s = storageFor(atSign);
+      final owner = clientOf(atSign, 'e1');
+      await s.attach(owner);
+      final key = 'public:held$atSign';
+      await s.keyStore.put(key, AtData()..data = 'kept');
+
+      await expectLater(
+          s.close(),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              contains('held by $atSign|e1; stop that client first'))),
+          reason: 'a storage a client holds is not closed');
+
+      expect(s.isHeldBy(owner), isTrue,
+          reason: 'the refusal left the client holding the storage');
+      expect((await s.keyStore.get(key))?.data, 'kept',
+          reason: 'the refusal closed nothing');
     });
 
     test(
@@ -198,12 +247,14 @@ void runStorageContract(
         'operation throws', () async {
       final atSign = '@${backend}c10';
       final s = storageFor(atSign);
-      await s.attach(FakeClient(atSign, 'e1'));
+      final owner = clientOf(atSign, 'e1');
+      await s.attach(owner);
       final keyStore = s.keyStore;
       final key = 'public:note$atSign';
       await keyStore.put(key, AtData()..data = 'before');
       expect((await keyStore.get(key))?.data, 'before',
           reason: 'the control: the keystore answers while open');
+      await s.detach(owner);
       await s.close();
 
       final operations = <String, Future<Object?> Function()>{

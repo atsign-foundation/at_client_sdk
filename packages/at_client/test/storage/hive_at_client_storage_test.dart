@@ -24,7 +24,9 @@ void main() {
     const atSign = '@hivequeue';
     final keystoreBox = AtUtils.getShaForAtSign(atSign);
     final first = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
-    await first.attach(FakeClient(atSign, 'e1'));
+    final owner = FakeClient(atSign, 'e1');
+    await first.attach(owner);
+    await first.detach(owner);
     await first.close();
     final restore = unreadable(
         '${dir.path}/${HiveBoxSyncQueueStore.boxNameFor(atSign)}.hive');
@@ -45,9 +47,11 @@ void main() {
 
     restore();
     final again = HiveAtClientStorage(atSign: atSign, storagePath: dir.path);
-    await again.attach(FakeClient(atSign, 'e1'));
+    final reopened = FakeClient(atSign, 'e1');
+    await again.attach(reopened);
     await again.keyStore.put('k$atSign', AtData()..data = 'v');
     expect((await again.keyStore.get('k$atSign'))?.data, 'v');
+    await again.detach(reopened);
     await again.close();
   });
 
@@ -58,9 +62,13 @@ void main() {
       const atSign = '@hiveattachrace';
       final storage =
           _CountingHiveStorage(atSign: atSign, storagePath: dir.path);
-      addTearDown(storage.close);
       final first = FakeClient(atSign, 'e1');
       final second = FakeClient(atSign, 'e2');
+      addTearDown(() async {
+        await storage.detach(first);
+        await storage.detach(second);
+        await storage.close();
+      });
 
       final firstAttach = storage.attach(first);
       final secondAttach = storage.attach(second);

@@ -10,8 +10,10 @@ import 'storage_contract.dart';
 Future<void> main(List<String> args) async {
   final store = HiveAtClientStorage(
       atSign: '@holder'.toAtsign(), storagePath: args.single);
-  await store.attach(FakeClient('@holder', 'e1'));
+  final owner = FakeClient('@holder', 'e1');
+  await store.attach(owner);
   stdout.writeln('held');
   await stdin.drain<void>();
+  await store.detach(owner);
   await store.close();
 }

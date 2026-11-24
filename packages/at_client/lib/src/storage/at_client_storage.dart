@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
@@ -51,6 +53,9 @@ abstract class AtClientStorage {
   Future<void> clear();
 
   /// Closes the backend. Idempotent.
+  ///
+  /// Throws [StateError], and closes nothing, while a client holds this
+  /// storage or is still attaching to it: stop that client first.
   Future<void> close();
 
   /// Whether the client that attaches to this storage closes it on [AtClient.stop].
@@ -85,7 +90,7 @@ abstract class AtClientStorageBase implements AtClientStorage {
   String? _lastPrincipal;
   bool _closed = false;
 
-  /// The client whose [attach] is under way, and its outcome.
+  /// The client whose [attach] is opening the backend, and its outcome.
   ({AtClient owner, Future<void> done})? _attaching;
 
   /// The storages whose backend is open, keyed by [location].
@@ -122,11 +127,7 @@ abstract class AtClientStorageBase implements AtClientStorage {
           '${principalOf(under.owner)}; a client cannot attach to storage '
           'another client holds'));
     }
-    final done = _attach(owner);
-    _attaching = (owner: owner, done: done);
-    return done.whenComplete(() {
-      _attaching = null;
-    });
+    return _attach(owner);
   }
 
   Future<void> _attach(AtClient owner) async {
@@ -158,14 +159,20 @@ abstract class AtClientStorageBase implements AtClientStorage {
     // location can otherwise both read no occupant and both pass the check
     // above while the first is still suspended inside openBackend().
     _openByLocation[here] = this;
+    final attached = Completer<void>();
+    _attaching = (owner: owner, done: attached.future..ignore());
     try {
       await openBackend();
-    } catch (_) {
+      _owner = owner;
+      _lastPrincipal = principal;
+      attached.complete();
+    } catch (e, stack) {
       if (identical(_openByLocation[here], this)) _openByLocation.remove(here);
+      attached.completeError(e, stack);
       rethrow;
+    } finally {
+      _attaching = null;
     }
-    _owner = owner;
-    _lastPrincipal = principal;
   }
 
   @override
@@ -193,8 +200,12 @@ abstract class AtClientStorageBase implements AtClientStorage {
   @override
   Future<void> close() async {
     if (_closed) return;
+    final holder = _owner ?? _attaching?.owner;
+    if (holder != null) {
+      throw StateError('this storage is held by ${principalOf(holder)}; stop '
+          'that client first');
+    }
     _closed = true;
-    _owner = null;
     final here = location;
     // NOTE: the claim is held until the backend has closed; releasing it first
     // lets a concurrent attach() open a backend over one still being torn down.

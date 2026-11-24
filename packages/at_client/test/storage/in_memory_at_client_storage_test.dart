@@ -18,10 +18,18 @@ void main() {
   test('Two memory storages share nothing', () async {
     final first = InMemoryAtClientStorage(atSign: '@memshare');
     final second = InMemoryAtClientStorage(atSign: '@memshare');
-    addTearDown(first.close);
-    addTearDown(second.close);
-    await first.attach(FakeClient('@memshare', 'e1'));
-    await second.attach(FakeClient('@memshare', 'e2'));
+    final firstOwner = FakeClient('@memshare', 'e1');
+    final secondOwner = FakeClient('@memshare', 'e2');
+    addTearDown(() async {
+      await first.detach(firstOwner);
+      await first.close();
+    });
+    addTearDown(() async {
+      await second.detach(secondOwner);
+      await second.close();
+    });
+    await first.attach(firstOwner);
+    await second.attach(secondOwner);
 
     await first.keyStore
         .put('public:phone.wavi@memshare', AtData()..data = '+44');
@@ -39,18 +47,22 @@ void main() {
   test('Nothing outlives a memory storage', () async {
     final before = Directory.current.listSync().map((e) => e.path).toSet();
     final s = InMemoryAtClientStorage(atSign: '@memonly');
-    await s.attach(FakeClient('@memonly', 'e1'));
+    final owner = FakeClient('@memonly', 'e1');
+    await s.attach(owner);
     await s.keyStore.put('public:k.wavi@memonly', AtData()..data = 'v');
     await s.syncQueue.enqueue('k@memonly', SyncQueueOp.updateAll);
+    await s.detach(owner);
     await s.close();
     expect(Directory.current.listSync().map((e) => e.path).toSet(), before,
         reason: 'an in-memory store that wrote a file would not be one');
 
     final again = InMemoryAtClientStorage(atSign: '@memonly');
-    await again.attach(FakeClient('@memonly', 'e1'));
+    final reopened = FakeClient('@memonly', 'e1');
+    await again.attach(reopened);
     expect(again.syncQueue.size, 0,
         reason: 'a fresh in-memory store starts empty');
     expect(await again.keyStore.getKeys().then((s) => s.toList()), isEmpty);
+    await again.detach(reopened);
     await again.close();
   });
 }

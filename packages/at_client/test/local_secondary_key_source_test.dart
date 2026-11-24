@@ -89,12 +89,13 @@ void main() {
         throwsA(isA<AtKeyNotFoundException>()));
     await expectLater(
         () => local.getPkamPublicKey(), throwsA(isA<AtKeyNotFoundException>()));
+    await storage.detach(atClient);
     await storage.close();
   });
 
   group('Given a client whose keys have not yet been read from its key source',
       () {
-    Future<(LocalSecondary, InMemoryAtClientStorage)> secondaryOver(
+    Future<(LocalSecondary, InMemoryAtClientStorage, AtClient)> secondaryOver(
         _HeldKeySource source) async {
       final atClient = MockAtClientImpl();
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
@@ -105,7 +106,8 @@ void main() {
       return (
         LocalSecondary(atClient,
             syncQueue: memorySyncQueue(), keyStore: storage.keyStore),
-        storage
+        storage,
+        atClient
       );
     }
 
@@ -118,7 +120,7 @@ void main() {
       final source = _HeldKeySource(
           await (await typedKeyfile(atSign)).read(atSign),
           failWith: null);
-      final (local, storage) = await secondaryOver(source);
+      final (local, storage, holder) = await secondaryOver(source);
 
       final first = outcome(local.getEncryptionSelfKey());
       final second = outcome(local.getEncryptionSelfKey());
@@ -128,6 +130,7 @@ void main() {
           [testSelfEncryptionKey, testSelfEncryptionKey],
           reason: 'a caller asking while the read is in flight waits for it');
       expect(source.reads, 1);
+      await storage.detach(holder);
       await storage.close();
     });
 
@@ -136,7 +139,7 @@ void main() {
         'from it and falls through to the keystore', () async {
       final source = _HeldKeySource(null,
           failWith: AtKeysNotInMemoryException('$atSign not found in memory'));
-      final (local, storage) = await secondaryOver(source);
+      final (local, storage, holder) = await secondaryOver(source);
 
       final first = outcome(local.getEncryptionSelfKey());
       final second = outcome(local.getEncryptionSelfKey());
@@ -146,6 +149,7 @@ void main() {
           [KeyNotFoundException, KeyNotFoundException],
           reason: 'the empty keystore answers both callers');
       expect(source.reads, 1);
+      await storage.detach(holder);
       await storage.close();
     });
   });

@@ -15,6 +15,7 @@ CLAUDE.md                                 @gkc @cconstab
 
 # Various important docs and tests
 /docs/sdk-shape.md                                               @gkc
+/features/at_client/storage_close_while_held.feature             @gkc
 /tools/check_architecture.sh                                     @gkc
 /tests/released_envelope/                                        @gkc
 /tests/upgrade/                                                  @gkc

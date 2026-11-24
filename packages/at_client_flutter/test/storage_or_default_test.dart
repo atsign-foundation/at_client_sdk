@@ -74,13 +74,19 @@ void main() {
       storagePath: support.path,
       closedByClient: true,
     );
-    await before.attach(clientOf('@alice'));
+    final writer = clientOf('@alice');
+    await before.attach(writer);
     await before.keyStore.put('phone.wavi@alice', AtData()..data = 'kept');
+    await before.detach(writer);
     await before.close();
 
     final after = await storageOrDefault('alice', AtClientPreference(), null);
-    addTearDown(after.close);
-    await after.attach(clientOf('@alice'));
+    final reader = clientOf('@alice');
+    addTearDown(() async {
+      await after.detach(reader);
+      await after.close();
+    });
+    await after.attach(reader);
 
     expect(
       (await after.keyStore.get('phone.wavi@alice'))?.data,

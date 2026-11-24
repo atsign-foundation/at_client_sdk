@@ -16,17 +16,20 @@ void main() {
   const atSign = '@parity';
   late AtClientStorage memory;
   late AtClientStorage sqlite;
+  final owner = FakeClient(atSign, 'e1');
 
   setUp(() async {
     memory = InMemoryAtClientStorage(atSign: atSign);
     sqlite = SqliteAtClientStorage(
         atSign: atSign, dbPath: SqliteAtClientStorage.inMemoryPath);
-    await memory.attach(FakeClient(atSign, 'e1'));
-    await sqlite.attach(FakeClient(atSign, 'e1'));
+    await memory.attach(owner);
+    await sqlite.attach(owner);
   });
 
   tearDown(() async {
+    await memory.detach(owner);
     await memory.close();
+    await sqlite.detach(owner);
     await sqlite.close();
   });
 
