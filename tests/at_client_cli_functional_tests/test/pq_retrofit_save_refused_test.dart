@@ -475,15 +475,17 @@ void main() {
 ///
 /// That save is an `update`, and the refusal is thrown from inside its change
 /// once the change has run, so nothing is written. Everything else passes
-/// through, the retrofit's write check before its request among it, and every
-/// write is recorded in [writes].
+/// through, the retrofit's write check before its request among it. Each
+/// write is recorded in [writes] once it has landed, and the refused one when
+/// it is refused.
 class _RefusesFirstRetrofitSave extends WrittenAtKeysIo {
   _RefusesFirstRetrofitSave(this._real);
 
   final FileAtKeysIo _real;
   bool _refused = false;
 
-  /// Each write in order: `update`, `update refused`, or `flush`.
+  /// Each write in order: `update` or `flush` once it has landed, or
+  /// `update refused`.
   final List<String> writes = [];
 
   /// The enrollment the refused save would have named.
@@ -497,25 +499,32 @@ class _RefusesFirstRetrofitSave extends WrittenAtKeysIo {
 
   @override
   Future<void> update(
-          Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) =>
-      _real.update(atsign, (keys) async {
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    var changed = false;
+    var refusing = false;
+    try {
+      await _real.update(atsign, (keys) async {
         final onDisk = keys.enrollmentToAuthenticateAs();
-        final changed = await mutate(keys);
+        changed = await mutate(keys);
         final names = keys.enrollmentToAuthenticateAs();
         if (changed && !_refused && names != onDisk) {
-          _refused = true;
+          _refused = refusing = true;
           refusedSaveNamed = names;
-          writes.add('update refused');
           throw FileSystemException('this keyfile refuses one save', 'keyfile');
         }
-        writes.add('update');
         return changed;
       });
+    } catch (_) {
+      if (refusing) writes.add('update refused');
+      rethrow;
+    }
+    if (changed) writes.add('update');
+  }
 
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
-    writes.add('flush');
     await _real.flush(atsign, atKeys);
+    writes.add('flush');
   }
 }
 
