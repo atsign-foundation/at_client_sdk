@@ -134,23 +134,33 @@ void main() {
       });
 
       test('The primary enrollment is allowed with no server call', () async {
-        await session.close();
-        final primary = await portalSession(
-            atSign: '@alice',
-            app: 'wavi',
-            keys: classicalAtKeys(enrollmentId: 'primary'),
-            transport: (
-              lookUps: wire.lookUps,
-              finder: FixedSecondaryAddressFinder('atserver.test', 1),
-              root: AtRootDomain.atsignDomain
-            ));
-        session = AtClientSession(primary, namespace: 'wavi');
-        wire.commands.clear();
+        // A client with no enrollment id and one whose id is the primary
+        // enrollment both read no record: the primary enrollment holds
+        // `*:rw` and has nothing to fetch or list.
+        for (final MapEntry(key: name, value: id) in {
+          'no enrollment id': null,
+          'the primary id': EnrollmentConstants.primaryEnrollmentId,
+        }.entries) {
+          await session.close();
+          final client = await portalSession(
+              atSign: '@alice',
+              app: 'wavi',
+              keys: classicalAtKeys(enrollmentId: 'primary'),
+              transport: (
+                lookUps: wire.lookUps,
+                finder: FixedSecondaryAddressFinder('atserver.test', 1),
+                root: AtRootDomain.atsignDomain
+              ));
+          client.enrollmentId = id;
+          session = AtClientSession(client, namespace: 'wavi');
+          wire.answer =
+              (command) => command.startsWith('otp:get') ? 'data:Z9Y8X7' : null;
+          wire.commands.clear();
 
-        final result = await allowed(fetch: (_) => fail('fetched'));
-
-        expect(result, isTrue);
-        expect(sent('enroll:fetch'), isFalse);
+          expect(await session.otp(), 'Z9Y8X7', reason: name);
+          expect(sent('enroll:fetch'), isFalse, reason: name);
+          expect(sent('enroll:list'), isFalse, reason: name);
+        }
       });
 
       test(
