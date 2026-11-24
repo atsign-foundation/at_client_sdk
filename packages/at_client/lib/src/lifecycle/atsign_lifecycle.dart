@@ -510,7 +510,10 @@ extension AtsignLifecycle on Atsign {
   /// [keys] are read as [open] reads them: keys that cannot be read, or that
   /// record another atSign, throw [AtKeysUnusableException] before any
   /// connection is opened, and a store holding nothing for this atSign gives
-  /// null.
+  /// null. A pending enrollment that signs with an algorithm this build
+  /// cannot sign with throws [AtKeysUnusableException] too, with cause
+  /// [AtKeysUnusableCause.noAuthenticationKeypair], naming the enrollment and
+  /// the algorithm.
   ///
   /// [preference] supplies the root domain; [lookUps] builds the connections
   /// the enrollment opens, to the atServer [secondaryAddressFinder] finds,
@@ -554,6 +557,18 @@ extension AtsignLifecycle on Atsign {
             m.role == CryptographicMaterialRole.privateAuthentication &&
             m.status == CryptographicMaterialStatus.pending)
         .first;
+    final signingAlgo =
+        SigningAlgoType.values.asNameMap()[apkam.algorithm.toString()];
+    if (signingAlgo == null) {
+      // NOTE: the id and the algorithm are escaped here, since the message
+      // keeps only the first line of the error's text.
+      throw AtKeysUnusableException.noAuthenticationKeypair(this,
+          source: keys.describeSource(this),
+          error: AtKeyNotFoundException('pending enrollment '
+              '"${clipForMessage(enrollmentId, quote: '"')}" signs with '
+              '"${clipForMessage(apkam.algorithm, quote: '"')}", which this '
+              'build cannot sign with; resume it with a build that can'));
+    }
     return PendingEnrollment(
         atSign: this,
         enrollmentId: enrollmentId,
@@ -562,8 +577,7 @@ extension AtsignLifecycle on Atsign {
         namespaces: info?.namespaces ?? const {},
         keys: keys,
         rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-        signingAlgo: SigningAlgoType.values
-            .firstWhere((a) => a.name == apkam.algorithm.toString()),
+        signingAlgo: signingAlgo,
         // A legacy request carries its own symmetric key in; a pq request
         // has none until the approver encapsulates one to its key package.
         // ignore: deprecated_member_use

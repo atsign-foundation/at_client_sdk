@@ -351,6 +351,104 @@ void main() {
         reason: 'a store holding nothing resumes nothing');
   });
 
+  /// Catalogue: features/at_client/resume_unknown_algorithm.feature
+  test(
+      'Resuming a pending enrollment whose signing algorithm this build does '
+      'not know names it', () async {
+    final filed = InMemoryAtKeysIo();
+    await submit(filed, atServer(decide: (_) async => true));
+    final pref = await preference();
+    final connections = <String>[];
+    final finder = _RecordingAtDirectory();
+    Future<PendingEnrollment?> resume(WrittenAtKeysIo keys) =>
+        Atsign(atSign).resumeEnrollment(
+            keys: keys,
+            preference: pref,
+            lookUps: (
+                {required atSign,
+                required rootDomain,
+                required authenticator,
+                secondaryAddressFinder}) {
+              connections.add(atSign);
+              return MockAtLookupImpl();
+            },
+            secondaryAddressFinder: finder);
+
+    final unchanged = await resume(filed);
+    expect(unchanged?.enrollmentId, enrollmentId,
+        reason: 'the control: the store as filed resumes');
+    expect(unchanged?.signingAlgo, SigningAlgoType.rsa2048);
+
+    final filedJson = jsonEncode((await filed.read(atSign)).toJson());
+
+    /// A store holding the filed request with both halves of its pending
+    /// APKAM keypair tagged as [algorithm].
+    Future<WrittenAtKeysIo> signingWith(String algorithm) async {
+      final json = jsonDecode(filedJson) as Map<String, dynamic>;
+      void retag(Object? node) {
+        if (node is Map) {
+          if ((node['role'] ==
+                      CryptographicMaterialRole.privateAuthentication ||
+                  node['role'] ==
+                      CryptographicMaterialRole.publicAuthentication) &&
+              node['status'] == CryptographicMaterialStatus.pending) {
+            node['algorithm'] = algorithm;
+          }
+          node.values.forEach(retag);
+        } else if (node is List) {
+          node.forEach(retag);
+        }
+      }
+
+      retag(json);
+      final store = _DescribedStore();
+      await store.write(atSign, AtKeys.fromJson(json));
+      return store;
+    }
+
+    final unknown = await signingWith('mldsa87');
+    expect(
+        (await unknown.read(atSign))
+            .keysForEnrollment(enrollmentId)
+            .where((m) =>
+                m.role == CryptographicMaterialRole.privateAuthentication &&
+                m.status == CryptographicMaterialStatus.pending)
+            .single
+            .algorithm,
+        'mldsa87',
+        reason: 'the control: the pending request now signs with an '
+            'algorithm no SigningAlgoType names');
+
+    await expectLater(
+        resume(unknown),
+        throwsA(isA<AtKeysUnusableException>()
+            .having((e) => e.cause, 'cause',
+                AtKeysUnusableCause.noAuthenticationKeypair)
+            .having((e) => e.source, 'source', 'a test location')
+            .having((e) => e.error, 'error', isA<AtKeyNotFoundException>())
+            .having(
+                (e) => e.message,
+                'message',
+                'The keys for $atSign in the AtKeys store (a test location) '
+                    'cannot be used to authenticate: pending enrollment '
+                    '"$enrollmentId" signs with "mldsa87", which this build '
+                    'cannot sign with; resume it with a build that can.')));
+
+    await expectLater(
+        resume(await signingWith('ml"dsa\n87')),
+        throwsA(isA<AtKeysUnusableException>().having(
+            (e) => e.message,
+            'message',
+            allOf(
+                isNot(contains('\n')),
+                contains(r'signs with "ml\\"dsa\\u000a87"'),
+                endsWith('resume it with a build that can.')))),
+        reason: 'a name holding a newline and a quote is quoted escaped, on '
+            'one line that still ends with the instruction');
+    expect(connections, isEmpty, reason: 'no connection is opened');
+    expect(finder.asked, isEmpty, reason: 'no atDirectory is asked');
+  });
+
   for (final (app, device) in const [
     ('wavi', 'phone'),
     ('wavi', 'laptop'),
