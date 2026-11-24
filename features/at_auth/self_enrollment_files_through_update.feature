@@ -12,8 +12,8 @@ Feature: A self-enrollment files its keys through update
   and the self-enrollment revokes the enrollment it created. Two
   self-enrollments of one keyfile are serialised only where the process sets
   a retrofit serializer, as at_client_cli does in its auth command and in
-  CliKeys.fileFor, and the keys are a keyfile. Elsewhere both may send a request, and the second to file
-  is refused and revokes its enrollment.
+  CliKeys.fileFor, and the keys are a keyfile. Elsewhere both may send a
+  request, and the second to file is refused and revokes its enrollment.
   Replay: nothing the atServer sent is stored for reuse; the enrollment id
   comes from its answer to this request, and a re-run of the change files
   the same keys, minted once.
