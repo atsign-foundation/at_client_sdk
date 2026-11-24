@@ -32,7 +32,7 @@ sealed class AtKeysIo {
 /// it. [InMemoryAtKeysIo] is the exception, for tests.
 abstract class WrittenAtKeysIo extends AtKeysIo {
   /// Create-only initial persist (fresh onboard); implementations throw if
-  /// the target already exists. Use [flush] to persist later mutations.
+  /// the target already exists. Use [update] to change keys already stored.
   //todo: futureOr & Atsign types
   Future write(String atsign, AtKeys atKeys);
 
@@ -45,8 +45,9 @@ abstract class WrittenAtKeysIo extends AtKeysIo {
 
   /// Persists [atKeys] as the complete new state for [atsign].
   ///
-  /// This is the runtime counterpart to [write]: mutate the in-memory
-  /// [AtKeys] (e.g. [AtKeys.addKey]), then flush the whole object.
+  /// Use it only for a keyset that was not read from this store, such as the
+  /// keys an enrollment's approval completed. Key material is added to keys
+  /// already stored through [update], never by [read], mutate and [flush].
   /// Implementations backed by durable storage must not lose data: when a
   /// target already exists, validate that everything in it is preserved in
   /// [atKeys] (see [AtKeysAssurance.validateMapUpdate]), then rewrite. When
