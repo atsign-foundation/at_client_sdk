@@ -1,30 +1,28 @@
-# Proposed layering of `at_client_web` (D-38..D-41, D-45)
+# Proposed layering of `at_client_web` (D-38..D-41)
 
-**Status: Proposed (D-38..D-41, D-45).** No proposed layer is built on trunk, and this does
-not bind until the rows in [`docs/architecture/decisions.md`](../../architecture/decisions.md)
-are accepted. The layer allocations this page describes for the closed state, regex compilation, namespace
+**Status: Proposed (D-38..D-41).** No proposed layer is built on trunk. The decisions
+themselves are the rows in [`docs/architecture/decisions.md`](../../architecture/decisions.md);
+this page gives the layering and reasoning behind them. The layer allocations this page describes for the closed state, regex compilation, namespace
 folding, id lowercasing and error mapping are re-proposed by the implementing PRs, which carry their tests;
 D-42..D-44 are reserved for them. Trunk's `at_client_web` has `portalSession`, `passkeyLogin` and
 `lib/src/collections/js_collections_adapter.dart`, and no `lib/src/js/` bridge yet;
 [`js-api.md`](js-api.md) section 4 says where the facade lives. The "Today" names and
 columns below are those of the bridge implementation that follows these decisions (#2537),
-not yet on trunk, except these names, which are on trunk too: `portalSession`,
-`passkeyLogin`, `PortalSessionOfflineException`, `JsCollectionsError`, `JsCollectionsAdapter`,
-`JsItem`, `JsItemAddress`, `JsListing`, `JsWhereClause`, `JsEvent`, `JsUnreadable`, the adapter's `_write`,
-`_guard`, `_error` and `_errorId`, and the file `js_collections_adapter.dart`. The names below are the proposed ones; the rename table at the end maps each
-to what it is called now.
+not yet on trunk, except these, which are on trunk too: `portalSession`, `passkeyLogin`, the five exceptions the Exceptions
+row lists, `JsCollectionsAdapter`, `JsItem`, `JsItemAddress`, `JsListing`,
+`JsWhereClause`, `JsEvent`, `JsUnreadable`, the file `js_collections_adapter.dart`, and `tool/build.sh`. The names below are the proposed ones; no trunk name changes.
 
 JS values enter the bridge only at its top layer; below the bridge the session and adapter
 layers take typed Dart. Existing platform helpers that need browser
 APIs (the passkey, storage and setup helpers under `lib/src/keys/` and `lib/src/session/`) keep their own
-`dart:js_interop` use; no decision here moves them behind the opener.
+`dart:js_interop` use; no decision here moves them behind the bridge's opening function.
 
 ```mermaid
 flowchart TD
   JS["JS caller (at_js)"] --> B["Bridge: lib/src/js/ (JS shapes, error codes)"]
   B --> S["Session: lib/src/session/ (domain rules)"]
   S --> C["Collections adapter: lib/src/collections/"]
-  S --> O["SessionOpener: KeysSessionOpener, PasskeySessionOpener"]
+  B --> O["Opening: one private function over portalSession and passkeyLogin"]
   C --> AC["at_client: AtCollection"]
   O --> AC2["at_client: AtClient"]
   X["lib/src/exceptions.dart"] -.-> B
@@ -35,86 +33,74 @@ flowchart TD
 | Layer | Where | Holds | Does not hold |
 |---|---|---|---|
 | Bridge | `lib/src/js/` (`bridge.dart`, `error_codes.dart`) | The only file in the bridge that touches `dart:js_interop`. `BridgeEntry`, `BridgeSession`, `BridgeCollection`. Shape checks (plain object, own property, string, function, array, finite number, depth), the converters `_toDart`, `_toJs`, `_toRejection`. | Closed-state checks, regex compilation, namespace folding, id lowercasing, key parsing, any rule about what an atSign may do. |
-| Session | `lib/src/session/` (`session.dart`, `at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the opener's stop. `SessionBoundCollection`, `ReceivedNotification`, `JsEnrollment`. | Any `dart:js_interop` type in the session interface or its domain rules (platform helpers under `lib/src/session/web_*.dart` keep their own), any error code. |
-| Opening | `lib/src/session/` | `SessionOpener` (interface), `KeysSessionOpener`, `PasskeySessionOpener`, sealed `SessionOptions` (`KeysSessionOptions`, `PasskeySessionOptions`), `OpenedSession`. The opener validates its own options, including the root domain. | Anything the bridge needs to know about transports. The bridge no longer imports `portal_session`, `session_transport` or the transport options. |
-| Collections adapter | `lib/src/collections/at_collection_adapter.dart` | `ItemCollection` (the eight operations) and `AtCollectionAdapter` over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. | Codes and message text. |
+| Session | `lib/src/session/` (`session.dart`, `at_client_session.dart`) | The `Session` interface and `AtClientSession`: the closed state, the namespace folded once in the constructor, the subscribe regex compiled once, incoming senders verified, the `__manage` grant, one decision per enrollment id at a time, one shared teardown that awaits the stop the opening function recorded. `SessionBoundCollection`, `ReceivedNotification`, `JsEnrollment`. | Any `dart:js_interop` type in the session interface or its domain rules (platform helpers under `lib/src/session/web_*.dart` keep their own), any error code. |
+| Opening | `lib/src/js/bridge.dart` (one private function); `portalSession`, `passkeyLogin` and `PasskeySession` stay in `lib/src/session/` and `at_client` | The private function opens either kind of session, keys or passkey, validates its options before any side effect, and returns the `AtClient` with its stop. `portalSession`, `passkeyLogin`, `onboardNewAtSign` and `PasskeySession` keep their names and shapes. | A public opener interface, a new return type, or a second teardown rule. |
+| Collections adapter | `lib/src/collections/` | The collections adapter over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. Its names stay as they are on trunk until the collections interface is typed (see D-45, withdrawn, in the Reasoning). | Codes and message text. |
 | Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each to extend `AtException`: `PortalSessionOfflineException`, `UnsupportedKeyMaterialException`, `JsCollectionsError`, `SetupLockTimeoutException` and `IndexedDbException`, all on trunk today, move into this one file. | Code mapping, which stays in the bridge. |
 | Contract manifest | release asset `bridge-manifest.json` | A `schemaVersion`, every exported method and every error code, generated from the Dart constants and identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against `bridge.ref`, and fails when its TypeScript types or code list disagree. | Anything written by hand. |
-| Build target | `tool/build.sh`, `at_client_web_bridge_release.yaml` | `--target dart2js\|dart2wasm`: `dart2js` by default; `dart2wasm` is strict, with no silent fallback; an unknown target exits 1. The release workflow takes the target as a dispatch input, read through `env:`, tags a wasm release distinctly (for example `at_client_web-bridge-wasm-<first 12 characters of the SHA>`) and attests every asset. | A target chosen by which entry name is passed. |
+| Build target | `tool/build.sh` | `--target dart2js\|dart2wasm`: `dart2js` by default; `dart2wasm` is strict, with no silent fallback; an unknown target exits 1. A release target is not part of D-38 (see its Reasoning). | A target chosen by which entry name is passed. |
 
 ## Opening a session (D-40)
 
-The shape, as a sketch; member names are not fixed until the code lands.
+One private function in the bridge opens either kind of session. It calls `portalSession` for
+keys and `passkeyLogin` for a passkey, and hands back the `AtClient` with the stop that
+releases it: `AtClient.stop()` for a keys session, `PasskeySession.stop()` for a passkey
+session, which closes the passkey's vault once the client has stopped (D-30). The session's
+`close()` awaits that recorded stop. Nothing is renamed and no public type is added.
 
 ```dart
-sealed class SessionOptions {}                       // KeysSessionOptions, PasskeySessionOptions
-abstract interface class SessionOpener {
-  Future<OpenedSession> open(SessionOptions options);
-}
-final class OpenedSession {                          // what every opener returns
-  AtClient get client;
-  Future<void> stop();                               // close() awaits this
-}
+// private to lib/src/js/bridge.dart; names are not fixed until the code lands
+Future<({AtClient client, Future<void> Function() stop})> _open(/* keys or passkey */);
 ```
 
-`KeysSessionOpener` is today's `portalSession`; `PasskeySessionOpener` is today's
-`passkeyLogin`. They are renamed as a pair rather than wrapped. A failure after the opener
-has returned stops the opened session before it is rethrown, so a passkey's vault is never
-left open. Validation runs first, in a fixed order, before any side effect, and rejects with
-an argument error without echoing a value.
+`close()` rules:
 
-## Rename table (D-45)
+- A second call returns the same future and throws no new error.
+- A call made while the session is still opening waits for the open to settle, then stops
+  what was opened.
+- The longest it waits is D-30's. The passkey vault closes once the client has stopped, or
+  after 10 seconds plus `AtServerAtKeysIo.lockWaitBound` (75 seconds by default) from when
+  the client's stop begins, and `close()` also awaits the client's own `stop()`. D-40 adds no
+  bound of its own.
 
-Rules: each name says what it does and names its layer; siblings share a suffix; an
-interface takes the plain noun and an implementation adds a qualifier; nothing pure-Dart
-starts with `Js`. JS-facing names (`create`, method names, event shapes, error codes) do not
-change. The table lists the names on trunk that change; names introduced in #2537 are not
-proposed here.
-
-| Layer | Today | Proposed | Why |
-|---|---|---|---|
-| Opening | portalSession | KeysSessionOpener | Opens with an .atKeys file |
-| Opening | passkeyLogin | PasskeySessionOpener | Sibling of KeysSessionOpener |
-| Opening | AtClient + stop (unnamed) | OpenedSession | What every opener returns |
-| Opening | PortalSessionOfflineException | SessionOfflineException | Drop "portal" |
-| Collection | JsCollectionsAdapter | AtCollectionAdapter | Adapts AtCollection to ItemCollection |
-| Collection | JsItem, JsItemAddress, JsListing, JsWhereClause, JsEvent | Item, ItemAddress, ItemListing, WhereClause, CollectionEvent | Drop Js; match at_js names |
-| Collection | JsUnreadable | UnreadableItem | Drop Js; match at_js names |
-| Collection | _write, _guard, _error | _ownedWrite, _mapFailures, _toCollectionException | Say what each step does |
-| Collection | js_collections_adapter.dart | at_collection_adapter.dart | Match the class |
-| Exceptions | JsCollectionsError | CollectionException | Drop Js; it is pure Dart |
-| Exceptions | spread over four files | lib/src/exceptions.dart | One file (D-41) |
+A failure after the open has returned stops the opened session before it is rethrown, so a
+passkey's vault is never left open. Validation runs first, in a fixed order, before any side
+effect, and rejects with an argument error without echoing a value.
 
 ## Reasoning
 
-The five decisions come from a design self-review of #2537, recorded in the first commit of this branch
+The four decisions come from a design self-review of #2537, recorded in the first commit of this branch
 ([`a0fd351bd`](https://github.com/atsign-foundation/at_client_sdk/commit/a0fd351bd9d501aad2f2acd96928806cea4aaf56)) and
-carried through #2601. #2537 itself has no review comments, so there is no review thread to link: the self-review is
-the originating record. Each block below gives the problem, the alternatives that were actually on the table, the
-argument that settled it, and what would reopen it. The "Would reopen if" lines were written for this PR; the review
-notes didn't record them.
+carried through #2601. The code owner's review of this PR on 2026-11-24 (#2602) changed D-38 and D-40 and withdrew D-45, and each
+block below records what was considered and rejected. Each block gives the problem, the alternatives that were
+actually on the table, the argument that settled it, and what would reopen it. The "Would reopen if" lines were
+written for this PR; the review notes didn't record them.
 
 ### D-40 — one way to open a session
 
 **Problem.** Trunk has two opening entry points with different shapes: `portalSession` returns an `AtClient`,
 `passkeyLogin` returns a `PasskeySession` with its own stop ([D-40](../../architecture/decisions.md)). A passkey
 opener added to the bridge would be a second opening path, and nothing in the bridge waits for the passkey vault to
-be released. The names also do not say they are alternatives to each other.
+be released.
 
 **Options considered.**
-- Keep both entry points: rejected because the bridge would carry two opening paths and two teardown rules.
-- Wrap both behind one interface: rejected because a wrapper leaves both names in place, so a caller still chooses
-  between two entry points.
-- Rename the pair and put one interface in front of them (chosen).
+- (a) Keep two opening paths in the bridge: rejected because the bridge would carry two teardown rules.
+- (b) A public `SessionOpener` family, with `KeysSessionOpener` and `PasskeySessionOpener` returning an
+  `OpenedSession` and renaming the pair: the original proposal of this PR, considered and rejected by the code owner
+  in review on 2026-11-24. His reason: on D-30 he chose a wrapper over changing working code ("I want to minimize
+  changes to existing proven machinery"); `PasskeySession` already holds the client and its stop and closes the
+  vault cleanly; and `docs/sdk-shape.md` and `test/export_surface_test.dart` name `onboardNewAtSign` and
+  `passkeyLogin`, so a rename changes proven entry points for the bridge's sake.
+- (c) One private function in the bridge that opens either kind of session and records its stop (chosen).
 
-**Decision and why.** One `SessionOpener` returning `OpenedSession` (the client and its stop), with
-`KeysSessionOpener` and `PasskeySessionOpener`; `close()` awaits the opener's stop. The deciding argument is
-teardown: one place waits for the stop, so a passkey's vault is never left open when a later step fails (see
-[Opening a session](#opening-a-session-d-40)). The cost is that both trunk names change; `at_client_web` is 0.1.0
-and `publish_to: none`, so the rename is internal to its call sites and tests, and `lib/at_client_web_web.dart` must
-keep its exports working.
+**Decision and why.** One private function opens either kind of session and `close()` awaits its stop. The deciding
+argument is the same as for the rejected family, teardown in one place, without touching proven machinery:
+`portalSession`, `passkeyLogin`, `onboardNewAtSign` and `PasskeySession` keep their names and shapes, and the
+public surface does not grow. `close()` is idempotent, waits for an open in progress, and waits no longer than
+D-30's bound (see [Opening a session](#opening-a-session-d-40)).
 
-**Would reopen if.** An opener whose teardown can't be expressed as one awaitable stop.
+**Would reopen if.** A caller outside the bridge needs to open a session by either route through one public type,
+or a session's teardown can't be expressed as one awaitable stop.
 
 ### D-41 — one exceptions file
 
@@ -148,28 +134,17 @@ and the implementing PR and its release notes must say so.
 **Would reopen if.** A caller turns out to depend on `PortalSessionOfflineException` or
 `UnsupportedKeyMaterialException` not being caught as `AtException`.
 
-### D-45 — one naming pattern
+### D-45 — withdrawn
 
-**Problem.** Trunk has `Js`-prefixed types that are pure Dart (`JsItem`, `JsUnreadable`, `JsListing`, `JsWhereClause`,
-`JsEvent`, `JsCollectionsAdapter`), an adapter class with no interface above it, and two opening names that do not say
-they are alternatives. There is no rule to apply to a new type, so each name is decided on its own
-([D-45](../../architecture/decisions.md)).
+D-45 proposed one naming pattern and renames of trunk names: the opening entry points, the `Js`-prefixed
+collections types and `PortalSessionOfflineException`. After the code owner's review on 2026-11-24 the opening
+renames went into D-40's rejected alternative. The collections renames wait until the collections interface is
+typed: the types are still `Map<String, Object?>`, `op` is a `String` and `watch` is callbacks, so dropping `Js`
+would make an untyped surface read as typed and sit beside at_client's `CItem`, `CEvent` and
+`CollectionOpException`. What remained, a rule for new names plus one rename, did not need a decision row, so D-45
+is withdrawn and its id is retired, not reused. `PortalSessionOfflineException` keeps its name.
 
-**Options considered.**
-- Keep the current names: rejected because the `Js` prefix on pure Dart reads as a JS-facing type, and nothing guides
-  a new name.
-- Rename everything now, including the #2537-only types: rejected for this PR because those names are not on trunk;
-  the rename PR settles them.
-- Rename the trunk names now under one pattern (chosen).
-
-**Decision and why.** Each name says what it does and names its layer; siblings share a suffix; an interface takes
-the plain noun and an implementation adds a qualifier; nothing pure-Dart starts with `Js`; JS-facing names do not
-change. The cost is eleven rows in the table above, both opening names, one file rename and one exception rename;
-the same 0.1.0 and `publish_to: none` that makes D-40 cheap makes these internal. Names introduced in #2537, such as
-`JsEnrollment`, are not proposed here.
-
-**Would reopen if.** A JS-facing name has to change (the rule forbids it), or the package is published before the
-renames land, so they would break callers.
+**Would reopen if.** The collections interface is typed.
 
 ### D-39 — a machine-readable contract
 
@@ -196,6 +171,9 @@ with this docs PR.
 **Would reopen if.** at_js stops being the consumer, or the Dart constants stop being the single source for the
 surface.
 
+**Likely follow-up.** at_js generates its error codes and types from the manifest rather than checking a
+hand-written list against it (raised in the code owner's review of 2026-11-24).
+
 ### D-38 — the compile target
 
 **Problem.** The trunk build script takes no argument: it always runs both compilers, warns and exits 0 when the
@@ -207,16 +185,19 @@ therefore implicit in whatever the script last ran, and a failed wasm build can 
 - Keep dart2js as the primary target: D-38 does not reopen this. It keeps `dart2js` as the default, which is the
   position of [wasm D-7](decisions.md), and D-7 already keeps `dart2wasm` available "at zero cost". The measured
   evidence favoured dart2js: one 77 KB file (24.5 KB gzipped) against dart2wasm's four files at about 25 KB gzipped, and
-  Sass ships dart2js ([js-api.md](js-api.md) section 2). D-38 decides how a wasm build is made and shipped, not
+  Sass ships dart2js ([js-api.md](js-api.md) section 2). D-38 decides how a wasm build is made, not
   which target is primary.
+- A release workflow that takes the target as a `workflow_dispatch` input and tags a wasm release distinctly:
+  considered and deferred, in the code owner's review of 2026-11-24, until OQ-16 (which target is primary) has
+  product sign-off. Until then a bridge release, if any, is dart2js only and dispatchable from trunk only
+  (`if: github.ref == 'refs/heads/trunk'`).
 - A `--target` flag with `dart2js` as the default (chosen).
 
 **Decision and why.** `tool/build.sh` takes `--target dart2js|dart2wasm`; `dart2js` is the default, `dart2wasm` is
 strict with no silent fallback, and an unknown target exits 1. The deciding argument is that the entry already
 compiles under both compilers (`test/web/compile_test.dart`), so the cost is in the build script, not in the bridge.
 
-**Cost.** Two release targets to keep green, and a wasm release is a separate prerelease under its own tag and
-advisory (OQ-16), so it does not replace the default.
+**Cost.** Two targets to keep building. No release workflow is part of this decision.
 
-**Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped; product sign-off on the
-advisory wasm release is still open (OQ-16).
+**Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped. A wasm release is a
+separate decision, taken once OQ-16 has product sign-off.
