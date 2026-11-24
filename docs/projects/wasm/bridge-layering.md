@@ -10,7 +10,7 @@ and are the subject of D-42, D-43 and D-44. Trunk's `at_client_web` has `portalS
 columns below are those of the bridge implementation that follows these decisions (#2537),
 not yet on trunk, except these, which are on trunk too: `portalSession`, `passkeyLogin`, the five exceptions the Exceptions
 row lists, `JsCollectionsAdapter`, `JsItem`, `JsItemAddress`, `JsListing`,
-`JsWhereClause`, `JsEvent`, `JsUnreadable`, the file `js_collections_adapter.dart`, and `tool/build.sh`. The names below are the proposed ones; no trunk name changes.
+`JsWhereClause`, `JsEvent`, `JsUnreadable`, the file `js_collections_adapter.dart`, and `tool/build.sh`. The names below are the proposed ones; every trunk type name and path stays, except `CollectionErrorCodes`, and except the five exception classes that moved into `lib/src/exceptions.dart` (`JsCollectionsError` is no longer declared in `js_collections_adapter.dart`), with `JsCollectionsError` and `JsUnreadable` changing shape to carry `CollectionFailure kind`.
 
 JS values enter the bridge only at its top layer; below the bridge the session and adapter
 layers take typed Dart. Existing platform helpers that need browser
