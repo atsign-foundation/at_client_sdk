@@ -37,6 +37,13 @@ Feature: create opens a session and close ends it
     Then the session opens with exactly those options
     And the result has notify, subscribe, status, onStatus, collection and close
 
+  Scenario: create resolves only once the session is open
+    Given a bridge whose session opener has not yet returned
+    When create is called
+    Then create's promise is still pending
+    When the opener then returns a session
+    Then create resolves with that session
+
   Scenario: keys may be an object as well as the document text
     Given create options whose keys are the parsed .atKeys object instead of its JSON text
     When create is called

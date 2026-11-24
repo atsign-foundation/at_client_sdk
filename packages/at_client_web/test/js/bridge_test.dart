@@ -331,6 +331,40 @@ void main() {
           ]));
     });
 
+    test('create resolves only once the session is open', () async {
+      final opener = Completer<Session>();
+      final bridge = createJSInteropWrapper(
+          BridgeEntry(open: (_) => opener.future, isSecureContext: () => true));
+
+      final pending = settle(invoke(bridge, 'create', [jsObject(opts())]));
+      var settled = false;
+      unawaited(pending.then((_) {
+        settled = true;
+      }));
+      await pumpEventQueue();
+      expect(settled, isFalse,
+          reason: "create's promise is still pending while the opener runs");
+
+      opener.complete(session);
+      final outcome = await pending;
+      expect(outcome, isA<Resolved>(),
+          reason: 'create resolves with the session');
+      expect(
+          _ownNames((outcome as Resolved).value! as JSObject),
+          unorderedEquals([
+            'notify',
+            'subscribe',
+            'status',
+            'onStatus',
+            'collection',
+            'otp',
+            'pendingEnrollments',
+            'approve',
+            'deny',
+            'close',
+          ]));
+    });
+
     test('keys may be an object as well as the document text', () async {
       await create(opts({
         'keys': {
