@@ -22,11 +22,16 @@ Feature: Clearing the keychain throws what the keychain throws
   retries both stores.
 
   Races: the clear takes the keychain's write lock in this isolate, as every
-  keychain change does; another isolate is excluded by nothing, as for every
-  keychain change. Replay: none; nothing is sent. DoS: none; two deletes and
-  a read-back of each, and on Windows a segment search bounded as every
-  Windows read is. Forgery and impersonation: only the app on the device
-  calls it, and it already holds the keychain.
+  change to the AtKeys entry does; the SPP stores' changes, by saveSpp,
+  deleteSppData and getAllSpps when it drops expired values, take no lock.
+  Another isolate is excluded by nothing, as for every keychain change.
+  Replay: none; nothing is sent. DoS: none; two deletes and a read-back of
+  each, and on Windows, for each store, up to three segment searches (of its
+  own segments, of a legacy header's segments when its count is refused,
+  and of the legacy segments from index 0), each reading at most 2560
+  segments, with a delete and a read-back of each segment found or named.
+  Forgery and impersonation: only the app on the device calls it, and it
+  already holds the keychain.
 
   Scenario: Clearing a keychain whose delete fails throws that failure
     Given a keychain whose delete of the AtKeys entry fails with a platform error
