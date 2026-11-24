@@ -332,6 +332,9 @@ void main() {
     () async {
       final aliceOnly = keychain();
       await aliceOnly.appendAtKeysToKeychain(keys: largeKeys(atSign));
+      // NOTE: rewritten as the removal below rewrites it, since a write of
+      // keys read back can order their JSON differently from the first.
+      await aliceOnly.removeAtsignFromKeychain('@bob');
       final expected = Map.of(held);
       held.clear();
       final storage = keychain();

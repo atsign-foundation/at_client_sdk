@@ -17,8 +17,8 @@ class MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 /// `KeychainAtKeysIo` as a *bootstrap store*.
 ///
 /// The keychain is one of the two homes the never-lose contract binds, the
-/// other being the `.atKeys` file, and `read` scans its list front-to-back —
-/// so an entry appended beside an existing one is unreachable.
+/// other being the `.atKeys` file, and `read` takes the first entry for an
+/// atSign, so the keychain refuses to add a second beside it.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -107,14 +107,51 @@ void main() {
     await io.write('@alice', keysFor('@alice'));
     expect(entryCount(), 1);
 
+    final refused = keysFor('@alice');
     await expectLater(
-      io.write('@alice', keysFor('@alice')),
-      throwsA(isA<AtKeysFileOverwriteException>()),
+      io.write('@alice', refused),
+      throwsA(
+        isA<AtKeysFileOverwriteException>().having(
+          (e) => e.message,
+          'message',
+          allOf(
+            contains('Use update() to change its keys'),
+            contains('flush() only to replace them whole'),
+          ),
+        ),
+      ),
       reason:
           'appending a second entry would leave the newer keys unreachable '
           'behind the older ones, which is a silent loss rather than a write',
     );
     expect(entryCount(), 1, reason: 'and nothing was appended');
+    expect(
+      (refused.atsign, refused.metadata.containsKey('atsign')),
+      (null, false),
+      reason: 'a refused write leaves the caller\'s keys unstamped',
+    );
+  });
+
+  test('write refuses an atSign that already has an entry as an overwrite, '
+      'whatever atSign the keys name', () async {
+    await io.write('@alice', keysFor('@alice'));
+    final before = blob;
+
+    await expectLater(
+      io.write('@carol', keysFor('@bob')..atsign = '@bob'.toAtsign()),
+      throwsA(isA<AtKeysValidationException>()),
+      reason:
+          'the control: for an atSign with no entry, keys naming another '
+          'atSign are refused for that',
+    );
+    await expectLater(
+      io.write('@alice', keysFor('@bob')..atsign = '@bob'.toAtsign()),
+      throwsA(isA<AtKeysFileOverwriteException>()),
+      reason:
+          'write is create-only: an atSign that already has an entry is '
+          'refused as an overwrite before the keys it is given are looked at',
+    );
+    expect(blob, before, reason: 'and nothing was written');
   });
 
   test('write still appends a DIFFERENT atSign', () async {
@@ -133,36 +170,6 @@ void main() {
     expect((await io.read('@alice')).storedEnrollmentId, 'e-@alice');
   });
 
-  test(
-    'flush REPLACES rather than appends, and the new state is what reads',
-    () async {
-      final keys = keysFor('@alice');
-      await io.write('@alice', keys);
-
-      keys.addKey(material('nskey.wavi'));
-      await io.flush('@alice'.toAtsign(), keys);
-
-      expect(
-        entryCount(),
-        1,
-        reason:
-            'a flush that appended would leave read() answering with the '
-            'pre-flush entry forever',
-      );
-      final reread = await io.read('@alice');
-      expect(
-        reread
-            .getAtSignKey(
-              'nskey.wavi',
-              CryptographicMaterialRole.symmetricEncryption,
-            )
-            ?.bytes
-            .toString(),
-        base64Encode(utf8.encode('nskey.wavi')),
-      );
-    },
-  );
-
   test('flush leaves other atSigns\' entries alone', () async {
     await io.write('@alice', keysFor('@alice'));
     await io.write('@bob', keysFor('@bob'));
@@ -173,6 +180,26 @@ void main() {
 
     expect(entryCount(), 2);
     expect((await io.read('@bob')).storedEnrollmentId, 'e-@bob');
+  });
+
+  test('flush of keys that do not name the atSign keeps the atsign its entry '
+      'holds', () async {
+    String? storedAtSign() =>
+        (((jsonDecode(blob!) as Map<String, dynamic>)['keys'] as List).single
+                as Map<String, dynamic>)['atsign']
+            as String?;
+    await io.write('@alice', keysFor('@alice'));
+    expect(storedAtSign(), '@alice', reason: 'the control: the entry holds it');
+
+    await io.flush('@alice'.toAtsign(), keysFor('@alice'));
+
+    expect(
+      storedAtSign(),
+      '@alice',
+      reason:
+          'the never-lose assurance refuses a flush that drops it, so the '
+          'keys are stamped with it before the assurance sees them',
+    );
   });
 
   test(
@@ -436,33 +463,6 @@ void main() {
     },
   );
 
-  test('an entry stored under the legacy `name` metadata key is found, '
-      'replaced and removed by the same predicate', () async {
-    blob = jsonEncode({
-      'keys': [
-        {
-          'name': '@alice',
-          'aesPkamPublicKey': base64Encode(utf8.encode('apkam')),
-          'selfEncryptionKey': base64Encode(utf8.encode('self')),
-          'enrollmentId': 'e-@alice',
-        },
-      ],
-      'defaultAtsign': '@alice',
-    });
-    final keychain = KeychainStorage()..biometricStorage = storage;
-
-    expect(await keychain.getAllAtsigns(), ['@alice']);
-
-    final legacyIo = KeychainAtKeysIo(keychainStorage: keychain);
-    final keys = await legacyIo.read('@alice');
-    keys.addKey(material('nskey.wavi'));
-    await legacyIo.flush('@alice'.toAtsign(), keys);
-    expect(entryCount(), 1, reason: 'replaced in place, not appended beside');
-
-    await keychain.removeAtsignFromKeychain('@alice');
-    expect(entryCount(), 0);
-  });
-
   test('an atSign is one entry however the caller spells it', () async {
     // NOTE: `read`/`write` are handed the caller's raw string while `flush`
     // is handed `toAtsign()`, so both spellings must resolve to one entry.
@@ -485,42 +485,6 @@ void main() {
       reason: 'a second spelling is not a second atSign',
     );
     expect(entryCount(), 1);
-  });
-
-  test('a stored spelling that differs from its normal form is replaced, '
-      'not appended beside', () async {
-    // NOTE: `@colin.constable` normalizes to `@colinconstable` — dots in the
-    // right-hand side are decoration — so a stored spelling can differ from
-    // the one `flush` matches on.
-    blob = jsonEncode({
-      'keys': [
-        {
-          'atsign': '@colin.constable',
-          'aesPkamPublicKey': base64Encode(utf8.encode('apkam')),
-          'selfEncryptionKey': base64Encode(utf8.encode('self')),
-          'enrollmentId': 'e-@colinconstable',
-        },
-      ],
-    });
-    final keychain = KeychainStorage()..biometricStorage = storage;
-    final legacyIo = KeychainAtKeysIo(keychainStorage: keychain);
-
-    final keys = await legacyIo.read('@colin.constable');
-    keys.addKey(material('nskey.wavi'));
-    await legacyIo.flush('@colin.constable'.toAtsign(), keys);
-
-    expect(entryCount(), 1, reason: 'replaced in place, not appended beside');
-    expect(
-      (await legacyIo.read('@colinconstable')).getAtSignKey(
-        'nskey.wavi',
-        CryptographicMaterialRole.symmetricEncryption,
-      ),
-      isNotNull,
-      reason: 'and the flushed material is what reads back',
-    );
-
-    await keychain.removeAtsignFromKeychain('@colinconstable');
-    expect(entryCount(), 0, reason: 'removal matches the same way');
   });
 
   test('describeSource names this device\'s keychain', () {

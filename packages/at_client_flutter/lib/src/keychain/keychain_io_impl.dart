@@ -9,6 +9,7 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_commons/at_commons.dart';
 
+import 'keychain_atsign.dart';
 import 'keychain_storage.dart';
 
 /// Implementation of WrittenAtKeysIo using Keychain storage
@@ -45,13 +46,14 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   @override
   Future<void> write(String atSign, AtKeys atKeys) => keychainStorage.writing(
     () async {
-      // NOTE: create-only. The underlying store appends and `read` answers with
-      // the first matching entry, so a second write for the same atSign would
-      // leave the newer keys unreachable.
+      // NOTE: create-only, checked before the keys are stamped, so an atSign
+      // that already has an entry is refused as an overwrite whatever the keys
+      // name, and the caller's keys are left as they were.
       if (await _existing(atSign) != null) {
         throw AtKeysFileOverwriteException(
           'Tried writing $atSign to the keychain, but failed since it already '
-          'has an entry. Use flush() to persist a change to existing keys.',
+          'has an entry. Use update() to change its keys, or flush() only to '
+          'replace them whole.',
         );
       }
       _stampAtSign(atSign, atKeys);
@@ -104,9 +106,11 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
   /// requires before it will serialize typed material, and on the `metadata`
   /// entry the keychain falls back to.
   ///
-  /// Neither is overwritten once set: the metadata entry is one the never-lose
-  /// assurance holds to be preserved, and the keychain compares atSigns
-  /// normalized, so the stored spelling need not match.
+  /// Keys naming another atSign, in either or in the legacy `name` metadata
+  /// entry, throw [AtKeysValidationException] and are left unchanged. A
+  /// metadata entry naming this atSign is not overwritten: it is one the
+  /// never-lose assurance holds to be preserved, and the keychain compares
+  /// atSigns normalized, so the stored spelling need not match.
   void _stampAtSign(String atSign, AtKeys atKeys) {
     final normalized = atSign.toAtsign();
     if (atKeys.atsign != null && atKeys.atsign != normalized) {
@@ -115,8 +119,8 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
         '$normalized',
       );
     }
+    stampAtSign(atKeys, atSignNamedBy(atKeys, filedAs: atSign));
     atKeys.atsign ??= normalized;
-    atKeys.metadata['atsign'] ??= normalized.toString();
   }
 
   /// The entry for [atSign], or null — including when the keychain holds no

@@ -15,6 +15,7 @@ CLAUDE.md                                 @gkc @cconstab
 
 # Various important docs and tests
 /docs/sdk-shape.md                                               @gkc
+/features/at_client_flutter/keychain_one_entry_per_atsign.feature @gkc
 /tools/check_architecture.sh                                     @gkc
 /tests/released_envelope/                                        @gkc
 /tests/upgrade/                                                  @gkc
@@ -31,5 +32,6 @@ CLAUDE.md                                 @gkc @cconstab
 /packages/at_client/test/vectors/jws_envelope.json               @gkc
 /packages/at_client/test/web_safe_test.dart                      @gkc
 /packages/at_client/test/wire_literal_pins_test.dart             @gkc
+/packages/at_client_flutter/test/keychain_one_entry_per_atsign_test.dart @gkc
 /packages/at_lookup/test/web_safe_test.dart                      @gkc
 /packages/at_utils/test/web_safe_test.dart                       @gkc

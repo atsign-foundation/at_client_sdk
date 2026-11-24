@@ -2,7 +2,12 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysFormatException, AtKeysSourceAbsentException;
+    show
+        AtKeys,
+        AtKeysFileOverwriteException,
+        AtKeysFormatException,
+        AtKeysSourceAbsentException,
+        AtKeysValidationException;
 import 'package:at_client/at_client.dart' show Passcode;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -16,6 +21,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:synchronized/synchronized.dart';
 
+import 'keychain_atsign.dart';
 import 'keychain_data.dart';
 
 part 'keychain_store.dart';
@@ -196,18 +202,22 @@ class KeychainStorage {
 
   /// Get all Atsigns currently stored in the keychain
   ///
-  /// Returns a [List] of unique Atsign values
+  /// Returns a [List] of unique Atsign values: an Atsign stored under two
+  /// spellings is listed once, in the spelling stored first.
   Future<List<String>> getAllAtsigns() async {
     final atKeysData = await readAtKeysData();
     if (atKeysData == null) {
       return [];
     }
-    final atSigns = <String>{};
+    final listed = <String>{};
+    final atSigns = <String>[];
     for (final keys in atKeysData.keys) {
       final atSign = _atSignOf(keys);
-      if (atSign != null) atSigns.add(atSign);
+      if (atSign != null && listed.add(normalizedAtSign(atSign)!)) {
+        atSigns.add(atSign);
+      }
     }
-    return atSigns.toList();
+    return atSigns;
   }
 
   /// Replace the stored [keys] for [atSign], or append them if this atSign has
@@ -219,17 +229,29 @@ class KeychainStorage {
   ///   [requireExisting] - throw [AtKeysSourceAbsentException] and write
   ///   nothing when [atSign] has no entry, rather than adding one.
   ///
+  /// The entry is replaced whole, and nothing checks that the key material it
+  /// held survives unless [assureUpdate] does: `KeychainAtKeysIo.update`
+  /// changes stored keys with that check.
+  ///
+  /// Keys naming an Atsign other than [atSign], in their typed `atsign` field
+  /// or their metadata's `atsign` or legacy `name` entry, or naming two
+  /// Atsigns, throw [AtKeysValidationException] before the keychain is read.
+  /// Their metadata is stamped with the Atsign they name, or with [atSign]
+  /// when they name none, only once those checks and [assureUpdate] have
+  /// passed, so keys they refuse are left as they were.
+  ///
   /// Writes in this isolate take turns; one from another isolate still wins
   /// over this, or loses to it, whole, since the keychain offers no
-  /// compare-and-swap. On Windows, where the entry is written in parts, a
-  /// write that fails partway is undone before it is thrown, unless undoing
-  /// it fails too, which is logged.
+  /// compare-and-swap. On Windows, where the keychain item is written in
+  /// parts, a write that fails partway is undone before it is thrown, unless
+  /// undoing it fails too, which is logged.
   Future<void> updateAtKeysInKeychain({
     required String atSign,
     required AtKeys keys,
     void Function(AtKeys existing)? assureUpdate,
     bool requireExisting = false,
   }) => _writes.synchronized(() async {
+    final named = atSignNamedBy(keys, filedAs: atSign);
     final previous = await _readAtKeysDataRaw();
     final atKeysData = previous == null
         ? AtKeysData(keys: [])
@@ -241,10 +263,11 @@ class KeychainStorage {
         'written',
       );
     }
+    if (index != -1) assureUpdate?.call(atKeysData.keys[index]);
+    stampAtSign(keys, named);
     if (index == -1) {
       atKeysData.keys.add(keys);
     } else {
-      assureUpdate?.call(atKeysData.keys[index]);
       atKeysData.keys[index] = keys;
     }
     await _replaceEntry(
@@ -255,34 +278,14 @@ class KeychainStorage {
   });
 
   /// The atSign an entry belongs to, in whatever spelling it was stored: the
-  /// typed `atsign` field, else the `atsign` metadata entry, else the legacy
-  /// `name` one.
-  String? _atSignOf(AtKeys keys) {
-    if (keys.atsign != null) return keys.atsign.toString();
-    final value = keys.metadata.containsKey('atsign')
-        ? keys.metadata['atsign']
-        : keys.metadata['name'];
-    return value is String ? value : null;
-  }
-
-  /// [atSign] in its normalized spelling, so that two spellings of one atSign
-  /// match the same entry — callers supply either.
-  ///
-  /// A value `toAtsign()` rejects is returned as it stands rather than
-  /// dropped, so a malformed stored entry is still readable and removable.
-  String? _normalized(String? atSign) {
-    if (atSign == null) return null;
-    try {
-      return atSign.toAtsign().toString();
-    } on InvalidAtSignException {
-      return atSign;
-    }
-  }
+  /// typed `atsign` field, else the one [metadataAtSignOf] finds.
+  String? _atSignOf(AtKeys keys) =>
+      keys.atsign?.toString() ?? metadataAtSignOf(keys);
 
   int _indexOf(AtKeysData atKeysData, String atSign) {
-    final wanted = _normalized(atSign);
+    final wanted = normalizedAtSign(atSign);
     for (int i = 0; i < atKeysData.keys.length; i++) {
-      if (_normalized(_atSignOf(atKeysData.keys[i])) == wanted) return i;
+      if (normalizedAtSign(_atSignOf(atKeysData.keys[i])) == wanted) return i;
     }
     return -1;
   }
@@ -291,21 +294,44 @@ class KeychainStorage {
   ///
   ///   [keys] - [AtKeys] instance to persist
   ///
-  /// Note: the Atsign must be included in the [AtKeys.metadata] field
+  /// The keys name their Atsign in their typed `atsign` field or their
+  /// metadata's `atsign` or legacy `name` entry, decided before the keychain
+  /// is read: keys naming two Atsigns throw [AtKeysValidationException], and
+  /// keys naming none are appended as they are. Keys whose metadata does not
+  /// name their Atsign have it stamped there only once the checks here have
+  /// passed, so keys they refuse are left as they were.
+  ///
+  /// Keys for an Atsign the keychain already holds, its legacy-named store
+  /// included, throw [AtKeysFileOverwriteException] and none of them is
+  /// added: `KeychainAtKeysIo.write` adds an Atsign's keys and
+  /// `KeychainAtKeysIo.update` changes them. Two appends for one Atsign in
+  /// this isolate take turns, so one of them is refused.
   ///
   /// A failure to read or write the keychain, its legacy-named store
-  /// included, is thrown, and a stored entry that is not a JSON object throws
-  /// [AtKeysFormatException], with nothing written. On Windows, where the
-  /// entry is written in parts, a write that fails partway is undone before
-  /// it is thrown, unless undoing it fails too, which is logged.
+  /// included, is thrown, and a keychain item that is not a JSON object
+  /// throws [AtKeysFormatException], with nothing written. On Windows, where
+  /// the keychain item is written in parts, a write that fails partway is
+  /// undone before it is thrown, unless undoing it fails too, which is
+  /// logged.
   Future<void> appendAtKeysToKeychain({required AtKeys keys}) =>
       _writes.synchronized(() => _append(keys));
 
   Future<void> _append(AtKeys keys) async {
+    final atSign = atSignNamedBy(keys);
     final existingData = await _readAtKeysDataRaw();
     final atKeysData = existingData == null
         ? AtKeysData(keys: [])
         : _decodeAtKeysData(existingData);
+    if (atSign != null && _indexOf(atKeysData, atSign) != -1) {
+      throw AtKeysFileOverwriteException(
+        'The keychain already holds keys for '
+        '${quotedForMessage(normalizedAtSign(atSign)!)}, so nothing was '
+        'added. KeychainAtKeysIo.write adds an Atsign\'s keys and '
+        'KeychainAtKeysIo.update changes them; a caller holding only this '
+        'storage can build KeychainAtKeysIo(keychainStorage: storage).',
+      );
+    }
+    stampAtSign(keys, atSign);
     atKeysData.keys.add(keys);
     await _replaceEntry(
       name: await AtKeysStore.getName(),
@@ -332,9 +358,9 @@ class KeychainStorage {
     final data = await _readAtKeysDataRaw();
     if (data == null) return;
     final atKeysData = _decodeAtKeysData(data);
-    final wanted = _normalized(atSign);
+    final wanted = normalizedAtSign(atSign);
     atKeysData.keys.removeWhere(
-      (element) => _normalized(_atSignOf(element)) == wanted,
+      (element) => normalizedAtSign(_atSignOf(element)) == wanted,
     );
     await _replaceEntry(
       name: await AtKeysStore.getName(),
