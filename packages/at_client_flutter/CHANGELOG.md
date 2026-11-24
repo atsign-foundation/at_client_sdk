@@ -14,6 +14,11 @@
   `flush` and `update`, refuse keys naming another Atsign than the one given
   with `AtKeysValidationException`; `updateAtKeysInKeychain` stores keys
   naming none under the one given.
+- note: a keychain entry an earlier release stored whose metadata `name`
+  names another Atsign than its `atsign` still reads, but can no longer be
+  updated or flushed. Remove that Atsign's entry with
+  `KeychainStorage.removeAtsignFromKeychain`, then write its keys again
+  without the `name` entry.
 - fix: `KeychainStorage.getAllAtsigns` lists an Atsign stored under two
   spellings once, and lists none for an entry with no typed Atsign and an
   empty metadata `atsign`.
