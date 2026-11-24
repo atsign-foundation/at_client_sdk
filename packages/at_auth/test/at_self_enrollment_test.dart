@@ -967,7 +967,7 @@ void main() {
       await keysIo.write(atSign, legacyKeys());
       final mock = approvingLookUp();
 
-      await AtEnrollmentImpl().submit(
+      final response = await AtEnrollmentImpl().submit(
           AtSelfEnrollmentRequest(
               session: AtAuthSession(
                   atSign: atSign,
@@ -1006,6 +1006,10 @@ void main() {
         'sign:rsa2048:1 privateSigning',
         'sign:rsa2048:1 publicVerification',
       ]);
+      // ignore: deprecated_member_use_from_same_package
+      expect(response.atAuthKeys, same(await keysIo.read(atSign)),
+          reason: 'the response carries the keys the last run of the change '
+              'was handed, which are the keys the store wrote');
       verify(() => mock.executeCommand(any(that: startsWith('enroll:request:')),
           auth: any(named: 'auth'))).called(1);
     });
