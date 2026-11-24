@@ -64,9 +64,10 @@ the reason the surface in [§5](#5-the-typescript-surface) looks the way it does
 
 ### 1.1 Almost nothing converts automatically
 
-A Dart class annotated `@JSExport` and installed with `createJSInteropWrapper` exposes
-its instance methods as own properties on a plain JS object. What those methods *return*
-is the problem:
+A member carrying a member-level `@JSExport()` on a class and installed with
+`createJSInteropWrapper` is exposed as an own property on a plain JS object; only the
+annotated members cross. A class-level `@JSExport()` exposes every concrete instance
+member instead, private ones included. What those members *return* is the problem:
 
 | Dart return type        | What JavaScript receives                                    |
 | ----------------------- | ----------------------------------------------------------- |

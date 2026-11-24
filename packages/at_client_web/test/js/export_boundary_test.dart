@@ -7,9 +7,9 @@ import 'package:test/test.dart';
 
 /// T6.3: nothing but `dart:js_interop` types crosses the exported surface.
 ///
-/// A member of a `@JSExport` class that takes or returns a Dart `Future`,
-/// `Stream`, `List`, `Uint8List` or any other Dart type compiles, then fails
-/// or hangs in JS, so the check reads the sources.
+/// A member carrying member-level `@JSExport()` that takes or returns a Dart
+/// `Future`, `Stream`, `List`, `Uint8List` or any other Dart type compiles,
+/// then fails or hangs in JS, so the check reads the sources.
 
 const _jsTypes = {
   'JSAny',
@@ -102,18 +102,40 @@ String _stripped(String source) {
   return out.toString();
 }
 
-/// The members of every `@JSExport` class in [source] as `Class.member`
-/// signatures: `(name, returnType, parameterTypes)`.
+/// Every class declaration, its leading annotations (group 1) and its name
+/// (group 2). The body starts at the match's `{`.
+final _classPattern = RegExp(
+  r'((?:@\w+(?:\([^)]*\))?\s*)*)(?:(?:abstract|final|base|interface|sealed|mixin)\s+)*class\s+(\w+)[^{]*\{',
+);
+
+/// The annotations that lead [raw], before any signature text.
+String _leadingAnnotations(String raw) =>
+    RegExp(r'^(?:@\w+(?:\([^)]*\))?\s*)*').firstMatch(raw.trim())!.group(0)!;
+
+bool _isExportAnnotation(String text) =>
+    RegExp(r'@JSExport\s*\(').hasMatch(text);
+
+/// The names of the classes in [source] that carry a class-level
+/// `@JSExport()`: a class-level annotation exposes every concrete instance
+/// member, private ones included, which is not what the bridge wants.
+List<String> _classLevelExports(String source) {
+  final code = _stripped(source);
+  return [
+    for (final c in _classPattern.allMatches(code))
+      if (_isExportAnnotation(c.group(1)!)) c.group(2)!
+  ];
+}
+
+/// The members of every class in [source] that carry member-level
+/// `@JSExport()`, as `Class.member` signatures:
+/// `(name, returnType, parameterTypes)`.
 List<({String owner, String name, String returns, List<String> params})>
     _exportedMembers(String source) {
   final code = _stripped(source);
   final members =
       <({String owner, String name, String returns, List<String> params})>[];
-  final classes = RegExp(
-    r'@JSExport\([^)]*\)(?:\s*@\w+(?:\([^)]*\))?)*\s*(?:(?:abstract|final|base|interface)\s+)*class\s+(\w+)[^{]*\{',
-  ).allMatches(code);
-  for (final c in classes) {
-    final owner = c.group(1)!;
+  for (final c in _classPattern.allMatches(code)) {
+    final owner = c.group(2)!;
     var depth = 1;
     var i = c.end;
     final start = i;
@@ -164,12 +186,17 @@ List<({String owner, String name, String returns, List<String> params})>
 
 ({String owner, String name, String returns, List<String> params})?
     _parseMember(String owner, String raw) {
+  // Bind the annotation to the member: only a member-level `@JSExport()`
+  // exports it, detected before the leading annotations are stripped.
+  if (!_isExportAnnotation(_leadingAnnotations(raw))) return null;
   var text = _signature(raw);
   if (text.isEmpty) return null;
-  // Drop leading annotations like `@override`.
+  // Drop leading annotations like `@override` or `@JSExport()`.
   text = text.replaceFirst(RegExp(r'^(?:@\w+(?:\([^)]*\))?\s+)+'), '');
+  // A static member is not part of the instance's JS surface.
+  if (RegExp(r'^static\s+').hasMatch(text)) return null;
   // Drop member modifiers that are not types.
-  text = text.replaceFirst(RegExp(r'^(?:external|static|late)\s+'), '');
+  text = text.replaceFirst(RegExp(r'^(?:external|late)\s+'), '');
   if (text.startsWith('$owner(') ||
       text.startsWith('$owner.') ||
       text.startsWith('factory ')) {
@@ -179,7 +206,7 @@ List<({String owner, String name, String returns, List<String> params})>
   if (method != null) {
     final prefix = method.group(1)?.trim();
     final name = method.group(2)!;
-    if (name == owner || name.startsWith('_')) return null;
+    if (name == owner) return null;
     if (prefix == 'set' || prefix == 'void set') {
       return (
         owner: owner,
@@ -197,11 +224,9 @@ List<({String owner, String name, String returns, List<String> params})>
   }
   final getter = RegExp(r'^(?:(.+?)\s+)?get\s+(\w+)$').firstMatch(text);
   if (getter != null) {
-    final name = getter.group(2)!;
-    if (name.startsWith('_')) return null;
     return (
       owner: owner,
-      name: name,
+      name: getter.group(2)!,
       returns: getter.group(1)?.trim() ?? 'dynamic',
       params: const [],
     );
@@ -214,7 +239,6 @@ List<({String owner, String name, String returns, List<String> params})>
     final qualifier = field.group(1);
     final type = field.group(2)?.trim();
     final name = field.group(3)!;
-    if (name.startsWith('_')) return null;
     if (qualifier == null && type == null) return null;
     return (
       owner: owner,
@@ -304,75 +328,84 @@ List<String> _violations(String source) => [
 
 void main() {
   final sources = {
-    for (final f in Directory('lib/src/js').listSync().whereType<File>())
+    for (final f
+        in Directory('lib').listSync(recursive: true).whereType<File>())
       if (f.path.endsWith('.dart')) f.path: f.readAsStringSync(),
   };
 
-  test('every member of an exported class takes and returns JS types only', () {
+  test('every member carrying @JSExport takes and returns JS types only', () {
     final exported = {for (final s in sources.values) ..._exportedMembers(s)};
-    expect({
-      for (final m in exported) m.owner
-    }, {
-      'BridgeSession',
-      'BridgeCollection',
-      'BridgeEntry'
-    }, reason: 'every @JSExport class is scanned');
-    expect(
-        exported.where((m) => m.owner == 'BridgeSession').map((m) => m.name),
-        containsAll([
-          'notify',
-          'subscribe',
-          'status',
-          'onStatus',
-          'collection',
-          'otp',
-          'pendingEnrollments',
-          'approve',
-          'deny',
-          'close'
-        ]));
-    expect(exported.where((m) => m.owner == 'BridgeEntry').map((m) => m.name),
-        ['create']);
-    expect(
-        exported.where((m) => m.owner == 'BridgeCollection').map((m) => m.name),
-        containsAll([
-          'create',
-          'get',
-          'list',
-          'query',
-          'update',
-          'share',
-          'remove',
-          'watch'
-        ]));
+    final names = <String, Set<String>>{};
+    for (final m in exported) {
+      (names[m.owner] ??= <String>{}).add(m.name);
+    }
+    expect(names, {
+      'BridgeSession': {
+        'notify',
+        'subscribe',
+        'status',
+        'onStatus',
+        'collection',
+        'otp',
+        'pendingEnrollments',
+        'approve',
+        'deny',
+        'close',
+      },
+      'BridgeCollection': {
+        'create',
+        'get',
+        'list',
+        'query',
+        'update',
+        'share',
+        'remove',
+        'watch',
+      },
+      'BridgeEntry': {'create'},
+    });
 
     for (final MapEntry(:key, :value) in sources.entries) {
       expect(_violations(value), isEmpty, reason: key);
     }
   });
 
-  test('the check flags Dart types on an exported member', () {
+  test('the check flags Dart types on a member-level @JSExport member', () {
     const bad = '''
 /*
 @JSExport()
 class CommentedOut { Future<void> ignored() async {} }
 */
-@JSExport()
 class Leaky {
+  @JSExport()
   Future<void> a() async {}
+  @JSExport()
   JSPromise<JSAny?> b(List<int> x) => throw 0;
+  @JSExport()
   Stream<int> c([JSAny? y = null]) => throw 0;
+  @JSExport()
   JSPromise<Uint8List> d() => throw 0;
+  @JSExport()
   JSFunction e(JSAny? ok, Object other) => throw 0;
+  @JSExport()
   Future<String> get badGetter => throw 0;
+  @JSExport()
   set badSetter(List<int> v) {}
+  @JSExport()
   String badField = r\'\'\'
     @JSExport() class InsideRaw { Future<void> ignored() async {} }
   \'\'\';
+  @JSExport()
   final List<int> badFinalField = const [];
+  @JSExport()
   var untypedField = 1;
+  @JSExport()
   JSPromise<JSArray<JSString>> fine(JSAny? a, [JSAny? b = null]) => throw 0;
+  @JSExport()
   void alsoFine(JSFunction f) {}
+  // Not annotated, so not exported.
+  Future<void> hidden() async {}
+  static Future<void> hiddenStatic() async {}
 }
 ''';
     expect(_violations(bad), [
@@ -389,10 +422,26 @@ class Leaky {
     ]);
   });
 
-  test('no exported class is declared outside lib/src/js/bridge.dart', () {
+  test('the check flags a class-level @JSExport', () {
+    const bad = '''
+@JSExport()
+class Leaky {
+  JSPromise<JSAny?> fine() => throw 0;
+}
+''';
+    expect(_classLevelExports(bad), ['Leaky']);
+  });
+
+  test('no class carries a class-level @JSExport', () {
+    for (final MapEntry(:key, :value) in sources.entries) {
+      expect(_classLevelExports(value), isEmpty, reason: key);
+    }
+  });
+
+  test('member-level @JSExport appears only in lib/src/js/bridge.dart', () {
     expect(
         sources.entries
-            .where((e) => e.value.contains('@JSExport'))
+            .where((e) => _exportedMembers(e.value).isNotEmpty)
             .map((e) => e.key),
         ['lib/src/js/bridge.dart']);
   });

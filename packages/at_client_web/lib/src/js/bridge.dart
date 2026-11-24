@@ -363,13 +363,14 @@ NotifyKey _jsKey(JSAny? value) {
 }
 
 /// The JS surface of one open client, as `AtClient` in the TypeScript
-/// package wraps it.
-@JSExport()
+/// package wraps it. Only the members carrying a member-level `@JSExport`
+/// reach JS.
 class BridgeSession {
   BridgeSession(this._session);
 
   final Session _session;
 
+  @JSExport()
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
 
@@ -380,6 +381,7 @@ class BridgeSession {
   /// when it cannot subscribe, the `{code, message}` object the promises
   /// reject with. It does not throw: a Dart `throw` reaches JS wrapped, with
   /// no `code` for the caller to read.
+  @JSExport()
   JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
       final pattern = _string(regex, 'regex');
@@ -411,10 +413,12 @@ class BridgeSession {
 
   /// The connection status: `connecting`, `connected`, `waiting:network`,
   /// `waiting:server` or `waiting:auth`.
+  @JSExport()
   JSString status() => _session.status.toJS;
 
   /// Calls [callback] with each later change of [status]; returns the
   /// function that stops it, or the `{code, message}` object when it cannot.
+  @JSExport()
   JSAny onStatus([JSAny? callback]) {
     try {
       final deliver = _function(callback, 'callback');
@@ -429,6 +433,7 @@ class BridgeSession {
   /// The collection [name] holding items tagged `opts.type`; `opts` may add
   /// `eventSource` (`data`, `notifs` or `both`) and `expiration`, in
   /// milliseconds (seven days by default).
+  @JSExport()
   JSPromise<JSObject> collection(JSAny? name, JSAny? opts) =>
       _promise(() async {
         final options = _object(opts, 'opts');
@@ -444,11 +449,13 @@ class BridgeSession {
       });
 
   /// A one-time passcode for a new device to enroll with.
+  @JSExport()
   JSPromise<JSString> otp() =>
       _promise(() async => (await _session.otp()).toJS);
 
   /// The requests awaiting a decision, each `{id, appName, deviceName,
   /// namespaces}` with `namespaces` mapping a namespace to its access.
+  @JSExport()
   JSPromise<JSArray<JSObject>> pendingEnrollments() => _promise(() async => [
         for (final e in await _session.pendingEnrollments())
           _envelope({
@@ -460,16 +467,19 @@ class BridgeSession {
       ].toJS);
 
   /// Approves the request [id] for exactly what it asked for.
+  @JSExport()
   JSPromise<JSAny?> approve(JSAny? id) => _promise(() async {
         await _session.approve(_string(id, 'id'));
         return null;
       });
 
+  @JSExport()
   JSPromise<JSAny?> deny(JSAny? id) => _promise(() async {
         await _session.deny(_string(id, 'id'));
         return null;
       });
 
+  @JSExport()
   JSPromise<JSAny?> close() => _promise(() async {
         await _session.close();
         return null;
@@ -484,8 +494,8 @@ int _wholeNumber(JSAny? value, String name) {
 
 /// The JS surface of one collection: the adapter's eight operations on JS
 /// values. Items are addressed `{id, owner}`, `owner` being this session's
-/// atSign when left out.
-@JSExport()
+/// atSign when left out. Only the members carrying a member-level `@JSExport`
+/// reach JS.
 class BridgeCollection {
   BridgeCollection(this._adapter, this._self);
 
@@ -539,6 +549,7 @@ class BridgeCollection {
 
   /// Creates an item from `data`; `opts` may name its `id` and who it is
   /// `sharedWith`.
+  @JSExport()
   JSPromise<JSObject> create(JSAny? data, [JSAny? opts]) => _promise(() async {
         final options = _optionalObject(opts, 'opts');
         return _item(await _adapter.create(_data(data),
@@ -549,18 +560,21 @@ class BridgeCollection {
       });
 
   /// The item at `address`, or null.
+  @JSExport()
   JSPromise<JSAny?> get(JSAny? address) => _promise(() async {
         final item = await _adapter.get(_address(address));
         return item == null ? null : _item(item);
       });
 
   /// `{items, unreadable}`: every readable item.
+  @JSExport()
   JSPromise<JSObject> list() => _promise(() async {
         return _listing(await _adapter.list());
       });
 
   /// `{items, unreadable}`: the items matching every `{path, op, value}` of
   /// `where`.
+  @JSExport()
   JSPromise<JSObject> query(JSAny? where) => _promise(() async {
         if (where == null || !where.isA<JSArray>()) {
           throw _invalidArgument('where', 'an array');
@@ -580,11 +594,13 @@ class BridgeCollection {
       });
 
   /// Replaces the data of the item at `address`.
+  @JSExport()
   JSPromise<JSObject> update(JSAny? address, JSAny? data) => _promise(() async {
         return _item(await _adapter.update(_address(address), _data(data)));
       });
 
   /// Adds the atSigns of `atSigns` to the item's recipients.
+  @JSExport()
   JSPromise<JSObject> share(JSAny? address, JSAny? atSigns) =>
       _promise(() async {
         return _item(await _adapter.share(
@@ -592,6 +608,7 @@ class BridgeCollection {
       });
 
   /// Deletes the item at `address`; `opts.cascade` removes its sub-items too.
+  @JSExport()
   JSPromise<JSAny?> remove(JSAny? address, [JSAny? opts]) => _promise(() async {
         final options = _optionalObject(opts, 'opts');
         await _adapter.remove(_address(address),
@@ -603,6 +620,7 @@ class BridgeCollection {
   /// given, with the `{code, message}` of each error on the stream; returns
   /// the function that stops watching, or the rejection object when it
   /// cannot start.
+  @JSExport()
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {
     try {
       final deliver = _function(onEvent, 'onEvent');
@@ -629,8 +647,8 @@ class BridgeCollection {
 /// The JS surface of the package: what `AtClient.create` calls.
 ///
 /// The opener and the secure-context check are injectable; they default to
-/// this browser's.
-@JSExport()
+/// this browser's. Only the members carrying a member-level `@JSExport` reach
+/// JS.
 class BridgeEntry {
   BridgeEntry({OpenJsSession? open, bool Function()? isSecureContext})
       : _open = open ?? _openSession,
@@ -646,6 +664,7 @@ class BridgeEntry {
   /// [rpId] and [rpName] name, and `keys` is then not read; otherwise `keys`
   /// is the `.atKeys` document, as its JSON text or as an object.
   /// `rootDomain` is `host` or `host:port`.
+  @JSExport()
   JSPromise<JSObject> create(JSAny? opts) => _promise(() async {
         if (!_isSecureContext()) {
           throw UnsupportedOperationException(

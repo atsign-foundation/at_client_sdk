@@ -233,6 +233,14 @@ JSObject _json(String text) =>
 
 final JSObject _reflectClass = globalContext['Reflect']! as JSObject;
 
+/// The own property names of [object], as `Object.getOwnPropertyNames` gives
+/// them: the exact JS surface a wrapped object exposes.
+List<String> _ownNames(JSObject object) {
+  final names = (globalContext['Object']! as JSObject)
+      .callMethod('getOwnPropertyNames'.toJS, object)! as JSArray<JSString>;
+  return [for (final name in names.toDart) name.toDart];
+}
+
 JSAny _jsConstruct(String ctor, [List<JSAny?> args = const []]) => _reflectClass
     .callMethod('construct'.toJS, globalContext[ctor]!, args.toJS)!;
 
@@ -296,10 +304,7 @@ void main() {
 
   group('the bridge has no passkey entry points', () {
     test('only create is exposed', () {
-      for (final name in ['onboard', 'enroll', 'prfSupported']) {
-        expect(api.has(name), isFalse, reason: name);
-      }
-      expect(api.has('create'), isTrue);
+      expect(_ownNames(api), ['create']);
     });
   });
 
@@ -310,16 +315,20 @@ void main() {
       final o = opened.single;
       expect((o.atSign, o.namespace, o.rootDomain), ('@alice', 'tally', null));
       expect((o as KeysSessionOptions).keys.toJson()['@alice'], {'k': 'v'});
-      for (final method in [
-        'notify',
-        'subscribe',
-        'status',
-        'onStatus',
-        'collection',
-        'close'
-      ]) {
-        expect(result.has(method), isTrue, reason: method);
-      }
+      expect(
+          _ownNames(result),
+          unorderedEquals([
+            'notify',
+            'subscribe',
+            'status',
+            'onStatus',
+            'collection',
+            'otp',
+            'pendingEnrollments',
+            'approve',
+            'deny',
+            'close',
+          ]));
     });
 
     test('keys may be an object as well as the document text', () async {
@@ -1102,18 +1111,18 @@ void main() {
 
       test('collection passes name, type, eventSource and expiration', () {
         expect(session.collectionArgs.single, ('tasks', 'task', 'both', 5000));
-        for (final op in [
-          'create',
-          'get',
-          'list',
-          'query',
-          'update',
-          'share',
-          'remove',
-          'watch'
-        ]) {
-          expect(c.has(op), isTrue, reason: op);
-        }
+        expect(
+            _ownNames(c),
+            unorderedEquals([
+              'create',
+              'get',
+              'list',
+              'query',
+              'update',
+              'share',
+              'remove',
+              'watch',
+            ]));
       });
 
       test('collection eventSource and expiration are optional', () async {
