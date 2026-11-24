@@ -1,10 +1,10 @@
-# Proposed layering of `at_client_web` (D-38..D-41)
+# Proposed layering of `at_client_web` (D-38..D-44)
 
-**Status: Proposed (D-38..D-41).** No proposed layer is built on trunk. The decisions
+**Status: Proposed (D-38..D-44).** No proposed layer is built on trunk. The decisions
 themselves are the rows in [`docs/architecture/decisions.md`](../../architecture/decisions.md);
 this page gives the layering and reasoning behind them. The layer allocations this page describes for the closed state, regex compilation, namespace
-folding, id lowercasing and error mapping are re-proposed by the implementing PRs, which carry their tests;
-D-42..D-44 are reserved for them. Trunk's `at_client_web` has `portalSession`, `passkeyLogin` and
+folding, id lowercasing and error mapping are re-proposed by the implementing PRs, which carry their tests,
+and are the subject of D-42, D-43 and D-44. Trunk's `at_client_web` has `portalSession`, `passkeyLogin` and
 `lib/src/collections/js_collections_adapter.dart`, and no `lib/src/js/` bridge yet;
 [`js-api.md`](js-api.md) section 4 says where the facade lives. The "Today" names and
 columns below are those of the bridge implementation that follows these decisions (#2537),
@@ -69,7 +69,7 @@ effect, and rejects with an argument error without echoing a value.
 
 ## Reasoning
 
-The four decisions come from a design self-review of #2537, recorded in the first commit of this branch
+These decisions come from a design self-review of #2537, recorded in the first commit of this branch
 ([`a0fd351bd`](https://github.com/atsign-foundation/at_client_sdk/commit/a0fd351bd9d501aad2f2acd96928806cea4aaf56)) and
 carried through #2601. The code owner's review of this PR on 2026-11-24 (#2602) changed D-38 and D-40 and withdrew D-45, and each
 block below records what was considered and rejected. Each block gives the problem, the alternatives that were
@@ -201,3 +201,85 @@ compiles under both compilers (`test/web/compile_test.dart`), so the cost is in 
 
 **Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped. A wasm release is a
 separate decision, taken once OQ-16 has product sign-off.
+
+### D-42 — one owning layer per check
+
+**Problem.** Four checks must hold on every path through the bridge, session and collections layers: that a
+session is open, that the subscribe regex compiles, that the namespace is folded, and that the item id is
+folded ([D-42](../../architecture/decisions.md)). Each is a rule a caller must not get past, and a layer that
+repeats the check it meets carries a second copy of it.
+
+**Options considered.**
+- Each layer repeating the check it meets: the closed check in `BridgeCollection` and again in the session, the
+  subscribe regex compiled in the bridge and in the session, the namespace folded in the bridge, the session
+  constructor, `qualifiedCollectionName` and `_atKey`, and the id lowercased in the adapter and in the bridge.
+  Rejected because a copy can drift from its twin.
+- One owning layer per check (chosen): the closed state is `AtClientSession._open`, which
+  `SessionBoundCollection` calls and the bridge does not repeat; the subscribe regex is compiled once, in
+  `AtClientSession.subscribe`; the namespace is folded by `foldNamespace`
+  (`lib/src/session/session_namespace.dart`) and nowhere else; the item id is folded by `foldItemId`
+  (`lib/src/exceptions.dart`), which the exceptions and the adapter's item lock take their ids through. The
+  bridge checks JS shapes only.
+
+**Decision and why.** The session owns all four checks. It is the layer a caller of the session meets without
+the bridge, so a check there cannot be bypassed.
+[`at_client_session.dart`](../../../packages/at_client_web/lib/src/session/at_client_session.dart) holds the
+closed check and the one regex compilation, and the two folds sit in the files the row names. The contract
+scenarios the row names pin it: `a closed session refuses each call with SessionClosedException` and
+`subscribe with invalid regex rejects naming regex`.
+
+**Would reopen if.** A check needs a fact only the bridge has, or a second caller of the session needs the same
+check made somewhere else.
+
+### D-43 — only the bridge words JS text and picks codes
+
+**Problem.** An error crossing into JS needs a code and a message, and three layers throw: the bridge, the
+session and the collections adapter ([D-43](../../architecture/decisions.md)). If each thrower carries its own
+code and finished text, the codes have more than one owner.
+
+**Options considered.**
+- Each exception carrying its own code and message, as `CollectionErrorCodes` and `JsCollectionsError` did for
+  the adapter: rejected because it gives the adapter a JS-facing vocabulary, so the codes have two owners and
+  the D-39 manifest no single source, and an exception's text choosing a code or reaching JS would let a
+  message from inside `at_client` change what a caller sees.
+- Typed exceptions carrying a kind and structured fields, with one mapping (chosen): `errorCodeOf` and
+  `atErrorMessage` in [`error_codes.dart`](../../../packages/at_client_web/lib/src/js/error_codes.dart) are pure
+  functions of the thrown type and its fields, and the session and adapter throw no finished text.
+
+**Decision and why.** Only the bridge maps an exception to a code and writes the text JS sees. A finished text
+would become a contract that the next change breaks, and the two sides bound text by different rules: session
+log text is bounded by `sanitizeLogText`, while JS messages have their own. The one text that passes through is
+`AtCollection`'s item-id refusal (`CollectionRefusal.itemId`), bounded to one line of at most 128 characters
+(`maxErrorMessageLength`); the scenario `An argument AtCollection refuses still rejects with
+COLLECTION_INVALID_ARGUMENT` (`js_collections_adapter.feature:318`) holds that path.
+
+**Would reopen if.** A caller outside the bridge needs the same wording, which would make it a shared function
+rather than a field.
+
+### D-44 — the bridge sends a `NotifyKey`, the session builds the `AtKey`
+
+**Problem.** `notify` arrives from JS as plain fields, and the key it describes has a grammar that at_commons
+and at_client already own ([D-44](../../architecture/decisions.md)). A bridge that built the `AtKey` would
+restate those rules and could not validate the result without them.
+
+**Options considered.**
+- The bridge builds an `AtKey` from the JS object, or the session trusts a raw object: rejected because the key
+  grammar and `AtKeyValidators` live in at_commons and at_client; restating them in the bridge would put a
+  second parser beside the one those packages have.
+- The bridge sends a `NotifyKey` and the session builds and validates the key (chosen): the `NotifyKey` carries
+  the name, an optional namespace, `sharedWith`, an optional `sharedBy`, and the `public`, `cached` and
+  `noNamespace` flags.
+
+**Decision and why.** [`bridge.dart`](../../../packages/at_client_web/lib/src/js/bridge.dart) reads the JS
+object into a `NotifyKey`; the session builds the `AtKey` with `AtKey.shared`, which is not namespace-aware,
+the namespace having been folded by `foldNamespace`, checks it with `AtKeyValidators` on its serialised form,
+and rejects `public:` and `cached:` keys with `InvalidKeyException`, which reaches JS as `bad_key`. For an
+incoming notification the session checks the shape (at most three `:` parts, one `@`, no empty or doubled dot
+segment) and then parses with `AtKey.fromString`, accepting a sender only when the key's owner is `from` and
+its recipient is this atSign. The `noNamespace` flag is documented in [`js-api.md`](js-api.md) section 5a; the
+scenario `notify with public or cached flag rejects with bad_key and sends nothing` in
+[`notify_and_subscribe.feature`](../../../features/at_client_web/notify_and_subscribe.feature) holds the
+refusal.
+
+**Would reopen if.** A notification stops being a key, for example a subscription handle that carries its own
+routing.
