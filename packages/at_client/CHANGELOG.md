@@ -1,3 +1,8 @@
+## 4.1.0-rc.2
+
+- fix: `AtClientStorage.close()` throws `StateError` while a client holds the
+  storage, so no running client is left on a closed store: stop it first.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and
