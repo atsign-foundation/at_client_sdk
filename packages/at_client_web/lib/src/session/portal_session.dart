@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
@@ -89,16 +90,26 @@ class SessionKeysIo extends WrittenAtKeysIo {
   }
 
   /// Runs [mutate] on a copy of the session's keys and hands a changed copy
-  /// to [flush], which throws, so no change reaches the session's keys.
+  /// to [flush], which throws, so the session's keys never change.
   ///
-  /// Session keys that record no Atsign are given the session's before the
-  /// copy is made; keys that record one keep it.
+  /// The copy of keys that record no Atsign records the session's. Keys that
+  /// record another Atsign keep it, where the file, keychain and server-held
+  /// stores refuse them.
   @override
   Future<void> update(
       Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
     final keys = await read(atsign.toString());
-    keys.atsign ??= _atSign.toAtsign();
-    final copy = AtKeys.fromJson(keys.toJson())..atsign = keys.atsign;
+    final had = keys.atsign;
+    final Map<String, dynamic> json;
+    try {
+      keys.atsign = had ?? _atSign.toAtsign();
+      json = keys.toJson();
+    } finally {
+      keys.atsign = had;
+    }
+    final copy =
+        AtKeys.fromJson(jsonDecode(jsonEncode(json)) as Map<String, dynamic>)
+          ..atsign = had ?? _atSign.toAtsign();
     if (await mutate(copy) == false) return;
     await flush(atsign, copy);
   }

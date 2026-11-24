@@ -94,19 +94,44 @@ void main() {
     });
 
     test(
-        'when an update adds a key to typed keys that record no Atsign and '
-        'returns false, then a read does not hold the key and records @alice',
-        () async {
-      io = SessionKeysIo('@alice', classicalAtKeys()..addKey(key('held')));
+        'when an update edits a nested metadata value and returns false, then '
+        'a read holds the value as it was', () async {
+      io = SessionKeysIo('@alice',
+          classicalAtKeys(atsign: alice)..metadata['extra'] = {'n': 1});
 
       await io.update(alice, (keys) {
-        keys.addKey(key('added'));
+        (keys.metadata['extra'] as Map)['n'] = 2;
         return false;
       });
 
-      final read = await io.read('@alice');
-      expect(holdsAdded(read), isFalse);
-      expect(read.atsign, alice);
+      expect((await io.read('@alice')).metadata['extra'], {'n': 1});
+    });
+
+    test(
+        'when an update on typed keys that record no Atsign returns false, then '
+        'the change is handed keys that record @alice and a read records no '
+        'Atsign', () async {
+      io = SessionKeysIo('@alice', classicalAtKeys()..addKey(key('held')));
+      Atsign? handed;
+
+      await io.update(alice, (keys) {
+        handed = keys.atsign;
+        return false;
+      });
+
+      expect(handed, alice);
+      expect((await io.read('@alice')).atsign, isNull);
+    });
+
+    test(
+        'when an update on typed keys that record no Atsign throws, then a '
+        'read records no Atsign', () async {
+      io = SessionKeysIo('@alice', classicalAtKeys()..addKey(key('held')));
+
+      await expectLater(
+          io.update(alice, (_) => throw _Refused()), throwsA(isA<_Refused>()));
+
+      expect((await io.read('@alice')).atsign, isNull);
     });
 
     test(
@@ -114,12 +139,15 @@ void main() {
         'still record it', () async {
       final bob = '@bob'.toAtsign();
       io = SessionKeysIo('@alice', classicalAtKeys(atsign: bob));
+      Atsign? handed;
 
       await io.update(alice, (keys) {
+        handed = keys.atsign;
         keys.addKey(key('added'));
         return false;
       });
 
+      expect(handed, bob);
       expect((await io.read('@alice')).atsign, bob);
     });
   });
