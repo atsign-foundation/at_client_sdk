@@ -2,10 +2,10 @@
 
 ## 1.4.0 — 2026-09-13
 
-- Stopping a notification service is final: `subscribe()` and
-  `startListening()` then throw `StoppedException`, and
-  `stopAllSubscriptions`' `stopNotificationsListener` is ignored
-  (`references/15`).
+- Stopping a notification service is final: `subscribe()`,
+  `subscribeFiltered()` and `startListening()` then throw
+  `StoppedException`, and `stopAllSubscriptions`' `stopNotificationsListener`
+  is ignored (`references/15`).
 - An approval whose keys cannot be collected throws whatever collecting them
   threw, mostly not an `AtEnrollmentException`, so a final `catch` waits
   again rather than cancelling (`references/15`).

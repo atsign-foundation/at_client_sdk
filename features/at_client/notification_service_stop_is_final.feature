@@ -6,8 +6,9 @@ Feature: Stopping a notification service is final
   on. Its stopNotificationsListener parameter is deprecated and ignored, so
   the listener stops whatever a caller passes. To pause the listener and
   keep the subscriptions, an app calls stopListening() and later
-  startListening(). To receive notifications after a stop, it builds a new
-  client. A client's stop() stops its notification service the same way.
+  startListening(). To receive notifications after a stop, it calls the
+  client's stop(), then builds a new one. A client's stop() stops the SDK's
+  own notification service, the one the client builds, the same way.
 
   Races: two stops at once are one stop, since the first sets the stopped
   flag before anything awaits and the second returns. A subscribe racing a

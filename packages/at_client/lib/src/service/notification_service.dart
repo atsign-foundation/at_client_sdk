@@ -48,8 +48,10 @@ abstract class NotificationService {
   /// Afterwards [subscribe], [subscribeFiltered] and [startListening] throw
   /// [StoppedException], and a second call does nothing. To pause the
   /// listener and keep the subscriptions, call [stopListening] instead, and
-  /// [startListening] to resume. To receive notifications after a stop, build
-  /// a new client. The client's `stop()` calls this for you.
+  /// [startListening] to resume. To receive notifications after a stop,
+  /// `stop()` this client, then build a new one. The client's `stop()` calls
+  /// this when the service is the SDK's own, as the one the client builds is;
+  /// a [NotificationService] the app implements itself is the app's to stop.
   ///
   /// [stopNotificationsListener] is ignored: the listener always stops.
   void stopAllSubscriptions(

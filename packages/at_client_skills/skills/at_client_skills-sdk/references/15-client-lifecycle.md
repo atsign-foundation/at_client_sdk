@@ -288,12 +288,15 @@ final sub = client.notificationService
   failure through `onError`; either way, a stop ends the status poll and the
   result says so.
 - `stopAllSubscriptions()` stops the notification service for good: every
-  subscription ends, the monitor stops, and `subscribe()` and
-  `startListening()` then throw `StoppedException`. Its
-  `stopNotificationsListener` argument is deprecated and ignored. To pause
-  the monitor and keep the subscriptions, call `stopListening()`, then
-  `startListening()` to resume; to receive notifications after a stop, build
-  a new client. `stop()` on the client stops the service for you.
+  subscription ends, the monitor stops, and `subscribe()`,
+  `subscribeFiltered()` and `startListening()` then throw
+  `StoppedException`. Its `stopNotificationsListener` argument is deprecated
+  and ignored. To pause the monitor and keep the subscriptions, call
+  `stopListening()`, then `startListening()` to resume; to receive
+  notifications after a stop, `stop()` this client, then build a new one.
+  `stop()` on the client stops the SDK's own service, the one the client
+  builds, for you; a `NotificationService` you implement yourself is yours
+  to stop.
 
 ---
 
