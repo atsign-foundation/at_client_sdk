@@ -5,7 +5,6 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
     show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
-import 'package:meta/meta.dart';
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
@@ -39,7 +38,6 @@ Future<Session> _openSession(SessionOptions options) async {
 /// The [Session] [options] describes over [client], whose [stop] ends what
 /// opened it. A construction that throws awaits [stop] before rethrowing, so
 /// an opened client or passkey session is never left running.
-@visibleForTesting
 Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
     SessionOptions options) async {
   try {
