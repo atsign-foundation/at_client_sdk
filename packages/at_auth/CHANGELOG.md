@@ -1,3 +1,10 @@
+## 4.1.0-rc.2
+
+- fix: a self-enrollment files the new enrollment's keys on a fresh read of
+  the keyfile, so a key another writer adds while it waits on the atServer is
+  kept. A keyfile removed meanwhile is no longer written again: the
+  self-enrollment fails and revokes the enrollment it created.
+
 ## 4.1.0-rc.1
 
 - fix: keys messages name where the keys are as "the AtKeys store
