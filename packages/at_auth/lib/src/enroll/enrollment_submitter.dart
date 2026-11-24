@@ -436,15 +436,25 @@ class EnrollmentSubmitter {
 
   /// Handles an APKAM-authenticated self-enrollment (the PQ retrofit).
   ///
-  /// Serialised per keyfile by [_serializedPerKeyfile], whose critical
-  /// section spans the whole check → mint → submit → persist sequence, so
-  /// two processes sharing one keyfile cannot both mint.
+  /// Serialised per keyfile by [_serializedPerKeyfile] only where the process
+  /// sets [retrofitSerializer], as at_client_cli does in its auth command and
+  /// in `CliKeys.fileFor`, and the store is a `FileAtKeysIo`. There the
+  /// critical section spans the whole check → mint → submit → persist
+  /// sequence, so two processes sharing one keyfile cannot both mint.
+  /// Elsewhere both may send a request, and the second to file is refused
+  /// and revokes its enrollment.
+  ///
+  /// The new enrollment's keys are filed through the store's
+  /// [WrittenAtKeysIo.update], on a fresh read, so material another writer
+  /// added since the first read is kept, and a keyfile removed since is not
+  /// written again. The request to the atServer stays outside that update,
+  /// since an update may run its change more than once.
   ///
   /// Idempotent per keyfile: when the keyfile already holds an active
   /// ML-DSA-65 signing material under some enrollment id, that enrollment is
   /// returned and nothing is minted or submitted. Otherwise the keyfile is
   /// written back unchanged first, and one that cannot be written is refused
-  /// before anything is sent; one that refuses the save after approval has
+  /// before anything is sent; one that refuses the filing after approval has
   /// the new enrollment revoked, best effort. A crash after the request
   /// lands but before the keyfile is written leaves an orphan approved
   /// enrollment server-side whose private nobody holds — unusable and
@@ -631,34 +641,41 @@ class EnrollmentSubmitter {
             'returned status "${enrollJson['status']}". $cleanup');
       }
 
-      // Persist into the SAME keyfile: the new credentials land as typed
-      // materials tagged with the new enrollment id, while the legacy flat
-      // fields — frozen by the keyfile's never-lose contract — keep carrying
-      // the original enrollment's.
-      existing.fileApkamMaterial(
-          enrollmentId: newEnrollmentId,
-          algorithm: materialAlgo,
-          publicKey: apkamPublic,
-          privateKey: apkamPrivate);
-      // Filed, not merely advertised. An enrollment whose `_apsk` names a key
-      // its keyfile does not hold signs with something else, and the next
-      // start's SigningKeyMinting finds the in-use algorithm missing, mints a
-      // SECOND key and republishes — orphaning the key this record already
-      // published and unverifying whatever was signed against it.
       final signing = request.advertisedSigningKey;
-      if (signing != null) {
-        existing.fileSigningMaterial(
-            enrollmentId: newEnrollmentId,
-            algorithm: signingMaterialAlgo!,
-            publicKey: signing.publicKey,
-            privateKey: signing.privateKey);
-      }
-      // Whatever the metadataBuilder filed (the X-Wing key package's two
-      // halves), re-tagged with the enrollment id it now belongs to.
-      existing.adoptMaterials(constructionKeys.keys,
-          enrollmentId: newEnrollmentId);
+      late AtKeys filed;
       try {
-        await keysIo.flush(request.atSign.toAtsign(), existing);
+        await keysIo.update(request.atSign.toAtsign(), (keys) {
+          // NOTE: update may run this again on a fresh read; only the last
+          // run counts.
+          filed = keys;
+          // Persist into the SAME keyfile: the new credentials land as typed
+          // materials tagged with the new enrollment id, while the legacy
+          // flat fields — frozen by the keyfile's never-lose contract — keep
+          // carrying the original enrollment's.
+          keys.fileApkamMaterial(
+              enrollmentId: newEnrollmentId,
+              algorithm: materialAlgo,
+              publicKey: apkamPublic,
+              privateKey: apkamPrivate);
+          // Filed, not merely advertised. An enrollment whose `_apsk` names a
+          // key its keyfile does not hold signs with something else, and the
+          // next start's SigningKeyMinting finds the in-use algorithm
+          // missing, mints a SECOND key and republishes — orphaning the key
+          // this record already published and unverifying whatever was
+          // signed against it.
+          if (signing != null) {
+            keys.fileSigningMaterial(
+                enrollmentId: newEnrollmentId,
+                algorithm: signingMaterialAlgo!,
+                publicKey: signing.publicKey,
+                privateKey: signing.privateKey);
+          }
+          // Whatever the metadataBuilder filed (the X-Wing key package's two
+          // halves), re-tagged with the enrollment id it now belongs to.
+          keys.adoptMaterials(constructionKeys.keys,
+              enrollmentId: newEnrollmentId);
+          return true;
+        });
       } catch (e) {
         // NOTE: an approved enrollment whose keys were not saved is revoked;
         // revoking needs `__manage`, which a scoped parent may not hold.
@@ -683,7 +700,7 @@ class EnrollmentSubmitter {
       return AtEnrollmentResponse(newEnrollmentId, enrollStatus,
           atSign: request.atSign,
           rootDomain: request.rootDomain,
-          atAuthKeys: existing,
+          atAuthKeys: filed,
           session: request.session);
     });
   }
