@@ -48,6 +48,12 @@ Feature: Collections store, read and share items through the session
     When collection is called with a name and only a type
     Then the bridge passes no eventSource and no expiration, leaving both to the session's defaults
 
+  Scenario: a non-finite expiration rejects with invalid_argument naming expiration
+    Given an open session
+    When collection is called with expiration NaN, Infinity or -Infinity
+    Then each rejects with code invalid_argument and a message naming expiration
+    And no collection is opened
+
   Scenario: opening a notification-backed collection starts listening on notificationService
     Given an open session whose notification monitor is not yet listening
     When collection is opened with eventSource notifs or default both, and separately with data

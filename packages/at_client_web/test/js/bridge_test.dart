@@ -1169,6 +1169,27 @@ void main() {
         expect(session.collectionArgs.last, ('c', 't', null, null));
       });
 
+      test(
+          'a non-finite expiration rejects with invalid_argument naming expiration',
+          () async {
+        final before = session.collectionArgs.length;
+        for (final bad in [
+          double.nan,
+          double.infinity,
+          double.negativeInfinity
+        ]) {
+          final r = await rejected(invoke(s, 'collection', [
+            'c'.toJS,
+            jsObject({'type': 't', 'expiration': bad})
+          ]));
+
+          expect(r.code, 'invalid_argument', reason: '$bad');
+          expect(r.message, contains('expiration'), reason: '$bad');
+        }
+        expect(session.collectionArgs, hasLength(before),
+            reason: 'no non-finite expiration reaches the session');
+      });
+
       test('collection create maps data, id and sharedWith', () async {
         final item = (await resolved(invoke(c, 'create', [
           jsObject({
