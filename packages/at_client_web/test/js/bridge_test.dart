@@ -579,6 +579,71 @@ void main() {
       expect(r.code, 'offline');
       expect(r.message, isNot(contains('sentinel')));
     });
+
+    group('passkey sign-in', () {
+      Map<String, Object?> passkeyOpts(
+              [Map<String, Object?> more = const {}]) =>
+          {
+            'atSign': '@alice',
+            'namespace': 'tally',
+            'passkey': true,
+            'rpId': 'example.org',
+            'rpName': 'Tally',
+            ...more,
+          };
+
+      test('opens a passkey session from the passkey options', () async {
+        await create(passkeyOpts({'rootDomain': 'root.example.org:9002'}));
+
+        final o = opened.single;
+        expect(o, isA<PasskeySessionOptions>());
+        final passkey = o as PasskeySessionOptions;
+        expect(
+            (passkey.atSign, passkey.namespace, passkey.rpId, passkey.rpName),
+            ('@alice', 'tally', 'example.org', 'Tally'));
+        expect((passkey.rootDomain!.rootDomain, passkey.rootDomain!.rootPort),
+            ('root.example.org', 9002));
+      });
+
+      test('passkey sign-in needs no keys document', () async {
+        await create(passkeyOpts());
+
+        expect(opened.single, isA<PasskeySessionOptions>());
+      });
+
+      test(
+          'missing or mistyped passkey fields reject with invalid_argument '
+          'naming the option', () async {
+        for (final name in ['atSign', 'namespace', 'rpId', 'rpName']) {
+          final o = passkeyOpts()..remove(name);
+          final r = await _rejected(_call(api, 'create', [_obj(o)]));
+          expect(r.code, 'invalid_argument');
+          expect(r.message, contains(name));
+        }
+        for (final name in ['rpId', 'rpName']) {
+          for (final bad in <Object?>[5, true, <Object?>[]]) {
+            final r = await _rejected(_call(api, 'create', [
+              _obj(passkeyOpts({name: bad}))
+            ]));
+            expect(r.code, 'invalid_argument', reason: name);
+            expect(r.message, contains(name));
+          }
+          final empty = await _rejected(_call(api, 'create', [
+            _obj(passkeyOpts({name: '   '}))
+          ]));
+          expect(empty.code, 'invalid_argument', reason: name);
+          expect(empty.message, contains(name));
+        }
+        for (final bad in <Object?>[5, 'yes', <Object?>[]]) {
+          final r = await _rejected(_call(api, 'create', [
+            _obj(passkeyOpts({'passkey': bad}))
+          ]));
+          expect(r.code, 'invalid_argument');
+          expect(r.message, contains('passkey'));
+        }
+        expect(opened, isEmpty);
+      });
+    });
   });
 
   group('argument errors', () {

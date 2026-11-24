@@ -36,6 +36,9 @@ class Wire {
   /// Whether closing or stopping a lookUp throws, as a client's stop does.
   var stopThrows = false;
 
+  /// How many times a lookUp was told to stop.
+  var stops = 0;
+
   /// What the atServer answers a command with; null answers nothing.
   FutureOr<String?> Function(String command)? answer;
 
@@ -132,6 +135,7 @@ class WireLookUp implements AtLookupMuxable {
 
   @override
   Future<void> stop() async {
+    _wire.stops++;
     if (_wire.stopThrows) throw StateError('stop failed');
   }
 

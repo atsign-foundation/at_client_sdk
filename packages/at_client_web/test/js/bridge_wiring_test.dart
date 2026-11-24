@@ -8,12 +8,14 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_chops/at_chops.dart' show AESKey, RsaKeyPair;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/passkey.dart' show PasskeySession;
 import 'package:at_client_web/at_client_web.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:test/fake.dart' show Fake;
 import 'package:test/test.dart';
 
 import '../session/wire_fakes.dart';
@@ -237,4 +239,101 @@ void main() {
         _call(todos, 'watch', [((JSAny? _) {}).toJS])! as JSObject;
     expect(watchAfterClose['code'].dartify(), 'closed');
   });
+
+  test('opening a keys session records the stop that close awaits', () async {
+    final wire = Wire();
+    final options = KeysSessionOptions(
+        atSign: '@alice',
+        namespace: 'wavi',
+        keys: classicalAtKeys().toJson(),
+        rootDomain: 'root.example');
+    final root = options.rootDomain!;
+
+    final session = await openJsSession(options, keysTransport: (
+      lookUps: wire.lookUps,
+      finder: FixedSecondaryAddressFinder('atserver.test', 1),
+      root: root,
+    ));
+
+    expect(session, isA<AtClientSession>());
+    expect(wire.roots, isNotEmpty);
+    for (final dialled in wire.roots) {
+      expect((dialled.rootDomain, dialled.rootPort), ('root.example', 64));
+    }
+    final stops = wire.stops;
+    await session.close();
+    expect(wire.stops, greaterThan(stops));
+  });
+
+  test('opening a passkey session records the stop that close awaits',
+      () async {
+    final passkey = _FakePasskeySession(_PasskeyClient())
+      ..stopGate = Completer<void>();
+    final login = _FakePasskeyLogin(passkey);
+    final options = PasskeySessionOptions(
+        atSign: '@alice',
+        namespace: 'wavi',
+        rpId: 'example.org',
+        rpName: 'Wavi',
+        rootDomain: 'root.example');
+
+    final session = await openJsSession(options, passkeyOpen: login.call);
+
+    expect(session, isA<AtClientSession>());
+    final opened = login.seen.single;
+    expect((opened.atSign, opened.namespace, opened.rpId, opened.rpName),
+        ('@alice', 'wavi', 'example.org', 'Wavi'));
+    final transport = login.transports.single;
+    expect((transport.root.rootDomain, transport.root.rootPort),
+        ('root.example', 64));
+
+    var closed = false;
+    final closing = session.close().then((_) => closed = true);
+    await Future<void>.delayed(Duration.zero);
+    expect(closed, isFalse, reason: 'close awaits the recorded stop');
+    passkey.stopGate!.complete();
+    await closing;
+    expect(passkey.stops, 1);
+  });
+}
+
+/// A client whose passkey session builds.
+class _PasskeyClient extends Fake implements AtClient {
+  @override
+  final AtConnection connection = AtConnection(
+      atSign: '@alice', attempt: (_) async => AtConnectionState.online());
+}
+
+/// A passkey session whose [stop] is recorded and can be held open.
+class _FakePasskeySession extends Fake implements PasskeySession {
+  _FakePasskeySession(this.client);
+
+  @override
+  final AtClient client;
+
+  var stops = 0;
+  Completer<void>? stopGate;
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    if (stopGate case final gate?) await gate.future;
+  }
+}
+
+/// Records the options and transport the passkey arm hands the login, and
+/// opens [session].
+class _FakePasskeyLogin {
+  _FakePasskeyLogin(this.session);
+
+  final _FakePasskeySession session;
+  final seen = <PasskeySessionOptions>[];
+  final transports = <SessionTransportOptions>[];
+
+  Future<PasskeySession> call(
+      PasskeySessionOptions options, SessionTransportOptions transport) async {
+    seen.add(options);
+    transports.add(transport);
+    return session;
+  }
 }

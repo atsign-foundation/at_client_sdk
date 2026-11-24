@@ -5,6 +5,8 @@ import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
     show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
+import 'package:at_client/passkey.dart' show PasskeySession;
+import 'package:meta/meta.dart';
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
@@ -20,6 +22,10 @@ import '../session/at_client_session.dart';
 /// Opens the session of a caller's [SessionOptions].
 typedef OpenJsSession = Future<Session> Function(SessionOptions options);
 
+/// Opens the passkey session [options] describes over [transport].
+typedef OpenPasskeySession = Future<PasskeySession> Function(
+    PasskeySessionOptions options, SessionTransportOptions transport);
+
 final _logger = AtSignLogger('BridgeEntry');
 
 /// The browser's [OpenJsSession], and the only place a session is opened: a
@@ -27,13 +33,26 @@ final _logger = AtSignLogger('BridgeEntry');
 /// on [passkeyLogin]. The session's `close()` awaits the stop of what was
 /// opened: the client's own for keys, the passkey session's, which also
 /// closes its vault, for a passkey.
-Future<Session> _openSession(SessionOptions options) async {
+Future<Session> _openSession(SessionOptions options,
+    {SessionTransport? keysTransport,
+    SessionTransportOptions? passkeyTransport,
+    OpenPasskeySession? passkeyOpen}) async {
   final (AtClient client, Future<void> Function() stop) = switch (options) {
-    KeysSessionOptions() => await _openKeys(options),
-    PasskeySessionOptions() => await _openPasskey(options),
+    KeysSessionOptions() => await _openKeys(options, keysTransport),
+    PasskeySessionOptions() =>
+      await _openPasskey(options, passkeyTransport, passkeyOpen),
   };
   return sessionOver(client, stop, options);
 }
+
+/// [_openSession] with the transport, and the passkey login, left to the
+/// caller, so a test can drive the real openers over fakes. No barrel
+/// exports it.
+@visibleForTesting
+final Future<Session> Function(SessionOptions options,
+    {SessionTransport? keysTransport,
+    SessionTransportOptions? passkeyTransport,
+    OpenPasskeySession? passkeyOpen}) openJsSession = _openSession;
 
 /// The [Session] [options] describes over [client], whose [stop] ends what
 /// opened it. A construction that throws awaits [stop] before rethrowing, so
@@ -54,26 +73,34 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
 }
 
 Future<(AtClient, Future<void> Function())> _openKeys(
-    KeysSessionOptions options) async {
+    KeysSessionOptions options,
+    [SessionTransport? transport]) async {
   final client = await portalSession(
       atSign: options.atSign,
       app: options.namespace,
       keys: options.keys,
-      transport:
+      transport: transport ??
           sessionTransport(SessionTransportOptions(root: options.rootDomain)));
   return (client, client.stop);
 }
 
 Future<(AtClient, Future<void> Function())> _openPasskey(
-    PasskeySessionOptions options) async {
-  final session = await passkeyLogin(
-      atSign: options.atSign,
-      app: options.namespace,
-      rpId: options.rpId,
-      rpName: options.rpName,
-      transport: SessionTransportOptions(root: options.rootDomain));
+    PasskeySessionOptions options,
+    [SessionTransportOptions? transport,
+    OpenPasskeySession? login]) async {
+  final session = await (login ?? _browserPasskeyOpener)(
+      options, transport ?? SessionTransportOptions(root: options.rootDomain));
   return (session.client, session.stop);
 }
+
+Future<PasskeySession> _browserPasskeyOpener(
+        PasskeySessionOptions options, SessionTransportOptions transport) =>
+    passkeyLogin(
+        atSign: options.atSign,
+        app: options.namespace,
+        rpId: options.rpId,
+        rpName: options.rpName,
+        transport: transport);
 
 /// An event each time the browser goes online or offline, so a session's
 /// `waiting:network` and `waiting:server` follow it.
@@ -598,8 +625,10 @@ class BridgeEntry {
 
   static bool _pageIsSecure() => web.window.isSecureContext;
 
-  /// Opens a session for `{atSign, namespace, keys, rootDomain?}`: `keys` is
-  /// the `.atKeys` document, as its JSON text or as an object, and
+  /// Opens a session for `{atSign, namespace, passkey?, rpId?, rpName?,
+  /// keys?, rootDomain?}`: `passkey: true` asks for the passkey sign-in
+  /// [rpId] and [rpName] name, and `keys` is then not read; otherwise `keys`
+  /// is the `.atKeys` document, as its JSON text or as an object.
   /// `rootDomain` is `host` or `host:port`.
   JSPromise<JSObject> create(JSAny? opts) => _promise(() async {
         if (!_isSecureContext()) {
@@ -617,6 +646,28 @@ class BridgeEntry {
     final atSign = _string(_own(object, 'atSign'), 'atSign');
     final namespace = _string(_own(object, 'namespace'), 'namespace');
     final rootDomain = _field(object, 'rootDomain');
+    if (_flag(object, 'passkey')) {
+      final rpId = _string(_own(object, 'rpId'), 'rpId');
+      final rpName = _string(_own(object, 'rpName'), 'rpName');
+      try {
+        return PasskeySessionOptions(
+            atSign: atSign,
+            namespace: namespace,
+            rpId: rpId,
+            rpName: rpName,
+            rootDomain: rootDomain);
+      } on ArgumentError catch (e) {
+        throw switch (e.name) {
+          'atSign' => _invalidArgument('atSign', 'a valid atSign'),
+          'namespace' =>
+            _invalidArgument('namespace', 'a non-empty namespace segment'),
+          'rootDomain' => _invalidArgument('rootDomain', 'host or host:port'),
+          'rpId' => _invalidArgument('rpId', 'a non-empty string'),
+          'rpName' => _invalidArgument('rpName', 'a non-empty string'),
+          _ => e,
+        };
+      }
+    }
     final keys = _keys(_own(object, 'keys'));
     try {
       return KeysSessionOptions(
