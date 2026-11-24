@@ -1,3 +1,10 @@
+## 4.1.0-rc.2
+
+- fix: `Atsign.resumeEnrollment` throws `AtKeysUnusableException`, cause
+  `noAuthenticationKeypair`, naming the pending enrollment and its signing
+  algorithm when this build cannot sign with it: resume such a request with
+  a build that can.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and
