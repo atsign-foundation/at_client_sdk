@@ -39,3 +39,9 @@ Feature: Every exception the package declares is an AtException in one file
     When it is constructed with an invalid namespace, subscribe is called with an invalid regular expression, or collection is called with an invalid name
     Then each throws an exception declared in lib/src/exceptions.dart and never an ArgumentError
     And the bridge maps the first two to invalid_argument and the third to COLLECTION_INVALID_ARGUMENT
+
+  Scenario: the offline exception keeps the state error in its text
+    Given a PortalSessionOfflineException for @alice offline because unreachable, one carrying a StateError and one carrying no error
+    When each is rendered as text
+    Then the first ends with the state error's text after the cause
+    And the second names the atSign, the state and the cause and holds no state error
