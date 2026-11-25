@@ -76,6 +76,7 @@ void main() {
       UnsupportedKeyMaterialException('@alice'),
       UnsupportedOperationException(UnsupportedOperation.secureContext),
       SetupLockTimeoutException('lock'),
+      QueueLimitException(64),
       IndexedDbException('QuotaExceededError'),
       JsCollectionsError(CollectionFailure.failed),
     ];

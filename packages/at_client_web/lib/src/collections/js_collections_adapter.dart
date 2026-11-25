@@ -558,6 +558,7 @@ final class JsCollectionsAdapter implements ItemCollection {
         InvalidAtSignException() => 'InvalidAtSignException',
         CItemReadException() => 'CItemReadException',
         AtClientException() => 'AtClientException',
+        QueueLimitException() => 'QueueLimitException',
         AtException() => 'AtException',
         StateError() => 'StateError',
         ArgumentError() => 'ArgumentError',

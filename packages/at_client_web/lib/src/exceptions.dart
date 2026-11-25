@@ -220,6 +220,25 @@ class SetupLockTimeoutException extends AtException {
   String toString() => 'SetupLockTimeoutException: $lockName was not granted';
 }
 
+/// Thrown when a key already holds every waiter its queue allows.
+///
+/// A keyed queue caps the runs that may wait on one key, so a body that
+/// stalls cannot grow that key's queue without bound; the run that would
+/// exceed the cap fails fast instead. No barrel exports this type.
+class QueueLimitException extends AtException {
+  /// Creates the exception for a key that already holds [maxQueuedPerKey]
+  /// waiters.
+  QueueLimitException(this.maxQueuedPerKey)
+      : super('at most $maxQueuedPerKey runs may wait on one key');
+
+  /// The most waiters one key may hold.
+  final int maxQueuedPerKey;
+
+  @override
+  String toString() =>
+      'QueueLimitException: at most $maxQueuedPerKey runs may wait on one key';
+}
+
 /// Thrown when IndexedDB refuses an operation of the passkey stores.
 ///
 /// The message names the browser's error, such as `QuotaExceededError`, when

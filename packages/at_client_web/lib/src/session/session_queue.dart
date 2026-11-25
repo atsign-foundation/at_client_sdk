@@ -15,4 +15,11 @@ Future<T> queuedOpen<T>(String lock, Future<T> Function() open) =>
     _opening.run(lock, open);
 
 /// The opens running for each lock; it never completes with an error.
-final _opening = KeyedQueue<String>();
+///
+/// An open builds and authenticates a whole client and holds it until it
+/// ends, so one lock's queue is capped at 16 rather than an item lock's
+/// default of 64: a stalled open would pin that much memory and a whole
+/// credential's worth of work, and a caller that has sixteen opens waiting on
+/// one lock is already looping. An item's queue of 64 writes is ordinary
+/// traffic. A saturated open queue rejects the next open instead of growing.
+final _opening = KeyedQueue<String>(maxQueuedPerKey: 16);

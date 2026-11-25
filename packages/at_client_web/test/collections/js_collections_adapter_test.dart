@@ -8,6 +8,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
+import 'package:at_client_web/src/keyed_queue.dart';
 import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -1163,6 +1164,48 @@ void main() {
       releaseUpdate.complete();
       await Future.wait([u2, r2]);
       expect(server.hasKey('i2.$_ns@alice'), isFalse);
+    });
+
+    test(
+        'a write queue saturated behind one item rejects with COLLECTION_FAILED',
+        () async {
+      final todos = await open();
+      final firstPutStarted = Completer<void>();
+      final releaseFirstPut = Completer<void>();
+      var stalled = false;
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (!stalled) {
+          stalled = true;
+          firstPutStarted.complete();
+          await releaseFirstPut.future;
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      final held = todos.create({'title': 'v1'}, id: 'i1');
+      await firstPutStarted.future;
+
+      final queued = [
+        for (var i = 0; i < KeyedQueue.defaultMaxQueuedPerKey; i++)
+          todos.create({'title': 'v2'}, id: 'i1').then<Object?>((_) => null,
+              onError: (Object error) => error),
+      ];
+
+      await expectLater(
+          todos.create({'title': 'late'}, id: 'i1'),
+          _rejectsWith(CollectionFailure.failed,
+              id: 'i1', owner: '@alice', causeType: 'QueueLimitException'));
+
+      releaseFirstPut.complete();
+      await held;
+      final outcomes = await Future.wait(queued);
+      expect(outcomes, everyElement(isA<JsCollectionsError>()));
+      expect([for (final e in outcomes) (e as JsCollectionsError).kind],
+          everyElement(CollectionFailure.alreadyExists));
+      expect(server.hasKey('i1.$_ns@alice'), isTrue);
     });
 
     test('collection get errors carry id and owner', () async {
