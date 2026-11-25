@@ -2,15 +2,41 @@
 library;
 
 import 'dart:async';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 
 import 'package:at_auth/passkey.dart' show setupLockName;
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/web_setup_lock.dart';
 import 'package:test/test.dart';
+import 'package:web/web.dart' as web;
 
 void main() {
   test('the setup lock name is the pinned string', () {
     expect(setupLockName(WebSetupLock.namePrefix, '@alice'),
         'at_client_web:setup:@alice');
+  });
+
+  test(
+      'a browser without navigator.locks gets UnsupportedError from the setup lock',
+      () async {
+    final navigator = web.window.navigator as JSObject;
+    // `locks` is an accessor on Navigator.prototype; shadow it on the instance.
+    globalContext.getProperty<JSObject>('Object'.toJS).callMethod<JSAny?>(
+        'defineProperty'.toJS,
+        navigator,
+        'locks'.toJS,
+        {'value': null, 'configurable': true}.jsify());
+    addTearDown(() {
+      globalContext
+          .getProperty<JSObject>('Reflect'.toJS)
+          .callMethod<JSAny?>('deleteProperty'.toJS, navigator, 'locks'.toJS);
+    });
+
+    await expectLater(
+      WebSetupLock().run('lock_absent', () async => 1),
+      throwsA(isA<UnsupportedError>()),
+    );
   });
 
   test('a waiter times out while the lock is held, then succeeds after',

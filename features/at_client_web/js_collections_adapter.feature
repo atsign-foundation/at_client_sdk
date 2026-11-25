@@ -14,8 +14,10 @@ Feature: The JS collections adapter translates onto AtCollection
   #   never removes a recipient it did not read: "An update keeps a recipient
   #   copy another device writes during the update" and "A share keeps a
   #   recipient copy another device writes during the share". Two creates with
-  #   one id at the same moment are not serialised by the adapter; that check
-  #   belongs to AtCollection.create.
+  #   one id at the same moment are serialised by the adapter: an explicit-id
+  #   create queues behind the earlier write to that item, so the second sees
+  #   the first and rejects ("Two creates with one id at once are serialised
+  #   by the adapter").
   # Replay: a replayed notification only makes the collection re-read the stored,
   #   signed record. It creates no item and changes no item's type or owner:
   #   "Each upstream event is delivered once and cancel stops delivery".
@@ -41,8 +43,9 @@ Feature: The JS collections adapter translates onto AtCollection
     Then the open rejects with COLLECTION_INVALID_ARGUMENT
 
   Scenario: An empty type rejects with COLLECTION_INVALID_ARGUMENT
-    When the adapter opens a collection with type ""
-    Then the open rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter opens a collection with type "" and with a type of only whitespace
+    Then the open rejects with COLLECTION_INVALID_ARGUMENT and a message naming "type"
+    And AtClient.collection is never called
 
   Scenario: A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT
     When the adapter opens a collection with expirationMs 0 or -1
@@ -55,14 +58,17 @@ Feature: The JS collections adapter translates onto AtCollection
     Then the open rejects with COLLECTION_FAILED and kind "StateError"
 
   Scenario: JsCollectionsError is an AtException and keeps its fields
-    Given an adapter error built with a code, message, id, owner, kind and failures
+    Given a collection exception built with a kind, message, id, owner, cause type and failures
     When a Dart caller catches AtException
-    Then the adapter error is caught
-    And its code, message, id, owner, kind and failures are kept
+    Then the collection exception is caught
+    And its kind, message, id, owner, cause type and failures are kept
+    And it carries no error code
 
   Scenario: The error codes are the COLLECTION_ and COLLECTION_ITEM_ names
-    Given the adapter's error codes
-    Then item-level codes start with COLLECTION_ITEM_ and the rest with COLLECTION_
+    Given every kind a collection exception can carry
+    When the bridge maps an exception of each kind
+    Then each kind gives a different code and the eleven codes are exactly those listed in js-api.md 6.1
+    And item-level codes start with COLLECTION_ITEM_ and the rest with COLLECTION_
 
   Scenario: A record written through the adapter carries its declared type tag on the wire
     When the adapter creates an item in a collection opened with type "Todo"
@@ -76,6 +82,12 @@ Feature: The JS collections adapter translates onto AtCollection
     Given an item "i1"
     When the adapter creates another item "i1"
     Then the create rejects with COLLECTION_ITEM_ALREADY_EXISTS
+
+  Scenario: Two creates with one id at once are serialised by the adapter
+    Given an adapter
+    When two creates with the id "i1" are started without awaiting the first
+    Then one create succeeds and the other rejects with COLLECTION_ITEM_ALREADY_EXISTS
+    And the collection sees the first create finish before the second begins
 
   Scenario: A get addresses an item by id and owner
     Given @alice and @bob each own an item "a1" that @alice can read
@@ -307,3 +319,9 @@ Feature: The JS collections adapter translates onto AtCollection
     Given the libraries directly under lib/
     Then none reaches the adapter through exports or parts, directly or through lib/src
     And the adapter's package-local imports reach no dart:js_interop or package:web
+
+  Scenario: An argument AtCollection refuses still rejects with COLLECTION_INVALID_ARGUMENT
+    Given AtCollection throws an ArgumentError for an item id, a type tag or a where clause
+    When the adapter operation that reached it rejects
+    Then the bridge mapping gives COLLECTION_INVALID_ARGUMENT with kind "ArgumentError"
+    And the message is AtCollection's own bounded text for an item id, 'collection is already open with a different type' for a type tag and 'invalid argument' otherwise
