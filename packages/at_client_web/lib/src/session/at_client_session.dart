@@ -522,25 +522,28 @@ class AtClientSession implements Session {
     try {
       service.startListening();
     } catch (_) {
-      _cancelQuietly(subscription);
+      unawaited(
+          _cancelLogged(subscription.cancel, 'notification subscription'));
       rethrow;
     }
     if (!done) _subscriptions.add(subscription);
     return () {
-      if (_subscriptions.remove(subscription)) _cancelQuietly(subscription);
+      if (_subscriptions.remove(subscription)) {
+        unawaited(
+            _cancelLogged(subscription.cancel, 'notification subscription'));
+      }
     };
   }
 
-  /// Cancels [subscription] without waiting, warning when it fails, whether
-  /// `cancel` throws or its future fails.
-  void _cancelQuietly(StreamSubscription<Object?> subscription) {
-    unawaited(() async {
-      try {
-        await subscription.cancel();
-      } on Object catch (_) {
-        _warn('Failed to cancel notification subscription');
-      }
-    }());
+  /// Awaits [cancel], warning `Failed to cancel $what` when it throws or its
+  /// future fails.
+  Future<void> _cancelLogged(
+      Future<void> Function() cancel, String what) async {
+    try {
+      await cancel();
+    } on Object catch (_) {
+      _warn('Failed to cancel $what');
+    }
   }
 
   @override
@@ -658,26 +661,17 @@ class AtClientSession implements Session {
     _itemLocks.clear();
     _statusListeners.clear();
     for (final cancel in [_connection.cancel, _network?.cancel]) {
-      try {
+      await _cancelLogged(() async {
         await cancel?.call();
-      } on Object catch (_) {
-        _warn('Failed to cancel status subscription on close');
-      }
+      }, 'status subscription on close');
     }
     for (final subscription in [..._subscriptions]) {
-      try {
-        await subscription.cancel();
-      } on Object catch (_) {
-        _warn('Failed to cancel notification subscription on close');
-      }
+      await _cancelLogged(
+          subscription.cancel, 'notification subscription on close');
     }
     _subscriptions.clear();
     for (final cancelWatch in [..._watchCancels]) {
-      try {
-        await cancelWatch();
-      } on Object catch (_) {
-        _warn('Failed to cancel collection watch on close');
-      }
+      await _cancelLogged(cancelWatch, 'collection watch on close');
     }
     _watchCancels.clear();
     await _stop();
