@@ -904,6 +904,20 @@ void main() {
           'todos.myapp');
     });
 
+    test('a collection without an expiration keeps items for seven days',
+        () async {
+      await session.collection('todos', type: 'Todo');
+
+      expect(client.openedCollections.single.$2, const Duration(days: 7));
+    });
+
+    test('an explicit expiration wins over the seven-day default', () async {
+      await session.collection('todos', type: 'Todo', expirationMs: 1000);
+
+      expect(client.openedCollections.single.$2,
+          const Duration(milliseconds: 1000));
+    });
+
     test(
         'opening a notification-backed collection starts listening on notificationService',
         () async {

@@ -48,6 +48,12 @@ Feature: Collections store, read and share items through the session
     When collection is called with a name and only a type
     Then the bridge passes no eventSource and no expiration, leaving both to the session's defaults
 
+  Scenario: a collection without an expiration keeps items for seven days
+    Given an open session
+    When collection is called with a name and type and no expiration
+    Then the collection opens with a seven-day default expiration
+    And an explicit expiration is used instead of it
+
   Scenario: rejects invalid collection names and folds mixed-case namespace
     Given a session whose namespace is "MyApp"
     When collection is called with "Todos"
