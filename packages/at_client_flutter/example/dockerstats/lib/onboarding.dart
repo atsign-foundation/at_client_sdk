@@ -63,7 +63,7 @@ Future<bool> loginWithApkam(BuildContext context) async {
   // The dialog submits the enrollment request, waits for an enrolled client
   // to approve it, and hands back the client that opens on the approved
   // keys. Those keys are filed in the keychain, which is also where a request
-  // submitted earlier for this app and device is resumed from.
+  // submitted earlier is resumed from.
   final client = await ApkamActivationDialog.show(
     context,
     atSign: selection.atSign,

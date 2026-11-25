@@ -108,8 +108,6 @@ class LoopbackFlows extends AtsignFlows {
     AtLookUpFactory? lookUps,
   }) async => super.resumeEnrollment(
     atSign,
-    app: app,
-    device: device,
     keys: keys,
     preference: _onLoopback(preference),
     lookUps: lookUps,

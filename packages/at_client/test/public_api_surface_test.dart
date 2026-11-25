@@ -93,6 +93,18 @@ void main() {
     });
   });
 
+  group('a refused passphrase is reachable through the barrel', () {
+    test('an app tells a refused passphrase from other unreadable keys', () {
+      final unusable = AtKeysUnusableException.unreadable('@alice',
+          source: '/keys/@alice_key.atKeys',
+          error: AtKeysPassphraseException('the passphrase does not open it'));
+
+      expect(unusable.error, isA<AtKeysPassphraseException>());
+      expect(unusable.error, isA<AtDecryptionException>());
+      expect(unusable.cause, AtKeysUnusableCause.unreadable);
+    });
+  });
+
   group('a refusal and its code are reachable through the barrel', () {
     test('an app names AtAuthErrorReplyException and reads its code', () {
       final refusal =
@@ -225,7 +237,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/preference/pq_posture.dart',
   // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
   // WrittenAtKeysIo, InMemoryAtKeysIo), what reading a keyfile that is not a
-  // JSON object throws (AtKeysFormatException), the grant type an
+  // JSON object throws (AtKeysFormatException), what a refused passphrase
+  // throws (AtKeysPassphraseException), the grant type an
   // enrollment's namespaces read as (NamespacePermission), and
   // EnrollmentKeyExchangeMode:
   // an app opens, activates and enrols through this package and must not

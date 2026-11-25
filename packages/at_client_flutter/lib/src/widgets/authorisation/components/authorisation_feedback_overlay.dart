@@ -78,7 +78,7 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
-                        text: request.appName,
+                        text: clipForMessage(request.appName ?? ''),
                         children: [
                           TextSpan(
                             text: ' | ',
@@ -90,7 +90,7 @@ class AuthorisationFeedbackOverlay extends StatelessWidget {
                             ),
                           ),
                           TextSpan(
-                            text: request.deviceName,
+                            text: clipForMessage(request.deviceName ?? ''),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.onSurface,
                               fontWeight: FontWeight.normal,

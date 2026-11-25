@@ -56,6 +56,7 @@ export 'src/keys/serialization/atkey_material.dart';
 export 'src/keys/serialization/assurance.dart';
 export 'src/keys/serialization/passphrase_envelope.dart';
 export 'src/keys/io/at_keys_io.dart';
+export 'src/keys/io/at_keys_unusable.dart' hide whereKeysAre;
 // FileAtKeysIo is NOT here: it needs dart:io, which dart2wasm refuses
 // anywhere reachable from this barrel. It lives in at_auth_io.dart.
 export 'src/keys/io/memory_io.dart';

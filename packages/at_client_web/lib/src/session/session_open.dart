@@ -2,6 +2,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/memory.dart';
 import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
 
+import '../exceptions.dart';
 import 'portal_session.dart';
 import 'session_queue.dart';
 

@@ -1909,9 +1909,10 @@ retire-never-remove and `flush()` shapes were ratified 2026-07-17 (see
 **`AtKeysIo`** is the key source (`read(atsign)`). `WrittenAtKeysIo` adds:
 
 - `write`: create only, for a fresh onboard;
-- `flush(atsign, atKeys)`: persist the whole state, so a caller mutates in memory
-  and then flushes. On an existing target, `AtKeysAssurance.validateMapUpdate`
-  checks first that nothing is lost;
+- `flush(atsign, atKeys)`: persist a whole keyset that was not read from the
+  store, such as a pending enrollment's keys once its approval completes them.
+  Keys already stored are changed through `update`. On an existing target,
+  `AtKeysAssurance.validateMapUpdate` checks first that nothing is lost;
 - `update(atsign, mutate)`: read, mutate and flush as one operation, which a store
   that can be shared takes a lock across.
 

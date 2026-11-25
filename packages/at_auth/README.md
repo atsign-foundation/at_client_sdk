@@ -80,6 +80,11 @@ Onboarding happens **exactly once per atSign** and consists of:
 4. Writing the private halves to a local `.atKeys` file (for CLI apps)
    or to the device **keychain** (for Flutter apps).
 
+Before step 1 sends anything, activation reads the AtKeys store and, for a
+keyfile, checks that it can write there. Keys already in the store, keys it
+cannot read, or a keyfile it cannot write stop it with an exception that
+names the store.
+
 The result is a **master AtKeys** set. These keys:
 
 - Are the **root of trust** for the atSign — losing them is
@@ -253,7 +258,9 @@ Persistence has three verbs:
   `addKey` is deliberately not split: a material states its own owner through
   its `enrollmentId`, and a null one routes it to the atSign's container.
 
-- `flush(atsign, atKeys)` — persist the current in-memory state. If the
+- `flush(atsign, atKeys)` — persist a whole keyset that was not read from
+  the file, such as a pending enrollment's keys once its approval completes
+  them; keys already in the file are changed through `update`. If the
   file exists, `flush` first validates that nothing it holds would be lost
   (key material is never removed — a key's `status` may only move forward,
   `pending` → `active` → `retired` → `dead`), then rewrites it; flushing a legacy

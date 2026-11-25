@@ -102,8 +102,10 @@ mistyped keyfile a working-looking client with an empty store).
 
 `LIVE`. `enroll(keys:)` files the minted keypair under the new enrollment id
 as `pending` typed material in the destination the caller named, with app,
-device and namespaces on the slot. Resume finds the pending slot for (app,
-device) in the same store; approval flushes the completed keys and moves the
+device and namespaces on the slot. Resume finds the store's one pending
+slot, whatever its app and device (amended 2026-11-22 by Gary's ruling that an
+AtKeys store holds at most one pending enrollment; it said "the pending slot for
+(app, device)"); approval flushes the completed keys and moves the
 material to `active`; denial or expiry removes it. at_onboarding_cli's
 `EnrollmentCheckpoint` file and at_client_flutter's keychain `EnrollmentData`
 go. `CryptographicMaterialStatus` gains `pending`.

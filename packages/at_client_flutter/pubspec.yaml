@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 2.0.0
+version: 2.1.0-rc.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -24,7 +24,7 @@ dependencies:
   # process left behind, and 4.0.0-rc4 ends ApkamActivationDialog's wait at
   # once for an enrollment that has expired. Resolution in this workspace is by
   # path, so only a consumer resolving from pub.dev feels a floor set too low.
-  at_auth: ^4.0.0
+  at_auth: ^4.1.0-rc.1
   at_client: ^4.1.0-rc.1
   encrypt: ^5.0.3
   intl: ^0.20.2
@@ -36,6 +36,7 @@ dependencies:
 
 dev_dependencies:
   lints: ^6.0.0
+  http: ^1.2.1
   test: ^1.25.0
   mocktail: ^1.0.4
   at_persistence_secondary_server: ^5.4.0

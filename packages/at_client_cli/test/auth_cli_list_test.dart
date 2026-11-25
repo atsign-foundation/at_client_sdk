@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
@@ -29,6 +30,7 @@ class _CapturedStdout extends Fake implements Stdout {
 
 /// Catalogue: features/enrollment/approver_sees_expiry.feature and
 /// docs/projects/pq/acceptance.md UC-G3.25.
+/// Catalogue: features/enrollment/approver_sees_names_escaped.feature
 void main() {
   setUpAll(() {
     registerFallbackValue(_FakeListParams());
@@ -308,5 +310,174 @@ void main() {
         allOf(contains(' revoked '), isNot(contains('revoked ?'))),
         reason: 'an enrollment whose _apsk was moved to .r.__e reads revoked '
             'through client.enrollments.anchoring');
+  });
+
+  const requestId = 'b0b0b0b0-1a2e-43e4-93bd-378f1d366ea7';
+
+  /// What `at_activate list` prints for @alice when its atServer holds one
+  /// pending request, B, whose record carries [fields].
+  Future<String> listing(Map<String, dynamic> fields) async {
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'wavi',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'pending',
+                ...fields,
+              })
+                ..enrollmentId = requestId
+            ]);
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-r', '127.0.0.1:1']);
+    final out = _CapturedStdout();
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+    return out.text;
+  }
+
+  const columns = [
+    'Enrollment ID',
+    'Status',
+    'AppName',
+    'DeviceName',
+    'KeysExpiry',
+    'ExpiresAt',
+    'Anchored',
+    'Namespaces',
+  ];
+
+  for (final (field, column, char, raw, escape, fields) in [
+    (
+      'app name',
+      'AppName',
+      'carriage return',
+      '\r',
+      r'\u000d',
+      {'appName': 'wa\rvi'}
+    ),
+    (
+      'device name',
+      'DeviceName',
+      'ESC',
+      '\u001b',
+      r'\u001b',
+      {'deviceName': 'pho\u001bne'}
+    ),
+    (
+      'namespace',
+      'Namespaces',
+      'line feed',
+      '\n',
+      r'\u000a',
+      {
+        'namespace': {'wa\nvi': 'rw'}
+      }
+    ),
+  ]) {
+    test(
+        "at_activate list shows a request's $field with its control "
+        'characters escaped', () async {
+      final printed = await listing(fields);
+
+      final lines = printed.split('\n');
+      expect(lines.removeLast(), '', reason: 'the list ends with a newline');
+      expect(lines, [
+        startsWith('Found 1 matching enrollment records'),
+        startsWith('Enrollment ID'),
+        startsWith(requestId),
+      ]);
+      expect(lines.last, contains(escape),
+          reason: "B's row shows the $char written as $escape");
+      expect(lines, everyElement(isNot(anyOf(contains('\r'), contains(raw)))),
+          reason: 'no line holds the $char or a carriage return');
+      final (header, row) = (lines[1], lines.last);
+      for (final later in columns.skip(columns.indexOf(column) + 1)) {
+        final start = header.indexOf(later);
+        expect(row.substring(start - 1, start + 1), matches(RegExp(r'^ \S$')),
+            reason: "B's $later column starts where the header's does");
+      }
+    });
+  }
+
+  test('at_activate list clips a name longer than 180 characters', () async {
+    final printed = await listing({'deviceName': 'd' * 400});
+
+    final row = printed.split('\n').singleWhere((l) => l.startsWith(requestId));
+    expect(row, contains('${'d' * 180}...'));
+    expect(row, isNot(contains('d' * 181)));
+  });
+
+  test(
+      'at_activate list shows the key an Anchored verdict names with its '
+      'control characters escaped', () async {
+    const approvedId = 'a2a2a2a2-1a2e-43e4-93bd-378f1d366ea7';
+    const kid = 'k\n1';
+    const key = {'kid': kid, 'use': 'sign', 'alg': 'mldsa65', 'pub': 'cHVi'};
+    final client = _MockAtClient();
+    final service = _MockEnrollmentService();
+    when(() => client.getCurrentAtSign()).thenReturn('@alice');
+    when(() => client.enrollmentService).thenReturn(service);
+    when(() => service.fetchEnrollmentRequests(
+            enrollmentListParams: any(named: 'enrollmentListParams')))
+        .thenAnswer((_) async => [
+              Enrollment.fromJSON({
+                'appName': 'wavi',
+                'deviceName': 'phone',
+                'namespace': {'wavi': 'rw'},
+                'status': 'approved',
+              })
+                ..enrollmentId = approvedId
+            ]);
+    when(() => client.get(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenThrow(AtKeyNotFoundException('no such record'));
+    when(() => client.get(
+            any(
+                that: predicate<AtKey>(
+                    (k) => '$k'.contains('_apsk.$approvedId.a.__e'))),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((_) async => AtValue()
+          ..value = jsonEncode({
+            'v': 1,
+            'keys': [key]
+          })
+          ..metadata = (Metadata()
+            ..appMetadata = AppMetadata(providerId: 'legacy', additional: {
+              PqSigningChain.linksField: {
+                kid: {
+                  'payload': {...key, 'v': 2, 'enrollmentId': 'another'}
+                }
+              }
+            })));
+    final args = AuthCliArgs()
+        .createListCommandParser()
+        .parse(['-a', '@alice', '-r', '127.0.0.1:1']);
+    final out = _CapturedStdout();
+
+    await IOOverrides.runZoned(() => auth_cli.list(args, client),
+        stdout: () => out);
+
+    final lines = out.text.split('\n');
+    expect(lines.removeLast(), '', reason: 'the list ends with a newline');
+    expect(lines, [
+      startsWith('Found 1 matching enrollment records'),
+      startsWith('Enrollment ID'),
+      startsWith(approvedId),
+    ]);
+    final (header, row) = (lines[1], lines.last);
+    final (anchored, namespaces) =
+        (header.indexOf('Anchored'), header.indexOf('Namespaces'));
+    final escapedKid = 'k${String.fromCharCode(92)}u000a1';
+    final column = 'broken $escapedKid'.padRight(namespaces - anchored);
+    expect(row.substring(anchored), '$column{wavi: rw}',
+        reason: "the enrollment's Anchored column, from its header to the "
+            "next, names the failing key with its line feed escaped");
   });
 }

@@ -68,6 +68,11 @@ enum AuthCliCommand {
           ' permission to approve or deny the requests. Typically that will be'
           ' the program which first onboarded; however it can also be an enrolled'
           ' program which has "rw" access to the "__manage" namespace.'),
+  cancel(
+      usage: 'Give up the pending enrollment request the keyfile -k holds,'
+          ' removing its keys from that keyfile. It sends nothing: the'
+          ' request stays on the atServer, for the Atsign\'s manager to'
+          ' deny.'),
   decrypt(
       usage: 'Decrypts a passphrase-protected atKeys file and writes it to the '
           'targetKeys file'),
@@ -273,6 +278,9 @@ class AuthCliArgs {
 
       case AuthCliCommand.enroll:
         return createEnrollCommandParser();
+
+      case AuthCliCommand.cancel:
+        return createCancelCommandParser();
 
       case AuthCliCommand.interactive:
         return createInteractiveCommandParser();
@@ -555,6 +563,13 @@ class AuthCliArgs {
             'conveys to leaves the enrollment approved and unable to decrypt',
         mandatory: false,
         allowed: keyExchangeNames.keys);
+    return p;
+  }
+
+  /// The parser for `cancel`, which takes the shared options alone.
+  @visibleForTesting
+  ArgParser createCancelCommandParser() {
+    ArgParser p = createSharedArgParser(hide: true);
     return p;
   }
 
