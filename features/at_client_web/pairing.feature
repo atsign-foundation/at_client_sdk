@@ -54,6 +54,12 @@ Feature: An approving device enrolls another browser
     When pendingEnrollments is called with pending requests and with none
     Then it returns each pending request as filed and an empty list when none are pending
 
+  Scenario: a peer-chosen app or device name is bounded in pending enrollments
+    Given a pending enrollment whose app and device names are very long and carry control characters
+    When pendingEnrollments is called
+    Then both names come back on one line, at most the rejection bound long
+    And its id and namespaces are returned unchanged
+
   Scenario: approves the request as filed, with no namespaces of its own
     Given a pending enrollment e1
     When approve is called with e1

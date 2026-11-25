@@ -1946,6 +1946,31 @@ void main() {
             isEmpty);
       });
 
+      test('a peer-chosen app or device name is bounded in pending enrollments',
+          () async {
+        session.pending = [
+          (
+            id: 'e1',
+            appName: '${'a' * 300}\nsecond line',
+            deviceName: 'Phone \u202Eevil',
+            namespaces: {'tally': 'rw'}
+          )
+        ];
+
+        final entries =
+            (await resolved(invoke(s, 'pendingEnrollments'))).dartify() as List;
+        final entry = entries.single as Map;
+        final appName = entry['appName'] as String;
+        final deviceName = entry['deviceName'] as String;
+
+        expect(appName, isNot(contains('\n')));
+        expect(deviceName, isNot(contains('\u202E')));
+        expect(appName.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(deviceName.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(entry['id'], 'e1');
+        expect(entry['namespaces'], {'tally': 'rw'});
+      });
+
       test('approve and deny pass the id and resolve undefined', () async {
         final approved = await resolved(invoke(s, 'approve', ['e1'.toJS]));
         final denied = await resolved(invoke(s, 'deny', ['e2'.toJS]));

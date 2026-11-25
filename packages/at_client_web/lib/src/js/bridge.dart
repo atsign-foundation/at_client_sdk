@@ -462,13 +462,15 @@ class BridgeSession {
 
   /// The requests awaiting a decision, each `{id, appName, deviceName,
   /// namespaces}` with `namespaces` mapping a namespace to its access.
+  /// `appName` and `deviceName` are peer-chosen, so both take the rejection
+  /// bound: one line, at most [maxErrorMessageLength] long.
   @JSExport()
   JSPromise<JSArray<JSObject>> pendingEnrollments() => _promise(() async => [
         for (final e in await _session.pendingEnrollments())
           _envelope({
             'id': e.id,
-            'appName': e.appName,
-            'deviceName': e.deviceName,
+            'appName': boundedRejectionText(e.appName),
+            'deviceName': boundedRejectionText(e.deviceName),
             'namespaces': e.namespaces,
           })
       ].toJS);
