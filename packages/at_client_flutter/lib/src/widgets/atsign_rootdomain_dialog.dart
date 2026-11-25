@@ -57,7 +57,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
     }
     try {
       return trimmedValue.toAtsign();
-    } catch (_) {
+    } on InvalidAtSignException {
       return value;
     }
   }
@@ -69,7 +69,7 @@ class _AtSignSelectionDialogState extends State<AtSignSelectionDialog> {
     }
     try {
       return atSign.toAtsign();
-    } catch (_) {
+    } on InvalidAtSignException {
       return null;
     }
   }

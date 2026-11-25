@@ -13,6 +13,9 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart'
     show AtEnrollmentResponse, EnrollmentRequestDecision;
 import 'package:at_client_flutter/at_client_flutter.dart';
+import 'package:at_utils/at_logger.dart' show AtSignLogger, LoggingHandler;
+import 'package:flutter/foundation.dart'
+    show FlutterMemoryAllocations, ObjectCreated, ObjectDisposed, ObjectEvent;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -28,7 +31,21 @@ class FakeEnrollmentRequestDecision extends Fake
 
 class FakeListParams extends Fake implements EnrollmentListRequestParam {}
 
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) =>
+      records.add((level: '${record.level}', message: record.message));
+
+  List<String> at(String level) => [
+    for (final r in records)
+      if (r.level == level) r.message,
+  ];
+}
+
 /// Catalogue: features/enrollment/approver_sees_names_escaped.feature
+/// Catalogue: features/at_client_flutter/enrollment_feedback_overlay.feature
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -104,7 +121,12 @@ void main() {
     );
   }
 
+  final logs = _RecordedLogs();
+
   setUpAll(() {
+    // NOTE: before anything logs; a logger binds the handler on first use.
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'info';
     registerFallbackValue(FakeEnrollmentRequestDecision());
     registerFallbackValue(FakeListParams());
     registerFallbackValue(AtKey());
@@ -114,6 +136,7 @@ void main() {
     // The reset leaves AtClientManager.atClient throwing, so any client read
     // that does not go through the injected client fails the test.
     AtClientManager.getInstance().reset();
+    logs.records.clear();
 
     atClient = MockAtClient();
     service = MockEnrollmentService();
@@ -1061,4 +1084,176 @@ void main() {
       );
     });
   }
+
+  testWidgets(
+    'Given reading whether one approved enrollment is anchored throws an '
+    'exception, when the list loads, then that row shows ? and a warning '
+    'names the enrollment',
+    (tester) async {
+      when(
+        () => service.fetchEnrollmentRequests(
+          enrollmentListParams: any(named: 'enrollmentListParams'),
+        ),
+      ).thenAnswer(
+        (inv) async => approvedFilter(inv)
+            ? [approvedRecord('x-1', 'tablet')]
+            : [pendingRecord()],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: EnrollmentRequestList(
+              atClient: atClient,
+              anchoring: (id) async =>
+                  throw const FormatException('the chain record is not JSON'),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('approved-x-1')),
+          matching: find.text('?'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        logs.at('WARNING'),
+        contains(
+          allOf(contains('x-1'), contains('the chain record is not JSON')),
+        ),
+      );
+    },
+  );
+
+  group('the feedback overlay', () {
+    void approves() => when(() => service.approve(any())).thenAnswer(
+      (_) async =>
+          AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
+    );
+    void denies() => when(() => service.deny(any())).thenAnswer(
+      (_) async => AtEnrollmentResponse(enrollmentId, EnrollmentStatus.denied),
+    );
+    Finder overlay() => find.byType(AuthorisationFeedbackOverlay);
+
+    /// Taps [button] on the pending request and lets its overlay show.
+    Future<void> showFeedback(WidgetTester tester, String button) async {
+      await tester.tap(find.text(button));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        overlay(),
+        findsOneWidget,
+        reason: 'the control: the overlay is showing',
+      );
+    }
+
+    testWidgets('Tapping the feedback overlay removes it, and its timer then '
+        'does nothing', (tester) async {
+      approves();
+      await pumpList(tester);
+      await showFeedback(tester, 'Approve');
+
+      await tester.tap(overlay());
+      await tester.pump();
+      expect(overlay(), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+
+      expect(overlay(), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('The feedback overlay is removed after 3 seconds', (
+      tester,
+    ) async {
+      denies();
+      await pumpList(tester);
+      await showFeedback(tester, 'Reject');
+
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump();
+
+      expect(overlay(), findsNothing);
+    });
+
+    testWidgets('Two taps before the next frame remove the feedback overlay '
+        'once', (tester) async {
+      approves();
+      await pumpList(tester);
+      await showFeedback(tester, 'Approve');
+
+      await tester.tap(overlay());
+      await tester.tap(overlay());
+      await tester.pump();
+
+      expect(overlay(), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 4));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Given the feedback overlay showing, when a tap removes it, '
+        'then its OverlayEntry is disposed', (tester) async {
+      approves();
+      await pumpList(tester);
+      final created = <Object>[];
+      final disposed = <Object>[];
+      void record(ObjectEvent event) {
+        if (event.object is! OverlayEntry) return;
+        if (event is ObjectCreated) created.add(event.object);
+        if (event is ObjectDisposed) disposed.add(event.object);
+      }
+
+      FlutterMemoryAllocations.instance.addListener(record);
+      addTearDown(
+        () => FlutterMemoryAllocations.instance.removeListener(record),
+      );
+      await showFeedback(tester, 'Approve');
+      expect(
+        created,
+        hasLength(1),
+        reason: 'the control: the feedback overlay made one entry',
+      );
+
+      await tester.tap(overlay());
+      await tester.pump();
+
+      expect(disposed, [same(created.single)]);
+    });
+
+    testWidgets('The feedback overlay goes when the request list goes', (
+      tester,
+    ) async {
+      approves();
+      final showList = ValueNotifier(true);
+      addTearDown(showList.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<bool>(
+              valueListenable: showList,
+              builder: (_, show, _) => show
+                  ? EnrollmentRequestList(atClient: atClient)
+                  : const SizedBox(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await showFeedback(tester, 'Approve');
+
+      showList.value = false;
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(EnrollmentRequestList), findsNothing);
+
+      expect(overlay(), findsNothing);
+      expect(tester.takeException(), isNull);
+      // NOTE: the test ends here, so a timer the list left running fails it.
+    });
+  });
 }

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2.1.0-rc.2
+
+- fix: `ApkamActivationDialog` says so when it opens on an AtKeys store it
+  cannot use, such as a keychain it cannot read or keys recorded for another
+  Atsign, and keeps the passcode form. An `Error` from that check, such as a
+  `StateError` for a pending request with no key, now reaches the app's
+  uncaught-error handler.
+- fix: `EnrollmentRequestList`'s approval and denial feedback goes when the
+  list does, and is removed only once, whether by a tap, its timer or the
+  list going.
+
 ## 2.1.0-rc.1
 
 - fix: the dialogs' keys messages, and the one a confirmed Cancel that

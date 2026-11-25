@@ -163,19 +163,39 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
   /// A request already in the AtKeys store is waited on again rather than
   /// asking for a passcode it has already spent: the store's one pending
   /// request, whatever app and device it was filed under, since `enroll`
-  /// refuses a store that already holds one.
+  /// refuses a store that already holds one. A store it cannot use is logged
+  /// and shown, and the passcode form stays; anything thrown that is not an
+  /// [Exception] is logged and rethrown.
   Future<void> _resumeIfPending() async {
     final PendingEnrollment? pending;
     try {
-      pending = await widget.flows.resumeEnrollment(
-        widget.atSign,
-        keys: _keys,
-        preference: under(widget.preference, widget.rootDomain),
-        lookUps: widget.lookUps,
+      // NOTE: a refusal thrown before the call returns must not reach
+      // ScaffoldMessenger while initState is still running.
+      pending = await Future.sync(
+        () => widget.flows.resumeEnrollment(
+          widget.atSign,
+          keys: _keys,
+          preference: under(widget.preference, widget.rootDomain),
+          lookUps: widget.lookUps,
+        ),
       );
-    } catch (e) {
-      // An unreadable store is reported when the request goes out.
+    } on Exception catch (e) {
+      _logger.warning(
+        'Could not check the AtKeys store for a pending enrollment of '
+        '${widget.atSign}: ${clipForMessage(_firstLine(e))}',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_failureMessage(e))));
       return;
+    } catch (e) {
+      _logger.severe(
+        'Checking the AtKeys store for a pending enrollment of '
+        '${widget.atSign} failed with a defect: '
+        '${clipForMessage(_firstLine(e))}',
+      );
+      rethrow;
     }
     if (pending == null || !mounted) return;
     final adopted =
@@ -260,6 +280,9 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog>
         'Activation timed out — the atServer could not be reached. '
         'Please check your connection and try again.',
   );
+
+  static String _firstLine(Object failure) =>
+      '$failure'.split('\n').first.trim();
 
   /// Stops [pending]'s wait and keeps the request. A failure is logged,
   /// since the dialog is gone and there is nobody to tell.

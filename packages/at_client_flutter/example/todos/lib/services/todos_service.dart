@@ -75,8 +75,8 @@ class TodosService {
           'present; not displayed by this version.',
         );
       }
-    } catch (_) {
-      /* best-effort */
+    } on Exception catch (e) {
+      _log('could not look for legacy notes in "notes.$ns": $e');
     }
   }
 
