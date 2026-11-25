@@ -48,6 +48,13 @@ Feature: Collections store, read and share items through the session
     When collection is called with a name and only a type
     Then the bridge passes no eventSource and no expiration, leaving both to the session's defaults
 
+  Scenario: rejects invalid collection names and folds mixed-case namespace
+    Given a session whose namespace is "MyApp"
+    When collection is called with "Todos"
+    Then the collection opens as "todos.myapp"
+    And collection names "", ".wavi", "todos.", "a..b", "a b", "a@b" and "a:b" each reject with invalid_argument
+    And a session namespace of "" or "a.b" is refused
+
   Scenario: a non-finite expiration rejects with invalid_argument naming expiration
     Given an open session
     When collection is called with expiration NaN, Infinity or -Infinity
