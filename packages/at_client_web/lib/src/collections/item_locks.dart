@@ -9,7 +9,9 @@ import '../keyed_queue.dart';
 /// handles on one item queue behind one another. The lock orders writes within
 /// one session, across all its handles. Two sessions (tabs, devices) do not
 /// queue behind each other and can still lose an update, last writer wins; a
-/// caller that needs cross-session ordering must serialise itself.
+/// caller that needs cross-session ordering must serialise itself. An
+/// atServer-side compare-and-set or version check would close the window, but
+/// the atServer does not offer one today (#2620).
 final class ItemLocks {
   final _locks = KeyedQueue<(String, String, String)>();
 

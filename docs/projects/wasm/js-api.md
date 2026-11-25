@@ -480,7 +480,8 @@ still rejects with `COLLECTION_ITEM_UNREADABLE`, and `get()` of an over-deep ite
 - The lock orders writes within one session only. Two sessions — two tabs or two devices — do
   not queue behind each other, and one can still lose an update (last writer wins). A caller that
   needs cross-session ordering must serialise itself; the pre-write re-read narrows the window,
-  it does not close it.
+  it does not close it. An atServer-side compare-and-set or version check would close it, but the
+  atServer does not offer one today (#2620).
 - Opening a collection whose `eventSource` is `'notifs'` or `'both'` (default) starts
   notification listening on the session's `notificationService`.
 - Closing the session cancels active collection watches and rejects subsequent collection
