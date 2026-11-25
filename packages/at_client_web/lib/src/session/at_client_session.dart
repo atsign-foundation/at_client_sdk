@@ -379,15 +379,17 @@ class AtClientSession implements Session {
     return false;
   }
 
-  /// Remembers [id] until the send's outcome is known: an echo can arrive
-  /// before [notify] resolves, and only a delivered send is bounded.
+  /// Remembers [id] for every send until its outcome is known: an echo can
+  /// arrive before [notify] resolves. An undelivered send's id is forgotten in
+  /// [notify]; a delivered send's id is kept so its echo is dropped.
   void _remember(String id) {
     if (id.isEmpty) return;
     _sent.add(id);
   }
 
-  /// Drops the ids of sends known not to be echoed: a delivered send fills a
-  /// slot, so the oldest beyond [sentIdLimit] are dropped.
+  /// Keeps the remembered ids within [sentIdLimit]. A delivered send's id is
+  /// kept so its echo is dropped; once the set passes the limit, the oldest
+  /// ids are dropped, though their echoes can still arrive.
   void _pruneSent() {
     while (_sent.length > sentIdLimit) {
       _sent.remove(_sent.first);
