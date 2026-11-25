@@ -5,6 +5,16 @@ import 'package:at_client_web/src/keyed_queue.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('a cap below 1 is refused, naming maxQueuedPerKey', () {
+    for (final cap in [0, -1]) {
+      expect(
+          () => KeyedQueue<String>(maxQueuedPerKey: cap),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'maxQueuedPerKey')
+              .having((e) => e.invalidValue, 'invalidValue', cap)));
+    }
+  });
+
   test('runs on one key start in the order they were queued and never overlap',
       () async {
     final queue = KeyedQueue<String>();

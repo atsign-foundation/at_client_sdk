@@ -23,7 +23,15 @@ final class KeyedQueue<K> {
   final int maxQueuedPerKey;
 
   /// Creates a queue that holds at most [maxQueuedPerKey] waiters per key.
-  KeyedQueue({this.maxQueuedPerKey = defaultMaxQueuedPerKey});
+  ///
+  /// A [maxQueuedPerKey] below 1 is an [ArgumentError] naming the parameter:
+  /// it would reject every run on a busy key.
+  KeyedQueue({this.maxQueuedPerKey = defaultMaxQueuedPerKey}) {
+    if (maxQueuedPerKey < 1) {
+      throw ArgumentError.value(
+          maxQueuedPerKey, 'maxQueuedPerKey', 'must be at least 1');
+    }
+  }
 
   /// The slot of every key busy or awaited right now.
   final _slots = <K, _Slot>{};
