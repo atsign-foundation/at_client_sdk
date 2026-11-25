@@ -99,10 +99,10 @@ Feature: Every failure carries a code the caller branches on
     Then it throws UnsupportedError, as on trunk
 
   Scenario: the shared log text sanitizer escapes, bounds and flattens untrusted text
-    Given untrusted text holding control characters, bidirectional formatting characters, a surrogate pair at the cut, and more than the bound
+    Given untrusted text holding control characters, bidirectional formatting characters, a zero-width space, a supplementary format character, a surrogate pair at the cut, and more than the bound
     When it goes through sanitizeLogText, singleLine and truncateText
-    Then sanitizeLogText returns one JSON string literal with those characters as \u escapes, bounded with an ellipsis
-    And singleLine replaces each of them with a space
+    Then sanitizeLogText returns one JSON string literal with those characters, the zero-width space and the supplementary format character as \u escapes, bounded with an ellipsis
+    And singleLine replaces each of them, including the zero-width space and the supplementary format character, with a space
     And truncateText never splits a surrogate pair
 
   Scenario: every closed rejection carries the same fixed message

@@ -30,6 +30,13 @@ void main() {
   test(
       'the shared log text sanitizer escapes, bounds and flattens untrusted '
       'text', () {
+    // The widened set counts a zero-width space and a supplementary format
+    // character as unprintable, as it does controls, bidi formatting and
+    // lone surrogates.
+    const widened = 'a\x01\u200b\u202eb\u{E0001}';
+    expect(sanitizeLogText(widened), r'"a\u0001\u200b\u202eb\udb40\udc01"');
+    expect(singleLine(widened), 'a   b ');
+
     // Eleven units; the bound of ten cuts at seven, between the emoji halves.
     const untrusted = 'a\x01\u202eb\nc\u{1F600}def';
     final quoted = sanitizeLogText(untrusted, maxLength: 10);
