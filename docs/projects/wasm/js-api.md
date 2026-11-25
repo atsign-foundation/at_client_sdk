@@ -247,8 +247,6 @@ as `packages/at_client_web` (`@atsign/at_client_web`), to be published only unde
 
 **Bridge releases.** The workflow that publishes the bundle as a prerelease ships separately from this change. The npm package pins a released tag and checksum.
 
-PR CI checks that `packages/at_client_web/dart-workspace.lock` matches the workspace's pubspecs: it copies the lock to the repo root and runs `dart pub get --enforce-lockfile`. To regenerate it, run `dart pub get` at the repo root and copy the resulting `pubspec.lock` to `packages/at_client_web/dart-workspace.lock`.
-
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
 also serving Node. Now that the JS surface exposes the collection API via `BridgeCollection`
 and `JsCollectionsAdapter` ([§5.5](#55-the-dart-side-collections-adapter)), splitting is

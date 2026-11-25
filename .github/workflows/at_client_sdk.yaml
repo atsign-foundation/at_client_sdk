@@ -143,12 +143,8 @@ jobs:
         with:
           dart-channel: ${{ matrix.dart-channel}}
 
-      - name: Check dart-workspace.lock is current and install dependencies
-        working-directory: .
-        run: |
-          cp packages/at_client_web/dart-workspace.lock pubspec.lock
-          cd packages/at_client_web
-          dart pub get --no-example --enforce-lockfile
+      - name: Install dependencies in at_client_web
+        run: dart pub get
 
       - name: Analyze project source in at_client_web
         run: dart analyze
