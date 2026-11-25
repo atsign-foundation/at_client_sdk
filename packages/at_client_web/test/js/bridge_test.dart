@@ -1519,6 +1519,28 @@ void main() {
         expect(failure['kind'], 'Unknown');
       });
 
+      test('a peer-chosen failure recipient is bounded in a rejection',
+          () async {
+        final direction = String.fromCharCode(0x202e);
+        adapter.failure =
+            JsCollectionsError(CollectionFailure.partialFailure, failures: [
+          {
+            'op': 'update',
+            'recipient': '@bob\n$direction${'r' * 600}',
+            'kind': 'Unknown',
+          }
+        ]);
+
+        final r = await rejected(invoke(c, 'list'));
+
+        final failure = (r.field('failures')! as List).single as Map;
+        final recipient = failure['recipient']! as String;
+        expect(singleLine(recipient), recipient, reason: 'one line');
+        expect(recipient.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(failure['op'], 'update');
+        expect(failure['kind'], 'Unknown');
+      });
+
       test(
           'list and query report each unreadable record with the same code as before',
           () async {

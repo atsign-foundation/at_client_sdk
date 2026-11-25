@@ -63,6 +63,13 @@ Feature: Every failure carries a code the caller branches on
     When the failure reaches JS
     Then the rejection's id and owner are each at most 128 characters and one line
 
+  @dos @forgery
+  Scenario: a peer-chosen failure recipient is bounded in a rejection
+    Given a collection failure whose failure recipient holds a newline, a direction character and 600 characters
+    When the failure reaches JS
+    Then the recipient is at most 128 characters and one line
+    And the failure's op and kind are unchanged
+
   @forgery
   Scenario: an ArgumentError from inside at_client rejects internal with the fixed message
     Given an open session whose client throws an ArgumentError, or at_commons' IllegalArgumentException, with a message that names a parameter
