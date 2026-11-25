@@ -678,8 +678,8 @@ class BridgeCollection {
   /// given, with the `{code, message}` of each error on the stream; returns
   /// the function that stops watching, or the rejection object when it
   /// cannot start. `id`, `owner` and `from` are peer-chosen, and so is each
-  /// ancestry entry's `subName`, so all take the rejection bound: one line,
-  /// at most [maxErrorMessageLength] long. Every other field, the payload
+  /// ancestry entry's `id` and `subName`, so all take the rejection bound: one
+  /// line, at most [maxErrorMessageLength] long. Every other field, the payload
   /// included, is delivered as received.
   @JSExport()
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {

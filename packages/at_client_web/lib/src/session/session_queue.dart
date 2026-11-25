@@ -14,7 +14,7 @@ String openLock(String atSign, String enrollmentId) => '$atSign $enrollmentId';
 Future<T> queuedOpen<T>(String lock, Future<T> Function() open) =>
     _opening.run(lock, open);
 
-/// The opens running for each lock; it never completes with an error.
+/// The opens running for each lock; a caller beyond one lock's cap is refused.
 ///
 /// An open builds and authenticates a whole client and holds it until it
 /// ends, so one lock's queue is capped at 16 rather than an item lock's

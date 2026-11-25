@@ -475,6 +475,8 @@ still rejects with `COLLECTION_ITEM_UNREADABLE`, and `get()` of an over-deep ite
 - Concurrent `update`, `share`, `remove`, and explicit-`id` `create` calls on the same
   `(namespace, id, owner)` run sequentially, across every collection handle the session opens
   (they share one lock map), so overlapping local writes do not overwrite one another.
+- A write queue holds at most 64 waiters per item and refuses the next writer with
+  `COLLECTION_FAILED`; the page's open queue holds 16 and refuses the next open with `internal`.
 - The lock orders writes within one session only. Two sessions — two tabs or two devices — do
   not queue behind each other, and one can still lose an update (last writer wins). A caller that
   needs cross-session ordering must serialise itself; the pre-write re-read narrows the window,

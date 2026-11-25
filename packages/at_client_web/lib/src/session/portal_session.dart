@@ -98,7 +98,9 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// while another for the same atSign and enrollment is running waits for it
 /// to end, then fails as it would after it (a [StateError] while that client
 /// is live) or builds afresh. Opens for different enrollments of an atSign,
-/// which at_client allows side by side, do not wait on each other.
+/// which at_client allows side by side, do not wait on each other. At most
+/// sixteen opens may wait on one atSign and enrollment; the next is refused by
+/// the queue cap rather than waiting.
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
