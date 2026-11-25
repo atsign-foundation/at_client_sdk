@@ -495,6 +495,62 @@ void main() {
       );
     });
 
+    test('Two creates with one id at once are serialised by the adapter',
+        () async {
+      registerFallbackValue(<String, dynamic>{});
+      registerFallbackValue(<Atsign>{});
+      final collection = MockAtCollection();
+      when(() => collection.atSign).thenReturn('@alice'.toAtsign());
+      final raw = rawCollection(alice, _ns, writeTypeTag: 'Todo');
+      final seen = <String>[];
+      var exists = false;
+      when(() => collection.create(
+            obj: any(named: 'obj'),
+            id: any(named: 'id'),
+            sharedWith: any(named: 'sharedWith'),
+          )).thenAnswer((inv) async {
+        final id = inv.namedArguments[#id] as String;
+        seen.add('create($id) began');
+        // Let a create that is not queued start before this one ends.
+        await Future<void>.delayed(Duration.zero);
+        if (exists) {
+          seen.add('create($id) rejected');
+          throw StateError('Cannot create item with id "$id": already exists');
+        }
+        exists = true;
+        seen.add('create($id) wrote');
+        return raw.draft(
+          obj: inv.namedArguments[#obj] as Map<String, dynamic>,
+          id: id,
+          sharedWith: inv.namedArguments[#sharedWith] as Set<Atsign>?,
+        );
+      });
+      final todos = JsCollectionsAdapter(collection);
+
+      // Neither create is awaited before the next starts.
+      final first = todos.create({'title': 'a'}, id: 'i1');
+      final second = todos.create({'title': 'b'}, id: 'i1');
+      final outcomes = await Future.wait([
+        first.then<Object?>((item) => item, onError: (Object e) => e),
+        second.then<Object?>((item) => item, onError: (Object e) => e),
+      ]);
+
+      expect(outcomes[0], isA<JsItem>());
+      expect((outcomes[0] as JsItem)['data'], {'title': 'a'});
+      expect(
+        outcomes[1],
+        isA<JsCollectionsError>()
+            .having(errorCodeOf, 'code', 'COLLECTION_ITEM_ALREADY_EXISTS'),
+      );
+      // The collection saw the first create finish before the second began.
+      expect(seen, [
+        'create(i1) began',
+        'create(i1) wrote',
+        'create(i1) began',
+        'create(i1) rejected',
+      ]);
+    });
+
     test('A get addresses an item by id and owner', () async {
       await bobShares('a1', {'title': 'bob'});
       final todos = await open();

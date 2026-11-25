@@ -14,8 +14,10 @@ Feature: The JS collections adapter translates onto AtCollection
   #   never removes a recipient it did not read: "An update keeps a recipient
   #   copy another device writes during the update" and "A share keeps a
   #   recipient copy another device writes during the share". Two creates with
-  #   one id at the same moment are not serialised by the adapter; that check
-  #   belongs to AtCollection.create.
+  #   one id at the same moment are serialised by the adapter: an explicit-id
+  #   create queues behind the earlier write to that item, so the second sees
+  #   the first and rejects ("Two creates with one id at once are serialised
+  #   by the adapter").
   # Replay: a replayed notification only makes the collection re-read the stored,
   #   signed record. It creates no item and changes no item's type or owner:
   #   "Each upstream event is delivered once and cancel stops delivery".
@@ -80,6 +82,12 @@ Feature: The JS collections adapter translates onto AtCollection
     Given an item "i1"
     When the adapter creates another item "i1"
     Then the create rejects with COLLECTION_ITEM_ALREADY_EXISTS
+
+  Scenario: Two creates with one id at once are serialised by the adapter
+    Given an adapter
+    When two creates with the id "i1" are started without awaiting the first
+    Then one create succeeds and the other rejects with COLLECTION_ITEM_ALREADY_EXISTS
+    And the collection sees the first create finish before the second begins
 
   Scenario: A get addresses an item by id and owner
     Given @alice and @bob each own an item "a1" that @alice can read
