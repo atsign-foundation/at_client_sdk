@@ -393,7 +393,10 @@ class BridgeSession {
   /// it the error is logged); returns the function that unsubscribes, or,
   /// when it cannot subscribe, the `{code, message}` object the promises
   /// reject with. It does not throw: a Dart `throw` reaches JS wrapped, with
-  /// no `code` for the caller to read.
+  /// no `code` for the caller to read. `id` and `key` are peer-chosen, so
+  /// both take the rejection bound: one line, at most
+  /// [maxErrorMessageLength] long. `from` is the verified key owner, and
+  /// `value` is the notification's payload, delivered as received.
   @JSExport()
   JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
@@ -406,9 +409,9 @@ class BridgeSession {
           deliver.callAsFunction(
               null,
               _envelope({
-                'id': n.id,
+                'id': boundedRejectionText(n.id),
                 'from': n.from,
-                'key': n.key,
+                'key': boundedRejectionText(n.key),
                 'value': n.value,
                 'epochMillis': n.epochMillis,
                 'operation': n.operation,

@@ -975,6 +975,41 @@ void main() {
       expect(session.listeners, isEmpty);
     });
 
+    test('a peer-chosen notification id and key are bounded in the envelope',
+        () async {
+      final seen = <Object?>[];
+      invoke(s, 'subscribe', [
+        '.*'.toJS,
+        ((JSAny? event) => seen.add(event.dartify())).toJS,
+      ]);
+      final direction = String.fromCharCode(0x202e);
+      final hostile = '${'n' * 600}\n$direction';
+
+      session.listeners.single((
+        id: hostile,
+        from: '@alice',
+        key: hostile,
+        value: 'ping',
+        epochMillis: 42,
+        operation: 'update',
+      ));
+
+      final event = seen.single! as Map;
+      for (final field in ['id', 'key']) {
+        final text = event[field]! as String;
+        expect(text, isNot(contains('\n')), reason: '$field holds no newline');
+        expect(text, isNot(contains(direction)),
+            reason: '$field holds no direction character');
+        expect(singleLine(text), text, reason: '$field is one line');
+        expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
+            reason: '$field takes the rejection bound');
+      }
+      expect(event['value'], 'ping');
+      expect(event['from'], '@alice');
+      expect(event['epochMillis'], 42);
+      expect(event['operation'], 'update');
+    });
+
     test(
         'bridge subscribe drops notifications and errors after session is closed',
         () async {
