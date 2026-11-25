@@ -1,5 +1,6 @@
 import 'package:at_telemetry/at_telemetry.dart';
 
+/// The events a door controller app sends to the Control Center.
 final class AcmeGateTelemetry {
   static const String serviceName = 'acme_gate';
 
@@ -32,6 +33,8 @@ final class AcmeGateTelemetry {
 
   AcmeGateTelemetry(this._telemetry);
 
+  /// Records that [door] unlocked for [requestedBy], after a recovered event
+  /// if commands to [door] failed since it last unlocked.
   void doorUnlocked({
     required String door,
     required String requestedBy,
@@ -61,6 +64,7 @@ final class AcmeGateTelemetry {
     );
   }
 
+  /// Records that [door] refused the unlock command from [requestedBy].
   void doorRefused({
     required String door,
     required String requestedBy,
@@ -79,6 +83,8 @@ final class AcmeGateTelemetry {
     );
   }
 
+  /// Reports an anomaly the first time [door] fails to open, and counts
+  /// further failures until it next unlocks.
   void doorFailed({
     required String door,
     required String requestedBy,
@@ -103,6 +109,8 @@ final class AcmeGateTelemetry {
     );
   }
 
+  /// Counts a status update [desk] did not answer, and reports an anomaly
+  /// when the count reaches [unansweredLimit].
   void statusUnanswered({required String desk}) {
     final int unanswered = (_unansweredUpdates[desk] ?? 0) + 1;
     _unansweredUpdates[desk] = unanswered;
@@ -122,6 +130,8 @@ final class AcmeGateTelemetry {
     );
   }
 
+  /// Clears the unanswered count for [desk], with a recovered event if the
+  /// count reached [unansweredLimit].
   void statusAnswered({required String desk}) {
     final int? unanswered = _unansweredUpdates.remove(desk);
     if (unanswered == null || unanswered < unansweredLimit) {

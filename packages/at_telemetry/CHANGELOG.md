@@ -1,4 +1,4 @@
-## 0.1.1
+## 0.1.2
 
 - docs: the `at-telemetry-app-events` agent skill in `skills/`, installable
   with `dart run skills get`. It says what an app should send to the Control
@@ -10,6 +10,9 @@
   send to the Control Center".
 - docs: the basic example's event name no longer starts with `atsign.`, which
   belongs to Atsign.
+
+## 0.1.1
+
 - chore(deps): at_utils `>=3.0.19 <5.0.0`, so an app can use at_utils 4.
 
 ## 0.1.0

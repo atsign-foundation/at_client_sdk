@@ -4,7 +4,7 @@ Each catalog is the complete list of what one kind of app sends. Copy the
 shape, not the names: use your own app's prefix and words.
 
 In every table, **Peer** is the attribute that names the other endpoint's
-atSign, and **Links** is what goes in `notificationIds` or `keys`.
+Atsign, and **Links** is what goes in `notificationIds` or `keys`.
 
 ## Remote-controlled device: `acme_gate`
 
@@ -64,7 +64,7 @@ device.
 | `chat.storage.full` | `storage_full` | the first attachment that cannot be saved | This device is out of space, so received attachments are not being saved. Free up space on the device. |
 
 Does **not** send: one event per message sent or received, message text,
-attachment names, or the people in a conversation beyond the peer's atSign.
+attachment names, or the people in a conversation beyond the peer's Atsign.
 
 ## Backup agent and vault: `backup`
 
