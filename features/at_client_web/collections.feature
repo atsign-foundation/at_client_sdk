@@ -270,9 +270,9 @@ Feature: Collections store, read and share items through the session
 
   @dos @forgery
   Scenario: a peer-stored item id and type are bounded
-    Given a listing with a readable item whose id and type carry a newline, a direction character and 600 characters
+    Given a listing with a readable item whose id, type, owner and sharedWith entry carry a newline, a direction character and 600 characters
     When list is called
-    Then the item's id and type each come back on one line, at most the rejection bound long
+    Then the item's id, type, owner and sharedWith entry each come back on one line, at most the rejection bound long
     And its data is unchanged
 
   Scenario: a repeated collection call builds a fresh adapter each time

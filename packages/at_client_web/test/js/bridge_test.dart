@@ -1654,22 +1654,33 @@ void main() {
         final hostile = '${'i' * 600}\n$direction';
         adapter.listing = (
           items: [
-            {...adapter.item, 'id': hostile, 'type': hostile}
+            {
+              ...adapter.item,
+              'id': hostile,
+              'type': hostile,
+              'owner': hostile,
+              'sharedWith': [hostile],
+            }
           ],
           unreadable: const []
         );
 
         final listing = (await resolved(invoke(c, 'list')))! as JSObject;
         final item = (listing['items']! as JSArray).toDart.single! as JSObject;
-        for (final field in ['id', 'type']) {
-          final text = item[field].dartify()! as String;
-          expect(text, isNot(contains('\n')),
-              reason: '$field holds no newline');
-          expect(text, isNot(contains(direction)),
-              reason: '$field holds a direction character');
-          expect(singleLine(text), text, reason: '$field is one line');
-          expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
-              reason: '$field takes the rejection bound');
+        final bounded = {
+          'id': item['id'].dartify()! as String,
+          'type': item['type'].dartify()! as String,
+          'owner': item['owner'].dartify()! as String,
+          'sharedWith':
+              (item['sharedWith']!.dartify()! as List).single! as String,
+        };
+        for (final MapEntry(:key, :value) in bounded.entries) {
+          expect(value, isNot(contains('\n')), reason: '$key holds no newline');
+          expect(value, isNot(contains(direction)),
+              reason: '$key holds a direction character');
+          expect(singleLine(value), value, reason: '$key is one line');
+          expect(value.length, lessThanOrEqualTo(maxErrorMessageLength),
+              reason: '$key takes the rejection bound');
         }
         expect((item['data']! as JSObject)['n'].dartify(), 1);
       });
