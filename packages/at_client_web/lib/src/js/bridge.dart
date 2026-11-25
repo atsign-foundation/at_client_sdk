@@ -126,8 +126,8 @@ Stream<void> networkChanges() {
 /// A rejection reason: a plain object with `code` and `message`, never an
 /// `Error`; a collection failure adds `id`, `owner`, `kind` and `failures`
 /// where it has them, and the rejection of a bad address owner adds `id`.
-/// `id` and `owner` are peer-chosen and so take the message's bound: one line,
-/// at most [maxErrorMessageLength] long.
+/// `id`, `owner` and each failure's `recipient` are peer-chosen and so take the
+/// message's bound: one line, at most [maxErrorMessageLength] long.
 JSObject _toRejection(Object error) {
   final code = errorCodeOf(error);
   final reason = JSObject()..['code'] = code.toJS;
@@ -142,7 +142,8 @@ JSObject _toRejection(Object error) {
       }
       if (error.causeType case final kind?) reason['kind'] = kind.toJS;
       if (error.failures.isNotEmpty) {
-        reason['failures'] = _toJs(error.failures);
+        reason['failures'] = _toJs(
+            [for (final failure in error.failures) _boundedFailure(failure)]);
       }
     case InvalidArgumentException(:final id?):
       reason['id'] = boundedRejectionText(id).toJS;
@@ -150,6 +151,13 @@ JSObject _toRejection(Object error) {
   }
   return reason;
 }
+
+/// A collection [failure] with its peer-chosen `recipient` bounded like the
+/// rejection's own `id` and `owner`; every other field passes through.
+Map<String, String> _boundedFailure(Map<String, String> failure) => {
+      for (final MapEntry(:key, :value) in failure.entries)
+        key: key == 'recipient' ? boundedRejectionText(value) : value,
+    };
 
 /// A promise of [body]'s result that rejects with a [_toRejection] of whatever
 /// [body] throws.

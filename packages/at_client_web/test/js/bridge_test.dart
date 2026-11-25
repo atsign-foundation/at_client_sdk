@@ -1493,18 +1493,30 @@ void main() {
       });
 
       test('a peer-chosen id and owner are bounded in a rejection', () async {
+        final direction = String.fromCharCode(0x202e);
         adapter.failure = JsCollectionsError(CollectionFailure.notFound,
             id: 'i' * 600,
-            owner: '@bob\n${String.fromCharCode(0x202e)}${'x' * 600}');
+            owner: '@bob\n$direction${'x' * 600}',
+            failures: [
+              {
+                'op': 'update',
+                'recipient': '@bob\n$direction${'y' * 600}',
+                'kind': 'Unknown',
+              }
+            ]);
 
         final r = await rejected(invoke(c, 'list'));
 
         final id = r.field('id')! as String;
         final owner = r.field('owner')! as String;
-        for (final field in [id, owner]) {
+        final failure = (r.field('failures')! as List).single as Map;
+        final recipient = failure['recipient']! as String;
+        for (final field in [id, owner, recipient]) {
           expect(singleLine(field), field, reason: 'one line');
           expect(field.length, lessThanOrEqualTo(maxErrorMessageLength));
         }
+        expect(failure['op'], 'update');
+        expect(failure['kind'], 'Unknown');
       });
 
       test(
