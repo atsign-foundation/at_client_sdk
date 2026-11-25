@@ -349,7 +349,7 @@ JSObject _envelope(Map<String, Object?> map) {
 }
 
 /// [event] with its peer-chosen label fields bounded like the subscribe
-/// envelope's: `id`, `owner` and `from`, and each ancestry entry's
+/// envelope's: `id`, `owner` and `from`, and each ancestry entry's `id` and
 /// `subName`, are one line and at most [maxErrorMessageLength] long. Every
 /// other field, the payload included, is delivered as received.
 JsEvent _boundedEvent(JsEvent event) => {
@@ -361,7 +361,9 @@ JsEvent _boundedEvent(JsEvent event) => {
                 ancestor is Map<String, Object?>
                     ? {
                         for (final MapEntry(:key, :value) in ancestor.entries)
-                          key: key == 'subName' ? _boundedText(value) : value,
+                          key: key == 'subName' || key == 'id'
+                              ? _boundedText(value)
+                              : value,
                       }
                     : ancestor,
             ],

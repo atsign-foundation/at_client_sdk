@@ -231,8 +231,8 @@ Feature: Collections store, read and share items through the session
   @dos @forgery
   Scenario: a peer-chosen watch event field is bounded
     Given a collection watch with an event callback
-    When a watch event arrives whose id, owner, from and ancestry subName carry a newline, a direction character and 600 characters
-    Then all four come back on one line, at most the rejection bound long
+    When a watch event arrives whose id, owner, from and ancestry id and subName carry a newline, a direction character and 600 characters
+    Then all five come back on one line, at most the rejection bound long
     And its data is unchanged
 
   Scenario: a collection rejection keeps code, message, id, owner, kind and failures
