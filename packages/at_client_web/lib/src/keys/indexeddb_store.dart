@@ -6,8 +6,9 @@ import 'dart:typed_data';
 
 import 'package:at_auth/passkey.dart' show PasskeyHintStore;
 import 'package:at_client/at_client.dart' show AtSignLogger;
-import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:web/web.dart';
+
+import '../exceptions.dart';
 
 final _logger = AtSignLogger('indexedDbHintStore');
 
@@ -90,8 +91,7 @@ class IndexedDbHintStore implements PasskeyHintStore {
           if (version != null && name == 'VersionError') {
             opened.complete(_openDatabase(dbName, null));
           } else {
-            opened
-                .completeError(IndexedDbException._naming('open failed', name));
+            opened.completeError(_failure('open failed', name));
           }
         }.toJS;
         request.onblocked = (Event event) {
@@ -227,15 +227,15 @@ Future<void> _transactionToFuture(IDBTransaction tx) {
   }.toJS;
   tx.onerror = (Event event) {
     if (completer.isCompleted) return;
-    completer.completeError(IndexedDbException._naming(
+    completer.completeError(_failure(
         'transaction failed',
         _errorName(() => tx.error) ??
             _errorName(() => (event.target as IDBRequest?)?.error)));
   }.toJS;
   tx.onabort = (Event event) {
     if (completer.isCompleted) return;
-    completer.completeError(IndexedDbException._naming(
-        'transaction aborted', _errorName(() => tx.error)));
+    completer.completeError(
+        _failure('transaction aborted', _errorName(() => tx.error)));
   }.toJS;
   return completer.future;
 }
@@ -248,7 +248,7 @@ Future<T> _guarded<T>(String operation, FutureOr<T> Function() body) async {
   } on IndexedDbException {
     rethrow;
   } on Object catch (e) {
-    throw IndexedDbException._naming('$operation failed', _errorName(() => e));
+    throw _failure('$operation failed', _errorName(() => e));
   }
 }
 
@@ -265,19 +265,6 @@ String? _errorName(Object? Function() read) {
   }
 }
 
-/// Thrown when IndexedDB fails to open the passkey database or to complete a
-/// request or transaction on it.
-///
-/// The message names the browser's error, such as `QuotaExceededError`, when
-/// the browser gave one, and never holds a stored value.
-class IndexedDbException extends AtException {
-  /// Creates the exception with [message].
-  IndexedDbException(super.message);
-
-  /// [what] went wrong, with the browser's error [name] when it gave one.
-  IndexedDbException._naming(String what, String? name)
-      : super(name == null ? what : '$what: $name');
-
-  @override
-  String toString() => 'IndexedDbException: $message';
-}
+/// [what] went wrong, with the browser's error [name] when it gave one.
+IndexedDbException _failure(String what, String? name) =>
+    IndexedDbException(name == null ? what : '$what: $name');
