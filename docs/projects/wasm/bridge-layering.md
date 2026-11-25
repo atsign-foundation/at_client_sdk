@@ -261,7 +261,7 @@ would become a contract that the next change breaks, and the two sides bound tex
 log text is bounded by `sanitizeLogText`, while JS messages have their own. The one text that passes through is
 `AtCollection`'s item-id refusal (`CollectionRefusal.itemId`), bounded to one line of at most 128 characters
 (`maxErrorMessageLength`); the scenario `An argument AtCollection refuses still rejects with
-COLLECTION_INVALID_ARGUMENT` (`js_collections_adapter.feature:315`) holds that path.
+COLLECTION_INVALID_ARGUMENT` (`js_collections_adapter.feature:323`) holds that path.
 
 **Would reopen if.** A caller outside the bridge needs the same wording, which would make it a shared function
 rather than a field.

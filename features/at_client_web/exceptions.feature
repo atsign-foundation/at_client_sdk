@@ -24,6 +24,11 @@ Feature: Every exception the package declares is an AtException in one file
     When the first names PortalSessionOfflineException and UnsupportedKeyMaterialException, and the second also names SetupLockTimeoutException, IndexedDbException and the at_client and at_auth passkey exceptions the barrel lists today
     Then both files analyze without error
 
+  Scenario: every member carrying @JSExport takes and returns JS types only
+    Given every class in lib/src/js/bridge.dart and its member-level @JSExport annotations
+    Then each exported member takes and returns only JS types
+    And no member is exported by a class-level annotation
+
   Scenario: only the bridge and its code mapping name an error code
     Given every Dart file under packages/at_client_web/lib except lib/src/js/bridge.dart and the bridge's code-mapping file
     Then none holds a string literal that is one of the bridge's error codes or starts with COLLECTION_
