@@ -44,7 +44,7 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
 
   /// Create-only, like every [WrittenAtKeysIo.write]: throws
   /// [AtKeysFileOverwriteException] when keys for [atsign] are already
-  /// loaded. Use [flush] (or [update]) for later mutations.
+  /// loaded. Use [update] to change keys already stored.
   ///
   /// Throwing as the file store does keeps this an honest stand-in: code that
   /// writes twice fails here as it would against the file.
@@ -54,7 +54,7 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
     if (_internal.containsKey(key)) {
       throw AtKeysFileOverwriteException(
           'Keys for $atsign are already loaded; write is create-only — '
-          'flush persists mutations');
+          'use update to change them');
     }
     _internal[key] = atKeys;
   }

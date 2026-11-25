@@ -7,6 +7,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:test/test.dart';

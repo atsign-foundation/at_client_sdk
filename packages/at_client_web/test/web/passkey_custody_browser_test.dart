@@ -19,11 +19,10 @@ import 'package:at_client/at_client.dart'
         ServerMutexLease;
 import 'package:at_client/passkey.dart';
 import 'package:at_commons/at_commons.dart' show AtException;
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_client_web/src/keys/web_crypto_passkey.dart';
 import 'package:at_client_web/src/keys/web_prf_environment.dart';
-import 'package:at_client_web/src/session/portal_session.dart'
-    show PortalSessionOfflineException;
 import 'package:at_client_web/src/session/web_setup_lock.dart';
 import 'package:at_client_web/src/session/web_storage_persistence.dart';
 import 'package:test/test.dart';
