@@ -5,7 +5,7 @@ import 'package:at_client_web/src/keyed_queue.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('a cap below 1 is refused, naming maxQueuedPerKey', () {
+  test('the queue cap rejects a non-positive size', () {
     for (final cap in [0, -1]) {
       expect(
           () => KeyedQueue<String>(maxQueuedPerKey: cap),

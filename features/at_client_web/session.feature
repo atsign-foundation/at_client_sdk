@@ -100,6 +100,12 @@ Feature: create opens a session and close ends it
     Then it rejects with code invalid_argument and a message naming namespace without its value
     And no session is opened
 
+  Scenario: a pre-normalised namespace must already be folded
+    Given a session namespace that is already folded, passed with namespaceIsNormalized true
+    When the session opens a collection
+    Then the collection opens under that namespace unchanged
+    And a namespace that is not folded, passed with namespaceIsNormalized true, is refused with ArgumentError naming namespace and "is not a valid namespace segment"
+
   Scenario: credential-less keys reject with bad_key
     Given create options whose .atKeys document holds no usable credential
     When create is called

@@ -113,6 +113,11 @@ Feature: Collections store, read and share items through the session
     Then the last write rejects with COLLECTION_FAILED naming QueueLimitException
     And the queued writes still run once the first finishes
 
+  Scenario: the queue cap rejects a non-positive size
+    Given a write queue cap of 0 or -1
+    When the queue is constructed with that cap
+    Then each construction throws ArgumentError naming maxQueuedPerKey and carrying that cap as the invalid value
+
   Scenario: collection operations and watch reject with closed after session close
     Given an open collection handle from a session
     When session.close() is called
