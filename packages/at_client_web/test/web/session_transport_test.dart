@@ -81,7 +81,7 @@ void main() {
 
   test(
       "A direct session's connections send nothing before the caller's first "
-      'command', () {
+      "command", () {
     final t = sessionTransport(SessionTransportOptions());
 
     expect(lookUpFor(t).onConnect, isNull,
