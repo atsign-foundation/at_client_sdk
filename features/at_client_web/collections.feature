@@ -102,8 +102,16 @@ Feature: Collections store, read and share items through the session
   Scenario: concurrent update, share and remove on one item run sequentially without losing writes
     Given an item in an open adapter
     When update and share (or remove) are started concurrently for that item
-    Then they execute one after the other for that (id, owner)
+    Then they execute one after the other for that (id, owner) while the queue holds fewer than 64 waiters
+    And a writer that finds the queue at its cap is refused rather than running in order
     And the second operation sees the state written by the first without losing writes
+
+  Scenario: a write queue saturated behind one item rejects with COLLECTION_FAILED
+    Given an item whose first write is stalled in an open adapter
+    When 64 further writes for that item are queued behind it
+    And one more write for that item is made
+    Then the last write rejects with COLLECTION_FAILED naming QueueLimitException
+    And the queued writes still run once the first finishes
 
   Scenario: collection operations and watch reject with closed after session close
     Given an open collection handle from a session

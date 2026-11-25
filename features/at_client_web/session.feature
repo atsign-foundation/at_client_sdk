@@ -23,7 +23,9 @@ Feature: create opens a session and close ends it
   #   credential-less keys before opening a connection ("create rejects with
   #   unsupported outside a secure context", "invalid or empty atSign rejects
   #   naming atSign", "invalid or empty namespace rejects naming namespace",
-  #   "credential-less keys reject with bad_key").
+  #   "credential-less keys reject with bad_key"), and a saturated open queue
+  #   refuses the next open ("a saturated open queue rejects the next open,
+  #   which maps to internal").
   # Forgery: options are read only as own plain properties and keys are parsed
   #   into AtKeys rather than trusted as strings ("keys may be an object as
   #   well as the document text").
@@ -43,6 +45,13 @@ Feature: create opens a session and close ends it
     Then create's promise is still pending
     When the opener then returns a session
     Then create resolves with that session
+
+  Scenario: a saturated open queue rejects the next open, which maps to internal
+    Given an open still running for one atSign and enrollment
+    When 16 further opens for that atSign and enrollment are queued
+    And one more open for that atSign and enrollment is made
+    Then the last open is refused with QueueLimitException
+    And the bridge maps that refusal to code internal
 
   Scenario: keys may be an object as well as the document text
     Given create options whose keys are the parsed .atKeys object instead of its JSON text
