@@ -12,7 +12,7 @@
 /// * [singleLine] flattens unprintable runes to spaces instead of escaping
 ///   them, for a field a JS caller writes onto one line.
 ///
-/// Follow-up: share the predicate with `at_commons` once its private
+/// Follow-up (#2621): share the predicate with `at_commons` once its private
 /// `_unprintable` may change, so the two sets cannot drift apart again.
 library;
 
