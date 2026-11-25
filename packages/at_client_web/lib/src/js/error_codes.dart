@@ -56,8 +56,9 @@ String collectionErrorCode(CollectionFailure kind) => switch (kind) {
     };
 
 /// The message JS sees for [error]: fixed here, or built from the exception's
-/// fields, each echoed field bounded to one line. A message names a parameter
-/// and never its value.
+/// fields, each echoed field bounded to one line. A message names the
+/// parameter or item; it carries values only bounded and single-lined, at
+/// most [maxErrorMessageLength] long, and never echoes key material.
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
       JsCollectionsError() => _collectionMessage(error),
