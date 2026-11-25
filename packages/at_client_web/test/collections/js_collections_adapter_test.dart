@@ -173,6 +173,7 @@ void main() {
     test(
         'An argument AtCollection refuses still rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
+      // The item-id arm: a real AtCollection refuses the id.
       final todos = await open();
 
       await expectLater(
@@ -183,6 +184,35 @@ void main() {
               .having(atErrorMessage, 'message', isNot('invalid argument'))
               .having(
                   (e) => atErrorMessage(e).length, 'bounded', lessThan(200))));
+
+      // The type-tag arm: AtCollection refuses a collection already open on
+      // another type tag.
+      final typeTag = MockAtCollection();
+      when(() => typeTag.getOrNull('a1', '@alice'.toAtsign())).thenThrow(
+          ArgumentError.value('x', 'typeTag',
+              'collection is already open with a different type'));
+
+      await expectLater(
+          JsCollectionsAdapter(typeTag).get(mine('a1')),
+          throwsA(isA<JsCollectionsError>()
+              .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+              .having((e) => e.causeType, 'kind', 'ArgumentError')
+              .having(atErrorMessage, 'message',
+                  'collection is already open with a different type')));
+
+      // The where-clause arm: AtCollection refuses with a plain ArgumentError,
+      // which the bridge words as 'invalid argument'.
+      final where = MockAtCollection();
+      when(() => where.getItemsAsStream())
+          .thenThrow(ArgumentError('invalid where clause'));
+
+      await expectLater(
+          JsCollectionsAdapter(where)
+              .query([(path: 'status', op: '==', value: 'open')]),
+          throwsA(isA<JsCollectionsError>()
+              .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+              .having((e) => e.causeType, 'kind', 'ArgumentError')
+              .having(atErrorMessage, 'message', 'invalid argument')));
     });
 
     test(
