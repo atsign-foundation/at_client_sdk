@@ -569,10 +569,15 @@ class BridgeCollection {
   }
 
   /// The item as an object whose `data` is converted from depth 0, so the
-  /// cap counts the data's own levels and not the envelope around it.
+  /// cap counts the data's own levels and not the envelope around it. `id`
+  /// and `type` are peer-stored, so both take the rejection bound: one line,
+  /// at most [maxErrorMessageLength] long.
   JSObject _item(JsItem item) {
     try {
-      return _envelope(item);
+      return _envelope({
+        for (final MapEntry(:key, :value) in item.entries)
+          key: key == 'id' || key == 'type' ? _boundedText(value) : value,
+      });
     } on JsCollectionsError catch (e) {
       if (e.kind == CollectionFailure.tooDeep &&
           (e.id == null || e.owner == null)) {

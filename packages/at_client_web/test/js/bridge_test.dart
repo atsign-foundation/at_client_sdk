@@ -1638,6 +1638,31 @@ void main() {
         }
       });
 
+      test('a peer-stored item id and type are bounded', () async {
+        final direction = String.fromCharCode(0x202e);
+        final hostile = '${'i' * 600}\n$direction';
+        adapter.listing = (
+          items: [
+            {...adapter.item, 'id': hostile, 'type': hostile}
+          ],
+          unreadable: const []
+        );
+
+        final listing = (await resolved(invoke(c, 'list')))! as JSObject;
+        final item = (listing['items']! as JSArray).toDart.single! as JSObject;
+        for (final field in ['id', 'type']) {
+          final text = item[field].dartify()! as String;
+          expect(text, isNot(contains('\n')),
+              reason: '$field holds no newline');
+          expect(text, isNot(contains(direction)),
+              reason: '$field holds a direction character');
+          expect(singleLine(text), text, reason: '$field is one line');
+          expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
+              reason: '$field takes the rejection bound');
+        }
+        expect((item['data']! as JSObject)['n'].dartify(), 1);
+      });
+
       test('every collection code reaches JS unchanged', () async {
         for (final kind in [
           CollectionFailure.notFound,
