@@ -258,7 +258,9 @@ Persistence has three verbs:
   `addKey` is deliberately not split: a material states its own owner through
   its `enrollmentId`, and a null one routes it to the atSign's container.
 
-- `flush(atsign, atKeys)` — persist the current in-memory state. If the
+- `flush(atsign, atKeys)` — persist a whole keyset that was not read from
+  the file, such as a pending enrollment's keys once its approval completes
+  them; keys already in the file are changed through `update`. If the
   file exists, `flush` first validates that nothing it holds would be lost
   (key material is never removed — a key's `status` may only move forward,
   `pending` → `active` → `retired` → `dead`), then rewrites it; flushing a legacy

@@ -191,7 +191,8 @@ copied into once the client is open — so a login from a `.atKeys` file
 populates the keychain for next time.
 
 `KeychainAtKeysIo` is a full `WrittenAtKeysIo`: as well as `read` and
-`write` it implements `flush`, and inherits `update`. That matters because
+`write` it implements `flush`, and overrides `update` to hold the
+keychain's write lock from its read to its write. That matters because
 the post-quantum paths add key material to the store as they run — a
 namespace key's private half, the atSign's signing-root private — and on
 Flutter this is the *default* store. Use `update` for any addition, never a
@@ -200,7 +201,8 @@ hand-rolled `read` → mutate → `flush`; see
 
 `write` is create-only, like every other `WrittenAtKeysIo`: it throws
 `AtKeysFileOverwriteException` if the atSign already has an entry. To
-persist a change to keys that are already stored, use `flush` or `update`.
+change keys that are already stored, use `update`; `flush` is only for a
+keyset that was not read from the keychain.
 `read` of an atSign the keychain does not hold throws
 `AtKeysSourceAbsentException`, as the file store does, which is how
 `Atsign.enroll` tells "no keys yet" from "keys this process cannot read".
