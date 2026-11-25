@@ -1139,9 +1139,20 @@ void main() {
       });
 
       test('subscribe with no onError does not throw', () {
+        final logged = <String>[];
+        final warn = web.console.getProperty<JSAny?>('warn'.toJS);
+        web.console.setProperty(
+            'warn'.toJS,
+            ((JSAny? message) {
+              logged.add('${message?.dartify()}');
+            }).toJS);
+        addTearDown(() => web.console.setProperty('warn'.toJS, warn));
+
         invoke(s, 'subscribe', ['x'.toJS, (() {}).toJS]);
 
         expect(() => session.errorSink!(StateError('x')), returnsNormally);
+        expect(logged,
+            ['at_client_web: a subscription error was dropped (internal)']);
       });
 
       test('a non-function onError answers a rejection object', () {

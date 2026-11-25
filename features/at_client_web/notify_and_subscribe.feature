@@ -186,6 +186,7 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given a subscription with no onError
     When the session reports a subscription error
     Then nothing is thrown
+    And the error is logged
 
   Scenario: close stops delivering subscription events and errors even if the stream emits before cancel settles
     Given an active subscription whose stream emits an event or error after close starts
