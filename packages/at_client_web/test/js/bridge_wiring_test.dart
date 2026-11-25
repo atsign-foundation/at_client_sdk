@@ -249,7 +249,7 @@ void main() {
 
     var closed = false;
     final closing = session.close().then((_) => closed = true);
-    await Future<void>.delayed(Duration.zero);
+    await pumpEventQueue();
     expect(closed, isFalse, reason: 'close awaits the recorded stop');
     passkey.stopGate!.complete();
     await closing;

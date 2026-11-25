@@ -1091,7 +1091,7 @@ void main() {
       });
       var closed = false;
       final closing = own.close().then((_) => closed = true);
-      await Future<void>.delayed(Duration.zero);
+      await pumpEventQueue();
       expect(closed, isFalse);
       gate.complete();
       await closing;

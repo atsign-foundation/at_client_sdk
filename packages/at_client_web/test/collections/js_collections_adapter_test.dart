@@ -542,7 +542,7 @@ void main() {
         final id = inv.namedArguments[#id] as String;
         seen.add('create($id) began');
         // Let a create that is not queued start before this one ends.
-        await Future<void>.delayed(Duration.zero);
+        await pumpEventQueue();
         if (exists) {
           seen.add('create($id) rejected');
           throw StateError('Cannot create item with id "$id": already exists');

@@ -690,7 +690,7 @@ void main() {
         var closed = false;
         final closing =
             resolved(invoke(result, 'close')).then((_) => closed = true);
-        await Future<void>.delayed(Duration.zero);
+        await pumpEventQueue();
         expect(closed, isFalse,
             reason: "close awaits the passkey session's stop");
         expect(passkey.stops, 1);
