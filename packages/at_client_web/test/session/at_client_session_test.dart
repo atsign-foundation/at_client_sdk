@@ -1044,14 +1044,22 @@ void main() {
           throwsA(isA<InvalidArgumentException>()));
     });
 
-    test('a pre-normalised namespace is taken as given', () async {
-      // The caller's contract: the value is already the output of
-      // normalizeSessionNamespace, so the session neither folds nor checks it.
+    test('a pre-normalised namespace must already be folded', () async {
+      // The flag means "already folded", not "unchecked": a folded value is
+      // used unchanged, and an un-folded one is refused like any invalid
+      // namespace.
       final pre = AtClientSession(client,
-          namespace: 'MyApp', namespaceIsNormalized: true, warn: warnings.add);
+          namespace: 'myapp', namespaceIsNormalized: true, warn: warnings.add);
       await pre.collection('Todos', type: 'Todo', eventSource: 'data');
 
-      expect(client.openedCollections.last.$1, 'todos.MyApp');
+      expect(client.openedCollections.last.$1, 'todos.myapp');
+      expect(
+          () => AtClientSession(client,
+              namespace: 'MyApp', namespaceIsNormalized: true),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'namespace')
+              .having((e) => e.message, 'message',
+                  'is not a valid namespace segment')));
     });
   });
 

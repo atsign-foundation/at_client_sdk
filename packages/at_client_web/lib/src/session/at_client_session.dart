@@ -120,7 +120,7 @@ class AtClientSession implements Session {
   /// [namespace] is the session's namespace, folded to lower case and
   /// validated here unless [namespaceIsNormalized] says it is already the
   /// [normalizeSessionNamespace] result (as [SessionOptions] gives it), in
-  /// which case it is taken as given and validated once, by the options.
+  /// which case it must still equal that result and is refused otherwise.
   /// [stop] ends what opened the client, by default the client's own stop;
   /// [close] awaits it. [warn] receives the warnings the session raises, by
   /// default through the atSign logger; [isNavigatorOnline] tells a
@@ -140,9 +140,7 @@ class AtClientSession implements Session {
       Future<void> Function()? stop,
       ItemLocks? itemLocks,
       Set<StreamSubscription<Object?>>? subscriptions})
-      : _namespace = namespaceIsNormalized
-            ? namespace
-            : normalizeSessionNamespace(namespace),
+      : _namespace = _checkedNamespace(namespace, namespaceIsNormalized),
         _itemLocks = itemLocks ?? ItemLocks(),
         _subscriptions = subscriptions ?? {},
         _warn = warn ?? _logger.warning,
@@ -153,6 +151,19 @@ class AtClientSession implements Session {
         _client.connection.changes.listen((state) => _reportStatusOf(state));
     _network = networkChanges
         ?.listen((_) => _reportStatusOf(_client.connection.current));
+  }
+
+  /// [namespace] folded and validated, or, when [isNormalized], the same
+  /// value unchanged if it is already the [normalizeSessionNamespace] result.
+  /// A value that is not is refused with the error [SessionOptions] uses.
+  static String _checkedNamespace(String namespace, bool isNormalized) {
+    if (!isNormalized) return normalizeSessionNamespace(namespace);
+    try {
+      if (normalizeSessionNamespace(namespace) == namespace) return namespace;
+    } on InvalidArgumentException {
+      // Refused below, as an un-folded value is.
+    }
+    throw ArgumentError('is not a valid namespace segment', 'namespace');
   }
 
   static final _logger = AtSignLogger('AtClientSession');
