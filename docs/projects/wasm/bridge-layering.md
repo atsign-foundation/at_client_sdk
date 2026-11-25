@@ -106,8 +106,8 @@ be released.
 **Decision and why.** One private function opens either kind of session and `close()` awaits its stop. The deciding
 argument is the same as for the rejected family, teardown in one place, without touching proven machinery:
 `portalSession`, `passkeyLogin`, `onboardNewAtSign` and `PasskeySession` keep their names and shapes, and the
-public surface does not grow. `close()` is idempotent, waits for an open in progress, and waits no longer than
-D-30's bound (see [Opening a session](#opening-a-session-d-40)).
+public surface does not grow. `close()` is idempotent and its wait is no longer than D-30's bound (see
+[Opening a session](#opening-a-session-d-40)).
 
 **Would reopen if.** A caller outside the bridge needs to open a session by either route through one public type,
 or a session's teardown can't be expressed as one awaitable stop.
