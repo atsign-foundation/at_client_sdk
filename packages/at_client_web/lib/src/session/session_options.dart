@@ -12,7 +12,7 @@ import 'session_transport_options.dart';
 /// an [ArgumentError] naming the field, never carrying its value; it checks
 /// in the order atSign, namespace, rootDomain, then the form's own fields.
 /// The root domain is given as the text `host` or `host:port` and parsed
-/// here, once; no other layer parses or checks it.
+/// here, before anything is opened; no other layer parses or checks it.
 sealed class SessionOptions {
   SessionOptions._(
       {required String atSign, required String namespace, String? rootDomain})
