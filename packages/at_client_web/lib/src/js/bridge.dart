@@ -56,6 +56,7 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
   try {
     return AtClientSession(client,
         namespace: options.namespace,
+        namespaceIsNormalized: true,
         isNavigatorOnline: () => web.window.navigator.onLine,
         networkChanges: networkChanges(),
         warn: _logger.warning,

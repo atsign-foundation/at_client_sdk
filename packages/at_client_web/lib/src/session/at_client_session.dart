@@ -117,6 +117,10 @@ abstract interface class Session {
 /// A [Session] on an [AtClient], keying each value as
 /// `<key>.<namespace>@<sharedBy>` with the namespace folded to lower case.
 class AtClientSession implements Session {
+  /// [namespace] is the session's namespace, folded to lower case and
+  /// validated here unless [namespaceIsNormalized] says it is already the
+  /// [normalizeSessionNamespace] result (as [SessionOptions] gives it), in
+  /// which case it is taken as given and validated once, by the options.
   /// [stop] ends what opened the client, by default the client's own stop;
   /// [close] awaits it. [warn] receives the warnings the session raises, by
   /// default through the atSign logger; [isNavigatorOnline] tells a
@@ -129,13 +133,16 @@ class AtClientSession implements Session {
   /// one.
   AtClientSession(this._client,
       {required String namespace,
+      bool namespaceIsNormalized = false,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
       Stream<void>? networkChanges,
       Future<void> Function()? stop,
       ItemLocks? itemLocks,
       Set<StreamSubscription<Object?>>? subscriptions})
-      : _namespace = normalizeSessionNamespace(namespace),
+      : _namespace = namespaceIsNormalized
+            ? namespace
+            : normalizeSessionNamespace(namespace),
         _itemLocks = itemLocks ?? ItemLocks(),
         _subscriptions = subscriptions ?? {},
         _warn = warn ?? _logger.warning,

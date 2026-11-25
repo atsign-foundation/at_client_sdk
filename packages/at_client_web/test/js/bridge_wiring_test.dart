@@ -73,7 +73,8 @@ void main() {
             ..rootPort = root.rootPort
             ..monitorAutoStart = false,
         );
-        return AtClientSession(client, namespace: o.namespace);
+        return AtClientSession(client,
+            namespace: o.namespace, namespaceIsNormalized: true);
       },
     ));
   });

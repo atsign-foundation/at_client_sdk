@@ -1040,6 +1040,16 @@ void main() {
       expect(() => AtClientSession(client, namespace: 'a.b'),
           throwsA(isA<InvalidArgumentException>()));
     });
+
+    test('a pre-normalised namespace is taken as given', () async {
+      // The caller's contract: the value is already the output of
+      // normalizeSessionNamespace, so the session neither folds nor checks it.
+      final pre = AtClientSession(client,
+          namespace: 'MyApp', namespaceIsNormalized: true, warn: warnings.add);
+      await pre.collection('Todos', type: 'Todo', eventSource: 'data');
+
+      expect(client.openedCollections.last.$1, 'todos.MyApp');
+    });
   });
 
   group('session errors', () {
