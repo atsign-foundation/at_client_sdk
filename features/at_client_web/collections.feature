@@ -214,6 +214,12 @@ Feature: Collections store, read and share items through the session
     Then it returns {code: invalid_argument} instead of the stop function
     And nothing is thrown
 
+  Scenario: a watch cancel that fails is logged
+    Given an open collection whose watch cancel rejects
+    When the stop function returned by watch is called
+    Then the rejection is caught and "Failed to cancel collection watch" is logged as a warning
+    And no error escapes
+
   Scenario: a collection rejection keeps code, message, id, owner, kind and failures
     Given a collection whose calls fail as a missing item, another owner's item, a failed open with a StateError and a partial write failure
     When each call rejects

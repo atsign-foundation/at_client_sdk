@@ -19,7 +19,8 @@ Feature: The connection status is readable and observable
   #   and re-classifies the current state when the browser's online/offline
   #   state changes, emitting only when the status differs; it retains the last
   #   state after close without replaying stale transitions ("status() reads the
-  #   latest value", "an event that changes nothing reports nothing").
+  #   latest value", "an event that changes nothing reports nothing", "close
+  #   ends the reporting and keeps the last status").
   # DoS: non-function callbacks are rejected synchronously without registering a
   #   listener ("onStatus with non-function callback returns {code: invalid_argument}
   #   without throwing").
@@ -50,6 +51,12 @@ Feature: The connection status is readable and observable
     Given an open session
     When the state changes
     Then status returns the new state
+
+  Scenario: close ends the reporting and keeps the last status
+    Given an open session already reporting connected
+    When a status listener is attached, the session is closed, and the connection then reports stopped
+    Then the listener is not called
+    And status still returns connected
 
   Scenario: onStatus after close answers {code: closed}
     Given a closed session

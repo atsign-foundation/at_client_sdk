@@ -26,6 +26,7 @@ import 'package:at_client_web/src/session/session_options.dart';
 import 'package:at_client_web/src/session/web_passkey_entry.dart'
     show openEntryHintStore;
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:test/fake.dart';
 import 'package:test/test.dart';
 import 'package:web/web.dart' as web;
@@ -58,6 +59,7 @@ class _FakeAdapter implements ItemCollection {
   void Function(JsEvent)? onEvent;
   void Function(JsCollectionsError)? onError;
   Object? last;
+  Object? cancelFailure;
   var cancelled = 0;
 
   Future<T> _run<T>(String call, T Function() result, [Object? args]) async {
@@ -103,8 +105,22 @@ class _FakeAdapter implements ItemCollection {
     if (failure case final error?) throw error;
     this.onEvent = onEvent;
     this.onError = onError;
-    return () async => cancelled++;
+    return () async {
+      if (cancelFailure case final error?) throw error;
+      cancelled++;
+    };
   }
+}
+
+/// Collects the lines the bridge's logger writes, as the other tests do. The
+/// logger is built once and keeps the handler it was built with, so the list
+/// is cleared rather than the handler replaced between tests.
+class _Collect implements LoggingHandler {
+  final List<String> lines = [];
+
+  @override
+  void call(record) =>
+      lines.add('${record.level.name}|${record.loggerName}|${record.message}');
 }
 
 /// A [Session] that records each call.
@@ -271,6 +287,14 @@ class _RefusingHintStore extends Fake implements IndexedDbHintStore {
 }
 
 void main() {
+  // The bridge's logger is built on first use and keeps the handler it was
+  // built with, so the collector is installed before any test touches it.
+  final logs = _Collect();
+  final previousHandler = AtSignLogger.defaultLoggingHandler;
+  AtSignLogger.defaultLoggingHandler = logs;
+  tearDownAll(() => AtSignLogger.defaultLoggingHandler = previousHandler);
+  setUp(logs.lines.clear);
+
   late _FakeSession session;
   late List<SessionOptions> opened;
   late bool secure;
@@ -1608,6 +1632,22 @@ void main() {
 
         expect(r['code'].dartify(), 'invalid_argument');
         expect(r['message'].dartify() as String, contains('onEvent'));
+      });
+
+      test('a watch cancel that fails is logged', () async {
+        adapter.cancelFailure = StateError('cancel failed');
+        final off = invoke(c, 'watch', [((JSAny? _) {}).toJS])! as JSFunction;
+
+        final escaped = <Object>[];
+        await runZonedGuarded(() async {
+          off.callAsFunction();
+          await pumpEventQueue();
+        }, (error, stack) => escaped.add(error));
+
+        expect(escaped, isEmpty,
+            reason: 'the bridge catches the cancel failure');
+        expect(logs.lines,
+            contains('WARNING|BridgeEntry|Failed to cancel collection watch'));
       });
 
       test(
