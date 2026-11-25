@@ -280,6 +280,12 @@ Feature: Collections store, read and share items through the session
     When each removes the same item, the id differing only in case
     Then the second starts after the first finishes, and an operation on another id does not wait
 
+  Scenario: two sessions do not queue behind each other
+    Given two open sessions over the same store
+    When each session starts an explicit-id write to the same item
+    Then both writes begin before either ends
+    And the write that lands last wins
+
   Scenario: warns, never swallows silently, when a watch fails to cancel
     Given a session with two active collection watches whose cancel throws
     When close is called

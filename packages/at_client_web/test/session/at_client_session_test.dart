@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/item_locks.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
-import 'package:test/fake.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import '../collections/adapter_test_utils.dart';
 
 class _FakeNotifications extends Fake implements NotificationService {
   final events = StreamController<AtNotification>.broadcast();
@@ -1049,6 +1052,97 @@ void main() {
       await pre.collection('Todos', type: 'Todo', eventSource: 'data');
 
       expect(client.openedCollections.last.$1, 'todos.MyApp');
+    });
+  });
+
+  group('two sessions on one store', () {
+    const ns = 'todos.demo';
+    final address = (id: 'i1', owner: '@alice'.toAtsign());
+    late FakeAtServer server;
+    late FakeAtClient alice;
+
+    setUp(() {
+      registerAdapterFallbacks();
+      server = FakeAtServer();
+      alice = server.client('@alice');
+      when(() => alice.mock.connection).thenReturn(AtConnection(
+          atSign: '@alice', attempt: (_) async => AtConnectionState.online()));
+    });
+
+    tearDown(() => alice.dispose());
+
+    test('two sessions do not queue behind each other', () async {
+      final first =
+          AtClientSession(alice.mock, namespace: 'demo', stop: () async {});
+      final second =
+          AtClientSession(alice.mock, namespace: 'demo', stop: () async {});
+      addTearDown(() async {
+        await first.close();
+        await second.close();
+      });
+      final a =
+          await first.collection('todos', type: 'Todo', eventSource: 'data');
+      final b =
+          await second.collection('todos', type: 'Todo', eventSource: 'data');
+      await rawCollection(alice, ns, writeTypeTag: 'Todo')
+          .create(obj: {'title': 'v1'}, id: 'i1');
+
+      final firstPutStarted = Completer<void>();
+      final releaseFirstPut = Completer<void>();
+      final secondPutStarted = Completer<void>();
+      final written = <String>[];
+      var puts = 0;
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (key.toString() == 'i1.$ns@alice') {
+          if (puts++ == 0) {
+            written.add('the first session began writing');
+            firstPutStarted.complete();
+            await releaseFirstPut.future;
+            written.add('the first session wrote');
+          } else {
+            written.add('the second session began writing');
+            secondPutStarted.complete();
+            written.add('the second session wrote');
+          }
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      // Start the first session's write and hold it at its key write.
+      final firstWrite = a.update(address, {'title': 'first'});
+      await firstPutStarted.future;
+
+      // The second session's write runs to completion while the first is
+      // still in flight: neither waits on the other's item lock.
+      final secondWrite = b.update(address, {'title': 'second'});
+      await secondPutStarted.future;
+      final secondResult = await secondWrite;
+
+      expect(written, [
+        'the first session began writing',
+        'the second session began writing',
+        'the second session wrote',
+      ]);
+      expect(secondResult['data'], {'title': 'second'});
+      expect(jsonDecode(server.storedValue('i1.$ns@alice')!)['obj'],
+          {'title': 'second'});
+
+      // Last writer wins: the first session's write lands last and stands.
+      releaseFirstPut.complete();
+      final firstResult = await firstWrite;
+
+      expect(written, [
+        'the first session began writing',
+        'the second session began writing',
+        'the second session wrote',
+        'the first session wrote',
+      ]);
+      expect(firstResult['data'], {'title': 'first'});
+      expect(jsonDecode(server.storedValue('i1.$ns@alice')!)['obj'],
+          {'title': 'first'});
     });
   });
 
