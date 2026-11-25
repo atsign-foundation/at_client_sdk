@@ -6,9 +6,10 @@ import '../keyed_queue.dart';
 /// Serialises operations on one item, keyed by the collection's namespace
 /// (already folded by the session), the item id folded to lower case and the
 /// owner. The key ignores every option a collection was opened with, so two
-/// handles on one item queue behind one another. The lock serialises writes
-/// through one session across all its handles; two sessions do not queue
-/// behind each other.
+/// handles on one item queue behind one another. The lock orders writes within
+/// one session, across all its handles. Two sessions (tabs, devices) do not
+/// queue behind each other and can still lose an update, last writer wins; a
+/// caller that needs cross-session ordering must serialise itself.
 final class ItemLocks {
   final _locks = KeyedQueue<(String, String, String)>();
 

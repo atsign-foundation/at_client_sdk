@@ -474,10 +474,11 @@ still rejects with `COLLECTION_ITEM_UNREADABLE`, and `get()` of an over-deep ite
 
 - Concurrent `update`, `share`, `remove`, and explicit-`id` `create` calls on the same
   `(namespace, id, owner)` run sequentially, across every collection handle the session opens
-  (they share one lock map), so overlapping local writes do not overwrite one another. The lock
-  serialises writes through one session across all its handles; two sessions do not queue behind
-  each other. Across separate devices or clients, last-writer-wins with a
-  pre-write re-read applies.
+  (they share one lock map), so overlapping local writes do not overwrite one another.
+- The lock orders writes within one session only. Two sessions — two tabs or two devices — do
+  not queue behind each other, and one can still lose an update (last writer wins). A caller that
+  needs cross-session ordering must serialise itself; the pre-write re-read narrows the window,
+  it does not close it.
 - Opening a collection whose `eventSource` is `'notifs'` or `'both'` (default) starts
   notification listening on the session's `notificationService`.
 - Closing the session cancels active collection watches and rejects subsequent collection
