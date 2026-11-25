@@ -21,11 +21,13 @@ Feature: Collections store, read and share items through the session
   #   only while open and stops on cancel or session close ("collection watch
   #   delivers events, including unknown, and unsubscribes (T6.5, T6.8)").
   # DoS: data nesting is capped at 64 levels both inbound and outbound,
-  #   unreadable items never fail list/query, and non-plain objects are rejected
-  #   ("collection data that is an array or too deep rejects naming data", "A
-  #   list reports an item nested 100000 levels deep without overflowing the
-  #   stack", "non-plain JS objects in collection arguments reject naming the
-  #   parameter").
+  #   unreadable items never fail list/query, non-plain objects are rejected,
+  #   and a watch event's peer-chosen labels take the message bound so none can
+  #   carry control characters or unbounded text into JS ("collection data that
+  #   is an array or too deep rejects naming data", "A list reports an item
+  #   nested 100000 levels deep without overflowing the stack", "non-plain JS
+  #   objects in collection arguments reject naming the parameter", "a
+  #   peer-chosen watch event field is bounded").
   # Forgery: item data crosses to JS as null-prototype objects and bridge reads
   #   inspect only own properties so Object.prototype pollution cannot alter
   #   arguments ("collection item data is a null-prototype object (T6.3)",
@@ -225,6 +227,13 @@ Feature: Collections store, read and share items through the session
     When the stop function returned by watch is called
     Then the rejection is caught and "Failed to cancel collection watch" is logged as a warning
     And no error escapes
+
+  @dos @forgery
+  Scenario: a peer-chosen watch event field is bounded
+    Given a collection watch with an event callback
+    When a watch event arrives whose id, owner, from and ancestry subName carry a newline, a direction character and 600 characters
+    Then all four come back on one line, at most the rejection bound long
+    And its data is unchanged
 
   Scenario: a collection rejection keeps code, message, id, owner, kind and failures
     Given a collection whose calls fail as a missing item, another owner's item, a failed open with a StateError and a partial write failure

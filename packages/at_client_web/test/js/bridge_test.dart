@@ -1737,6 +1737,48 @@ void main() {
         expect(adapter.cancelled, 1);
       });
 
+      test('a peer-chosen watch event field is bounded', () async {
+        final seen = <Object?>[];
+        invoke(c, 'watch', [
+          ((JSAny? event) => seen.add(event.dartify())).toJS,
+        ]);
+        final direction = String.fromCharCode(0x202e);
+        final hostile = '${'n' * 600}\n$direction';
+
+        adapter.onEvent!({
+          'type': 'subItemUpdated',
+          'id': hostile,
+          'owner': hostile,
+          'from': hostile,
+          'ancestry': [
+            {'id': 'a1', 'subName': hostile, 'owner': '@alice'},
+          ],
+          'data': {'n': 1},
+        });
+
+        final event = seen.single! as Map;
+        for (final field in ['id', 'owner', 'from']) {
+          final text = event[field]! as String;
+          expect(text, isNot(contains('\n')),
+              reason: '$field holds no newline');
+          expect(text, isNot(contains(direction)),
+              reason: '$field holds a direction character');
+          expect(singleLine(text), text, reason: '$field is one line');
+          expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
+              reason: '$field takes the rejection bound');
+        }
+        final subName =
+            ((event['ancestry']! as List).single as Map)['subName']! as String;
+        expect(subName, isNot(contains('\n')),
+            reason: 'subName holds no newline');
+        expect(subName, isNot(contains(direction)),
+            reason: 'subName holds a direction character');
+        expect(singleLine(subName), subName, reason: 'subName is one line');
+        expect(subName.length, lessThanOrEqualTo(maxErrorMessageLength),
+            reason: 'subName takes the rejection bound');
+        expect(event['data'], {'n': 1}, reason: 'the data is unchanged');
+      });
+
       test('collection watch needs a function and never throws', () {
         final r = invoke(c, 'watch', [5.toJS])! as JSObject;
 

@@ -348,6 +348,31 @@ JSObject _envelope(Map<String, Object?> map) {
   return object;
 }
 
+/// [event] with its peer-chosen label fields bounded like the subscribe
+/// envelope's: `id`, `owner` and `from`, and each ancestry entry's
+/// `subName`, are one line and at most [maxErrorMessageLength] long. Every
+/// other field, the payload included, is delivered as received.
+JsEvent _boundedEvent(JsEvent event) => {
+      for (final MapEntry(:key, :value) in event.entries)
+        key: switch (key) {
+          'id' || 'owner' || 'from' => _boundedText(value),
+          'ancestry' when value is List => [
+              for (final ancestor in value)
+                ancestor is Map<String, Object?>
+                    ? {
+                        for (final MapEntry(:key, :value) in ancestor.entries)
+                          key: key == 'subName' ? _boundedText(value) : value,
+                      }
+                    : ancestor,
+            ],
+          _ => value,
+        },
+    };
+
+/// [value] as the text [boundedRejectionText] bounds, so a peer-chosen field
+/// that reaches the event as an `Atsign` is bounded too.
+String _boundedText(Object? value) => boundedRejectionText('$value');
+
 void _reportStreamError(JSFunction? report, Object error, String source) {
   if (report != null) {
     report.callAsFunction(null, _toRejection(error));
@@ -644,7 +669,10 @@ class BridgeCollection {
   /// Calls `onEvent` with each event of the collection and `onError`, when
   /// given, with the `{code, message}` of each error on the stream; returns
   /// the function that stops watching, or the rejection object when it
-  /// cannot start.
+  /// cannot start. `id`, `owner` and `from` are peer-chosen, and so is each
+  /// ancestry entry's `subName`, so all take the rejection bound: one line,
+  /// at most [maxErrorMessageLength] long. Every other field, the payload
+  /// included, is delivered as received.
   @JSExport()
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {
     try {
@@ -652,7 +680,7 @@ class BridgeCollection {
       final report = _optionalFunction(onError, 'onError');
       final cancel = _adapter.watch(
         (event) {
-          deliver.callAsFunction(null, _envelope(event));
+          deliver.callAsFunction(null, _envelope(_boundedEvent(event)));
         },
         onError: (error) {
           _reportStreamError(report, error, 'watch');
