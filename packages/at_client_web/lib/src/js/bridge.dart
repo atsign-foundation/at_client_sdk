@@ -6,7 +6,6 @@ import 'dart:js_interop_unsafe';
 import 'package:at_client/at_client.dart'
     show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
 import 'package:at_client/passkey.dart' show PasskeySession;
-import 'package:meta/meta.dart';
 import 'package:web/web.dart' as web;
 
 import '../collections/js_collections_adapter.dart';
@@ -43,9 +42,8 @@ Future<Session> _openSession(SessionOptions options,
 }
 
 /// [_openSession] with the keys transport and the passkey login left to the
-/// caller, so a test can drive the real openers over fakes. No barrel
-/// exports it.
-@visibleForTesting
+/// caller. No barrel exports it: it exists for tests, to drive the real
+/// openers over fakes.
 final Future<Session> Function(SessionOptions options,
     {SessionTransport? keysTransport,
     OpenPasskeySession? passkeyOpen}) openJsSession = _openSession;

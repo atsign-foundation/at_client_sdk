@@ -13,7 +13,6 @@ dependencies:
   at_client: ^4.1.0-rc.1
   at_commons: ^5.23.0
   at_lookup: ^4.1.0-rc.1
-  meta: ^1.16.0
   web: ^1.1.0
 
 dev_dependencies:
