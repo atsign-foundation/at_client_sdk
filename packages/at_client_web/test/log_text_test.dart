@@ -52,16 +52,28 @@ void main() {
   });
 
   test('the unprintable set matches clipForMessage rune for rune', () {
-    // A single rune each, so the two predicates compare directly. Space,
-    // backslash and quote are absent: the two functions legitimately differ
-    // on them (space is printable, and clipForMessage escapes the other two).
-    for (final rune in _parityRunes) {
+    // Every code point, not a hand-picked boundary list, so a range added to
+    // either predicate cannot slip past it. Four code points are excluded as
+    // the known differences between the two policies: space (a printable that
+    // singleLine also renders as a space), backslash (clipForMessage escapes
+    // it), quote (clipForMessage escapes it when given as the quote argument)
+    // and newline (clipForMessage escapes it rather than flattening it).
+    const known = {0x20, 0x22, 0x5c, 0x0a};
+    var swept = 0;
+    for (var rune = 0; rune <= 0x10ffff; rune++) {
+      if (known.contains(rune)) continue;
+      swept++;
       final char = String.fromCharCode(rune);
-      final label = 'U+${rune.toRadixString(16).toUpperCase().padLeft(4, '0')}';
-      expect(clipForMessage(char) != char, singleLine(char) == ' ',
-          reason: '$label must be unprintable to clipForMessage exactly when '
-              'singleLine flattens it');
+      final escapedByClip = clipForMessage(char) != char;
+      final flattened = singleLine(char) == ' ';
+      if (escapedByClip != flattened) {
+        final label =
+            'U+${rune.toRadixString(16).toUpperCase().padLeft(4, '0')}';
+        fail('$label must be unprintable to clipForMessage exactly when '
+            'singleLine flattens it');
+      }
     }
+    expect(swept, 0x110000 - known.length);
   });
 
   test('singleLine preserves a valid surrogate pair', () {
@@ -89,25 +101,3 @@ void main() {
     expect(jsonDecode(escaped), value);
   });
 }
-
-/// Every boundary of a range in `at_commons`' `clipForMessage`, a sample
-/// inside each range, the printable rune just outside every boundary, and a
-/// few printable samples.
-const _parityRunes = <int>[
-  0x00, 0x0a, 0x1f, // controls below 0x20
-  0x7e, 0x7f, 0x85, 0x9f, 0xa0, // controls in 0x7f..0x9f
-  0xad, 0x61c, 0x6dd, 0x70f, 0x8e2, 0x180e, 0xfeff, // singleton ranges
-  0x5ff, 0x600, 0x602, 0x605, 0x606, // 0x0600..0x0605
-  0x88f, 0x890, 0x891, 0x892, // 0x0890..0x0891
-  0x200a, 0x200b, 0x200d, 0x200f, 0x2010, // 0x200b..0x200f
-  0x2027, 0x2028, 0x202c, 0x202e, 0x202f, // 0x2028..0x202e
-  0x205f, 0x2060, 0x2066, 0x206f, 0x2070, // 0x2060..0x206f
-  0xd7ff, 0xd800, 0xdc00, 0xdfff, 0xe000, // lone surrogates 0xd800..0xdfff
-  0xfff8, 0xfff9, 0xfffa, 0xfffb, 0xfffc, // 0xfff9..0xfffb
-  0x110bc, 0x110bd, 0x110be, 0x110cc, 0x110cd, 0x110ce, // singletons
-  0x1342f, 0x13430, 0x13438, 0x1343f, 0x13440, // 0x13430..0x1343f
-  0x1bc9f, 0x1bca0, 0x1bca2, 0x1bca3, 0x1bca4, // 0x1bca0..0x1bca3
-  0x1d172, 0x1d173, 0x1d176, 0x1d17a, 0x1d17b, // 0x1d173..0x1d17a
-  0xdffff, 0xe0000, 0xe0040, 0xe007f, 0xe0080, // 0xe0000..0xe007f
-  0x41, 0x100, 0x1f600, // printable samples
-];
