@@ -23,6 +23,9 @@ String errorCodeOf(Object error) => switch (error) {
       AtEnrollmentPendingException() => 'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       EnrollmentInFlightException() => 'enrollment_in_flight',
+      // `AtEnrollmentException` is also thrown locally, for an approval that
+      // landed and then lost its record or for a missing key package, so this
+      // code means the enrolment failed, not only that the atServer refused it.
       AtEnrollmentException() => 'enrollment_denied',
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||

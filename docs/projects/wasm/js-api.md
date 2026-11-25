@@ -655,7 +655,7 @@ land. Until then no adapter operation validates data against a schema.
 | `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
 | `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
-| `enrollment_denied` | `AtEnrollmentException`: for example, `approve` or `deny` names an enrollment id that is not pending |
+| `enrollment_denied` | `AtEnrollmentException`: `approve` or `deny` names an enrollment id that is not pending, the atServer refuses the verb, or the enrolment failed locally (an approval that landed and then lost its record, a missing key package, remaining approved enrollments). The code means the enrolment did not complete, not only that the atServer said no |
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, an invalid `address.owner`, or a missing or mistyped `create` option such as `passkey`, `rpId` or `rpName`; the message names the parameter and never its value, at most 128 characters on one line |
