@@ -695,47 +695,55 @@ void main() {
       expect(session.status, 'connecting');
     });
 
-    final cases = <String, (AtConnectionState, bool, String)>{
-      'online': (AtConnectionState.online(), true, 'connected'),
-      'unreachable with the browser online': (
-        AtConnectionState.offline(AtConnectionCause.unreachable),
-        true,
-        'waiting:server'
-      ),
-      'unreachable with the browser offline': (
-        AtConnectionState.offline(AtConnectionCause.unreachable),
-        false,
-        'waiting:network'
-      ),
-      'no atServer': (
-        AtConnectionState.offline(AtConnectionCause.noAtServer),
-        true,
-        'waiting:server'
-      ),
-      'revoked': (
-        AtConnectionState.refused(AtConnectionCause.revoked),
-        true,
-        'waiting:auth'
-      ),
-      'unauthenticated': (
-        AtConnectionState.refused(AtConnectionCause.unauthenticated),
-        true,
-        'waiting:auth'
-      ),
-      'enrollment not approved': (
-        AtConnectionState.refused(AtConnectionCause.enrollmentNotApproved),
-        true,
-        'waiting:auth'
-      ),
-    };
-    for (final MapEntry(key: name, value: (state, onLine, status))
-        in cases.entries) {
-      test('$name is $status', () async {
-        navigatorOnline = onLine;
-        await report(state);
-        expect(session.status, status);
-      });
+    Future<void> expectStatus(
+        AtConnectionState state, bool onLine, String status) async {
+      navigatorOnline = onLine;
+      await report(state);
+      expect(session.status, status);
     }
+
+    test('online is connected',
+        () => expectStatus(AtConnectionState.online(), true, 'connected'));
+
+    test(
+        'unreachable with the browser online is waiting:server',
+        () => expectStatus(
+            AtConnectionState.offline(AtConnectionCause.unreachable),
+            true,
+            'waiting:server'));
+
+    test(
+        'unreachable with the browser offline is waiting:network',
+        () => expectStatus(
+            AtConnectionState.offline(AtConnectionCause.unreachable),
+            false,
+            'waiting:network'));
+
+    test(
+        'no atServer is waiting:server',
+        () => expectStatus(
+            AtConnectionState.offline(AtConnectionCause.noAtServer),
+            true,
+            'waiting:server'));
+
+    test(
+        'revoked is waiting:auth',
+        () => expectStatus(AtConnectionState.refused(AtConnectionCause.revoked),
+            true, 'waiting:auth'));
+
+    test(
+        'unauthenticated is waiting:auth',
+        () => expectStatus(
+            AtConnectionState.refused(AtConnectionCause.unauthenticated),
+            true,
+            'waiting:auth'));
+
+    test(
+        'enrollment not approved is waiting:auth',
+        () => expectStatus(
+            AtConnectionState.refused(AtConnectionCause.enrollmentNotApproved),
+            true,
+            'waiting:auth'));
 
     test('onStatus reports each change, latest wins, and off stops it',
         () async {

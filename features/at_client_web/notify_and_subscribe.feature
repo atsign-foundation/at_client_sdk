@@ -194,6 +194,11 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When its notification stream completes
     Then the session no longer holds that subscription
 
+  Scenario: warns when the subscription of a failed start fails to cancel
+    Given a subscription whose start fails and whose cancel then throws
+    When close is called
+    Then the failure is logged and close still completes
+
   Scenario: subscribe cancels immediately if close occurs during startListening
     Given an open session whose startListening triggers close synchronously
     When subscribe is called

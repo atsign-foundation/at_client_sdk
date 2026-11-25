@@ -34,6 +34,18 @@ Feature: The connection status is readable and observable
     Then the listener saw both states in order
     And the bridge listener was removed once
 
+  Scenario: starts connecting while nothing has been attempted
+    Given a session whose client has not tried to connect
+    Then its status is connecting
+
+  Scenario: online is connected
+    Given a session whose client reports the connection online
+    Then its status is connected
+
+  Scenario: revoked is waiting:auth
+    Given a session whose client reports the connection refused as revoked
+    Then its status is waiting:auth
+
   Scenario: status() reads the latest value
     Given an open session
     When the state changes
