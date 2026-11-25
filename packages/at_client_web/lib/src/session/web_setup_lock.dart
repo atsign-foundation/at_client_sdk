@@ -3,21 +3,9 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_auth/passkey.dart' show SetupLock;
-import 'package:at_commons/at_commons.dart' show AtException;
 import 'package:web/web.dart';
 
-/// Thrown when the lock named [lockName] is not granted within the
-/// acquisition timeout.
-class SetupLockTimeoutException extends AtException {
-  /// Creates the exception for [lockName].
-  SetupLockTimeoutException(this.lockName) : super('$lockName was not granted');
-
-  /// The name of the lock that was not granted.
-  final String lockName;
-
-  @override
-  String toString() => 'SetupLockTimeoutException: $lockName was not granted';
-}
+import '../exceptions.dart';
 
 /// A [SetupLock] over `navigator.locks`.
 ///

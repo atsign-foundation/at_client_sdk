@@ -1,7 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+
+import '../exceptions.dart';
+import '../log_text.dart';
+import 'item_locks.dart';
 
 /// An item address: the item's id and the Atsign that owns it.
 typedef JsItemAddress = ({String id, Atsign owner});
@@ -15,9 +18,9 @@ typedef JsWhereClause = ({String path, String op, Object? value});
 /// milliseconds since the epoch (`availableAt` may be null).
 typedef JsItem = Map<String, Object?>;
 
-/// A record this device cannot read: its id, its owner and the code
-/// [CollectionErrorCodes.unreadable].
-typedef JsUnreadable = ({String id, Atsign owner, String code});
+/// A record this device cannot read: its id, its owner and the reason, a
+/// [CollectionFailure.unreadable] or [CollectionFailure.tooDeep].
+typedef JsUnreadable = ({String id, Atsign owner, CollectionFailure kind});
 
 /// What [JsCollectionsAdapter.list] and [JsCollectionsAdapter.query]
 /// resolve with: the readable items in upstream order, and one entry per
@@ -28,71 +31,52 @@ typedef JsListing = ({List<JsItem> items, List<JsUnreadable> unreadable});
 /// event type. See [JsCollectionsAdapter.watch].
 typedef JsEvent = Map<String, Object?>;
 
-/// The collection error codes a [JsCollectionsError] carries (js-api.md §6.1).
-abstract final class CollectionErrorCodes {
-  /// A malformed argument: an unknown eventSource or operator, a
-  /// non-positive expirationMs, an empty type or path segment, a value an
-  /// operator cannot compare, an invalid atSign, or an item id
-  /// AtCollection refuses.
-  static const invalidArgument = 'COLLECTION_INVALID_ARGUMENT';
+/// The deepest nesting of item data that reaches JS, counted in containers
+/// (maps and lists) with the data object itself the first level. The bridge
+/// refuses a `data` argument nested deeper, and no read returns data nested
+/// deeper.
+const maxItemDataDepth = 64;
 
-  /// No item with that id and owner.
-  static const notFound = 'COLLECTION_ITEM_NOT_FOUND';
-
-  /// A write to an item owned by another atSign.
-  static const notOwner = 'COLLECTION_ITEM_NOT_OWNER';
-
-  /// A create with an id that already exists.
-  static const alreadyExists = 'COLLECTION_ITEM_ALREADY_EXISTS';
-
-  /// A remove without cascade of an item that has sub-items.
-  static const hasSubItems = 'COLLECTION_ITEM_HAS_SUB_ITEMS';
-
-  /// A record this device cannot read, such as one sealed to a key it does
-  /// not hold yet.
-  static const unreadable = 'COLLECTION_ITEM_UNREADABLE';
-
-  /// An ordering `where` met a value of another type at its path.
-  static const typeMismatch = 'COLLECTION_TYPE_MISMATCH';
-
-  /// An update of an item another type tag wrote.
-  static const wrongType = 'COLLECTION_ITEM_WRONG_TYPE';
-
-  /// Some key-level writes of one operation failed.
-  static const partialFailure = 'COLLECTION_PARTIAL_FAILURE';
-
-  /// Any other failure; [JsCollectionsError.kind] names it.
-  static const failed = 'COLLECTION_FAILED';
+/// Whether [value] nests containers deeper than [maxItemDataDepth] levels.
+/// Iterative, so data of any depth is measured without recursing.
+bool exceedsMaxDepth(Object? value) {
+  final pending = <(Object?, int)>[(value, 1)];
+  while (pending.isNotEmpty) {
+    final (current, level) = pending.removeLast();
+    final children = switch (current) {
+      Map<Object?, Object?>(:final values) => values,
+      Iterable<Object?>() => current,
+      _ => null,
+    };
+    if (children == null) continue;
+    if (level > maxItemDataDepth) return true;
+    for (final child in children) {
+      pending.add((child, level + 1));
+    }
+  }
+  return false;
 }
 
-/// The single error shape every adapter operation rejects with.
-final class JsCollectionsError extends AtException {
-  JsCollectionsError(
-    this.code,
-    super.message, {
-    this.id,
-    this.owner,
-    this.kind,
-    this.failures = const [],
+/// The error for an item whose data nests deeper than [maxItemDataDepth].
+JsCollectionsError itemTooDeep({String? id, String? owner}) =>
+    JsCollectionsError(CollectionFailure.tooDeep, id: id, owner: owner);
+
+/// The eight collection operations on plain values, as the JS bridge uses
+/// them. [JsCollectionsAdapter] is the implementation; tests of the bridge
+/// supply another.
+abstract interface class ItemCollection {
+  Future<JsItem> create(Map<String, dynamic> data,
+      {String? id, List<String> sharedWith});
+  Future<JsItem?> get(JsItemAddress address);
+  Future<JsListing> list();
+  Future<JsListing> query(List<JsWhereClause> clauses);
+  Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data);
+  Future<JsItem> share(JsItemAddress address, List<String> atSigns);
+  Future<void> remove(JsItemAddress address, {bool cascade = false});
+  Future<void> Function() watch(
+    void Function(JsEvent event) onEvent, {
+    required void Function(JsCollectionsError error) onError,
   });
-
-  /// One of the [CollectionErrorCodes] codes.
-  final String code;
-
-  /// The item the failure is about, when known.
-  final String? id;
-  final String? owner;
-
-  /// The Dart type of the underlying error, for [CollectionErrorCodes.failed] and each
-  /// [failures] entry: a name the adapter knows, or `'Unknown'`.
-  final String? kind;
-
-  /// For [CollectionErrorCodes.partialFailure]: one `{op, recipient, kind}` per failed
-  /// key-level write, where recipient is the atSign the copy was for.
-  final List<Map<String, String>> failures;
-
-  @override
-  String toString() => 'JsCollectionsError($code): $message';
 }
 
 /// Translates plain values into [AtCollection] calls, and results, events
@@ -103,13 +87,21 @@ final class JsCollectionsError extends AtException {
 /// write re-reads the item right before writing and never removes a
 /// recipient it did not read, so a recipient another device added is kept.
 /// Every operation returns a Future that rejects with a
-/// [JsCollectionsError].
-final class JsCollectionsAdapter {
-  JsCollectionsAdapter(this._collection);
+/// [JsCollectionsError], except that a [StoppedException] from at_client
+/// (a call in flight when the client stops) is rethrown as it is.
+final class JsCollectionsAdapter implements ItemCollection {
+  /// [locks] is the session's lock map, shared by every adapter it builds,
+  /// and [namespace] the folded namespace this collection is keyed under in
+  /// it. A lone adapter gets a map of its own.
+  JsCollectionsAdapter(this._collection,
+      {ItemLocks? locks, this.namespace = ''})
+      : _locks = locks ?? ItemLocks();
 
   final AtCollection<Map<String, dynamic>> _collection;
+  final ItemLocks _locks;
+  final String namespace;
 
-  static final _logger = AtSignLogger('jsCollectionsAdapter');
+  final _logger = AtSignLogger('JsCollectionsAdapter');
 
   static const _eventSources = {
     'data': EventSource.data,
@@ -117,20 +109,35 @@ final class JsCollectionsAdapter {
     'both': EventSource.both,
   };
 
+  /// Serializes writes to the same `(namespace, id, owner)` across every
+  /// adapter of the session, so concurrent `update`, `share`, `remove`, and
+  /// explicit-id `create` calls run sequentially without overwriting one
+  /// another.
+  Future<R> _queueWrite<R>(
+          String id, Atsign owner, Future<R> Function() body) =>
+      _locks.run(namespace, id, owner, body);
+
   /// Opens [namespace] through [AtClient.collection], unchanged, writing
   /// [type] as the wire type tag. [eventSource] is `'data'`, `'notifs'` or
-  /// `'both'`; when omitted, AtClient's default applies.
+  /// `'both'`; when omitted, AtClient's default applies. A blank [type] or a
+  /// non-positive [expirationMs] rejects with
+  /// [CollectionFailure.invalidArgument] before anything opens.
   static Future<JsCollectionsAdapter> open(
     AtClient client, {
     required String namespace,
     required String type,
     required int expirationMs,
     String? eventSource,
+    ItemLocks? locks,
   }) =>
-      _guard(() async {
+      _mapFailures(() async {
         if (expirationMs <= 0) {
-          throw JsCollectionsError(
-              CollectionErrorCodes.invalidArgument, 'expirationMs must be > 0');
+          throw JsCollectionsError(CollectionFailure.invalidArgument,
+              refusal: CollectionRefusal.expiration);
+        }
+        if (type.trim().isEmpty) {
+          throw JsCollectionsError(CollectionFailure.invalidArgument,
+              refusal: CollectionRefusal.type);
         }
         final expiration = Duration(milliseconds: expirationMs);
         final AtCollection<Map<String, dynamic>> collection;
@@ -141,60 +148,71 @@ final class JsCollectionsAdapter {
         } else {
           final source = _eventSources[eventSource];
           if (source == null) {
-            throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
-                'unknown eventSource "$eventSource"');
+            throw JsCollectionsError(CollectionFailure.invalidArgument,
+                refusal: CollectionRefusal.eventSource, subject: eventSource);
           }
           collection = await client.collection<Map<String, dynamic>>(
               namespace, expiration,
               eventSource: source, writeTypeTag: type);
         }
-        return JsCollectionsAdapter(collection);
+        return JsCollectionsAdapter(collection,
+            locks: locks, namespace: namespace);
       });
 
-  /// Creates an item owned by this atSign. Rejects with [CollectionErrorCodes.alreadyExists]
+  /// Creates an item owned by this atSign. Rejects with [CollectionFailure.alreadyExists]
   /// when [id] exists.
+  @override
   Future<JsItem> create(
     Map<String, dynamic> data, {
     String? id,
     List<String> sharedWith = const [],
   }) =>
-      _guard(
-        () async {
-          return _item(await _collection.create(
-            obj: data,
-            id: id,
-            sharedWith: {for (final a in sharedWith) a.toAtsign()},
-          ));
+      _mapFailures(
+        () {
+          Future<JsItem> run() async => _item(await _collection.create(
+                obj: data,
+                id: id,
+                sharedWith: {for (final a in sharedWith) a.toAtsign()},
+              ));
+          return id == null ? run() : _queueWrite(id, _collection.atSign, run);
         },
-        id: _errorId(id),
+        id: id,
         owner: _collection.atSign,
-        stateError: id == null ? null : CollectionErrorCodes.alreadyExists,
+        stateError: id == null ? null : CollectionFailure.alreadyExists,
       );
 
   /// The item at [address], or null when there is none.
-  Future<JsItem?> get(JsItemAddress address) => _guard(() async {
-        final item = await _collection.getOrNull(address.id, address.owner);
-        return item == null ? null : _item(item);
-      });
+  @override
+  Future<JsItem?> get(JsItemAddress address) => _mapFailures(
+        () async {
+          final item = await _collection.getOrNull(address.id, address.owner);
+          return item == null ? null : _item(item);
+        },
+        id: address.id,
+        owner: address.owner,
+      );
 
   /// Every readable item, in the order AtCollection returns them, and the
   /// records that could not be read. An unreadable record does not fail the
   /// listing; one whose key names no Atsign is left out, with a warning.
-  Future<JsListing> list() => _guard(() => _read(const []));
+  @override
+  Future<JsListing> list() => _mapFailures(() => _read(const []));
 
   /// The readable items matching every clause, in the order AtCollection
   /// returns them, and the records that could not be read. Operators: `==`,
   /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`.
-  Future<JsListing> query(List<JsWhereClause> clauses) =>
-      _guard(() => _read([for (final clause in clauses) _predicate(clause)]));
+  @override
+  Future<JsListing> query(List<JsWhereClause> clauses) => _mapFailures(
+      () => _read([for (final clause in clauses) _predicate(clause)]));
 
   /// Replaces the data of the item at [address], keeping its recipients,
   /// expiresAt, availableAt and createdAt as just re-read. Rejects with
-  /// [CollectionErrorCodes.wrongType] when the item carries another type tag; an untagged
+  /// [CollectionFailure.wrongType] when the item carries another type tag; an untagged
   /// (`n/a`) item takes this collection's tag. [share] and [remove] work on
   /// an item of any type.
+  @override
   Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
-      _write(address, (current) async {
+      _ownedWrite(address, (current) async {
         final next = _collection.draft(
           obj: data,
           id: current.id,
@@ -205,35 +223,44 @@ final class JsCollectionsAdapter {
         // An untagged item is adopted; another type's item is refused before
         // any write.
         if (current.type != 'n/a' && current.type != next.type) {
-          throw JsCollectionsError(CollectionErrorCodes.wrongType,
-              'item ${current.id} is a ${current.type}, not a ${next.type}',
-              id: current.id, owner: current.owner.toString());
+          throw JsCollectionsError(CollectionFailure.wrongType,
+              id: current.id,
+              owner: current.owner.toString(),
+              foundType: current.type,
+              expectedType: next.type);
         }
         await _collection.update(next, unshareWithOthers: false);
         // The stored creation time, not the draft's.
         next.createdAt = current.createdAt;
-        return next;
+        return _item(next);
       });
 
   /// Adds [atSigns] to the recipients of the item at [address]. Never
   /// removes a recipient.
+  @override
   Future<JsItem> share(JsItemAddress address, List<String> atSigns) =>
-      _write(address, (current) async {
+      _ownedWrite(address, (current) async {
+        // The result carries the item's data, so an item that cannot be
+        // returned is refused before anything is written.
+        if (exceedsMaxDepth(current.obj)) {
+          throw itemTooDeep(id: current.id, owner: current.owner.toString());
+        }
         await _collection.updateSharedWith(
           current,
           {...current.sharedWith, for (final a in atSigns) a.toAtsign()},
           unshareWithOthers: false,
         );
-        return current;
+        return _item(current);
       });
 
-  /// Deletes the item at [address]. Rejects with [CollectionErrorCodes.hasSubItems] when it
+  /// Deletes the item at [address]. Rejects with [CollectionFailure.hasSubItems] when it
   /// has sub-items and [cascade] is false.
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
-      _write(address, (current) async {
-        await _collection.delete(current, cascade: cascade);
-        return current;
-      }, stateError: CollectionErrorCodes.hasSubItems);
+  @override
+  Future<void> remove(JsItemAddress address,
+          {bool cascade = false}) =>
+      _ownedWrite(
+          address, (current) => _collection.delete(current, cascade: cascade),
+          stateError: CollectionFailure.hasSubItems);
 
   /// Calls [onEvent] with each AtCollection event and [onError] with each
   /// error on the event stream, until the returned function is called; its
@@ -245,39 +272,63 @@ final class JsCollectionsAdapter {
   /// `subItemDeleted` (`ancestry`, a list of `{id, subName, owner}`); and
   /// `unknown` for an event type this adapter does not know. Times are
   /// milliseconds since the epoch.
+  @override
   Future<void> Function() watch(
     void Function(JsEvent event) onEvent, {
     required void Function(JsCollectionsError error) onError,
   }) {
     final subscription = _collection.watch().listen(
           (event) => onEvent(_event(event)),
-          onError: (Object error) => onError(_error(error)),
+          onError: (Object error) => onError(_toJsCollectionsError(error)),
         );
     return subscription.cancel;
   }
 
-  Future<JsItem> _write(
+  /// Runs [write] on the item at [address] as just re-read, after the owner
+  /// check, and returns what it returns. A [write] that returns the item
+  /// converts it with [_item] itself, so a `remove` never fails after it
+  /// deleted.
+  Future<R> _ownedWrite<R>(
     JsItemAddress address,
-    Future<CItem<Map<String, dynamic>>> Function(
-            CItem<Map<String, dynamic>> current)
-        write, {
-    String stateError = CollectionErrorCodes.notFound,
+    Future<R> Function(CItem<Map<String, dynamic>> current) write, {
+    CollectionFailure stateError = CollectionFailure.notFound,
   }) =>
-      _guard(
-        () async {
+      _mapFailures(
+        () {
           final owner = address.owner;
           if (owner != _collection.atSign) {
-            throw JsCollectionsError(CollectionErrorCodes.notOwner,
-                'item ${address.id} is owned by $owner, not ${_collection.atSign}',
-                id: _errorId(address.id), owner: owner);
+            throw JsCollectionsError(CollectionFailure.notOwner,
+                id: address.id,
+                owner: owner,
+                collectionOwner: _collection.atSign);
           }
-          final current = await _collection.get(address.id, owner);
-          return _item(await write(current));
+          return _queueWrite(address.id, owner, () async {
+            final current = await _collection.get(address.id, owner);
+            return await write(current);
+          });
         },
-        id: _errorId(address.id),
+        id: address.id,
         owner: address.owner,
         stateError: stateError,
       );
+
+  static String _describeAtKey(AtKey key) {
+    try {
+      return '$key';
+    } on Object {
+      // AtKey.toString throws InvalidAtKeyException when key.key is empty, and
+      // key.key is late on manually constructed keys.
+      try {
+        final ns = key.namespace == null || key.namespace!.isEmpty
+            ? ''
+            : '.${key.namespace}';
+        final owner = key.sharedBy ?? '';
+        return '${key.key}$ns$owner';
+      } on Object {
+        return '<invalid key>';
+      }
+    }
+  }
 
   /// Reads every item through [AtCollection.getItemsAsStream], collecting a
   /// [CItemReadException] per unreadable record instead of stopping at it,
@@ -285,23 +336,27 @@ final class JsCollectionsAdapter {
   /// unreadable record whose key names no Atsign is left out, and a warning
   /// names its key.
   Future<JsListing> _read(List<Predicate> predicates) async {
-    final readable = <CItem<Map<String, dynamic>>>[];
+    final all = <CItem<Map<String, dynamic>>>[];
     final unreadable = <JsUnreadable>[];
     final done = Completer<void>();
     final subscription = _collection.getItemsAsStream().listen(
-      readable.add,
+      all.add,
       onError: (Object error, StackTrace stack) {
-        if (error is CItemReadException) {
-          final entry = _unreadable(error);
-          if (entry != null) {
-            unreadable.add(entry);
-          } else {
-            _logger.warning('Left out the stored record '
-                '${jsonEncode('${error.key}')} from a listing: its key names '
-                'no Atsign');
+        try {
+          if (error is CItemReadException) {
+            final entry = _unreadable(error);
+            if (entry != null) {
+              unreadable.add(entry);
+            } else {
+              _logger.warning('Left out the stored record '
+                  '${sanitizeLogText(_describeAtKey(error.key))} from a '
+                  'listing: its key names no Atsign');
+            }
+          } else if (!done.isCompleted) {
+            done.completeError(error, stack);
           }
-        } else if (!done.isCompleted) {
-          done.completeError(error, stack);
+        } catch (e, s) {
+          if (!done.isCompleted) done.completeError(e, s);
         }
       },
       onDone: () {
@@ -312,6 +367,20 @@ final class JsCollectionsAdapter {
       await done.future;
     } finally {
       await subscription.cancel();
+    }
+    // An item nested too deep is reported whatever the predicates say, as an
+    // unreadable record is.
+    final readable = <CItem<Map<String, dynamic>>>[];
+    for (final item in all) {
+      if (exceedsMaxDepth(item.obj)) {
+        unreadable.add((
+          id: item.id,
+          owner: item.owner.toAtsign(),
+          kind: CollectionFailure.tooDeep,
+        ));
+      } else {
+        readable.add(item);
+      }
     }
     final List<CItem<Map<String, dynamic>>> matching;
     try {
@@ -324,8 +393,7 @@ final class JsCollectionsAdapter {
       // TypeError on the VM and dart2wasm, an ArgumentError from
       // compareTo under dart2js.
       if (e is! TypeError && e is! ArgumentError) rethrow;
-      throw JsCollectionsError(CollectionErrorCodes.typeMismatch,
-          'a where clause compared values of different types');
+      throw JsCollectionsError(CollectionFailure.typeMismatch);
     }
     return (
       items: [for (final i in matching) _item(i)],
@@ -342,7 +410,7 @@ final class JsCollectionsAdapter {
       return (
         id: _idOf(error.key),
         owner: sharedBy.toAtsign(),
-        code: CollectionErrorCodes.unreadable,
+        kind: CollectionFailure.unreadable,
       );
     } on InvalidAtSignException {
       return null;
@@ -355,8 +423,8 @@ final class JsCollectionsAdapter {
   static Predicate _predicate(JsWhereClause clause) {
     final segments = clause.path.split('.');
     if (segments.any((s) => s.isEmpty)) {
-      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
-          'empty segment in where path "${clause.path}"');
+      throw JsCollectionsError(CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.wherePath, subject: clause.path);
     }
     Object? extract(CItem<dynamic> item) {
       Object? at = item.obj;
@@ -389,18 +457,25 @@ final class JsCollectionsAdapter {
       _ => null,
     };
     if (compare == null) {
-      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
-          'unknown where operator "${clause.op}"');
+      throw JsCollectionsError(CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.whereOperator, subject: clause.op);
     }
     final value = clause.value;
     if (value is! num && value is! String) {
-      throw JsCollectionsError(CollectionErrorCodes.invalidArgument,
-          'where "${clause.op}" needs a number or string value');
+      throw JsCollectionsError(CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.whereValue, subject: clause.op);
     }
     return field.isNotNull.and(compare(value as Comparable<dynamic>));
   }
 
-  static JsItem _item(CItem<Map<String, dynamic>> item) => {
+  static JsItem _item(CItem<Map<String, dynamic>> item) {
+    if (exceedsMaxDepth(item.obj)) {
+      throw itemTooDeep(id: item.id, owner: item.owner.toString());
+    }
+    return _itemOf(item);
+  }
+
+  static JsItem _itemOf(CItem<Map<String, dynamic>> item) => {
         'id': item.id,
         'owner': item.owner,
         'type': item.type,
@@ -455,27 +530,24 @@ final class JsCollectionsAdapter {
     };
   }
 
-  /// The id an error reports for the caller's [id]: folded to lower case, as
-  /// AtCollection folds it, so it matches the id of the item listed.
-  static String? _errorId(String? id) => id?.toLowerCase();
-
   /// Runs [body], turning anything it throws into a [JsCollectionsError].
   /// [stateError] is the code for a StateError from the operation, which
   /// AtCollection uses for a missing, existing or still-parent item.
-  static Future<R> _guard<R>(
+  static Future<R> _mapFailures<R>(
     Future<R> Function() body, {
     String? id,
     String? owner,
-    String? stateError,
+    CollectionFailure? stateError,
   }) async {
     try {
       return await body();
-    } on StateError catch (e) {
-      throw JsCollectionsError(
-          stateError ?? CollectionErrorCodes.failed, e.message,
-          id: id, owner: owner, kind: 'StateError');
+    } on StoppedException {
+      rethrow;
+    } on StateError {
+      throw JsCollectionsError(stateError ?? CollectionFailure.failed,
+          id: id, owner: owner, causeType: 'StateError');
     } catch (e) {
-      throw _error(e, id: id, owner: owner);
+      throw _toJsCollectionsError(e, id: id, owner: owner);
     }
   }
 
@@ -494,29 +566,23 @@ final class JsCollectionsAdapter {
         _ => 'Unknown',
       };
 
-  static JsCollectionsError _error(Object error, {String? id, String? owner}) {
+  static JsCollectionsError _toJsCollectionsError(Object error,
+      {String? id, String? owner}) {
     switch (error) {
       case JsCollectionsError():
         return error;
       case CItemReadException():
         // The cause can carry record content; it stays on the Dart side.
-        final id = _idOf(error.key);
-        final owner = _unreadable(error)?.owner;
-        return JsCollectionsError(
-            CollectionErrorCodes.unreadable,
-            owner == null
-                ? 'item $id could not be read'
-                : 'item $id owned by $owner could not be read',
-            id: id,
-            owner: owner,
-            kind: 'CItemReadException');
+        return JsCollectionsError(CollectionFailure.unreadable,
+            id: _idOf(error.key),
+            owner: _unreadable(error)?.owner.toString(),
+            causeType: 'CItemReadException');
       case CollectionOpException(:final failures, :final item):
         // A create without an id learns it here: the item that landed.
-        return JsCollectionsError(CollectionErrorCodes.partialFailure,
-            '${failures.length} key-level write(s) failed',
+        return JsCollectionsError(CollectionFailure.partialFailure,
             id: item?.id ?? id,
             owner: item?.owner.toString() ?? owner,
-            kind: 'CollectionOpException',
+            causeType: 'CollectionOpException',
             failures: [
               for (final f in failures)
                 {
@@ -526,20 +592,35 @@ final class JsCollectionsAdapter {
                 }
             ]);
       case AtKeyNotFoundException():
-        return JsCollectionsError(CollectionErrorCodes.notFound, error.message,
-            id: id, owner: owner, kind: 'AtKeyNotFoundException');
+        return JsCollectionsError(CollectionFailure.notFound,
+            id: id, owner: owner, causeType: 'AtKeyNotFoundException');
       case InvalidAtSignException():
-        return JsCollectionsError(
-            CollectionErrorCodes.invalidArgument, error.message,
-            id: id, owner: owner, kind: 'InvalidAtSignException');
+        return JsCollectionsError(CollectionFailure.invalidArgument,
+            refusal: CollectionRefusal.atSign,
+            id: id,
+            owner: owner,
+            causeType: 'InvalidAtSignException');
       case ArgumentError():
-        return JsCollectionsError(
-            CollectionErrorCodes.invalidArgument, '${error.message}',
-            id: id, owner: owner, kind: 'ArgumentError');
+        final (refusal, subject) = switch (error) {
+          ArgumentError(name: 'id', message: final String text) => (
+              CollectionRefusal.itemId,
+              text
+            ),
+          ArgumentError(name: 'writeTypeTag' || 'typeTag') => (
+              CollectionRefusal.typeTag,
+              null
+            ),
+          _ => (null, null),
+        };
+        return JsCollectionsError(CollectionFailure.invalidArgument,
+            refusal: refusal,
+            subject: subject,
+            id: id,
+            owner: owner,
+            causeType: 'ArgumentError');
       default:
-        return JsCollectionsError(
-            CollectionErrorCodes.failed, 'operation failed',
-            id: id, owner: owner, kind: _kindOf(error));
+        return JsCollectionsError(CollectionFailure.failed,
+            id: id, owner: owner, causeType: _kindOf(error));
     }
   }
 }
