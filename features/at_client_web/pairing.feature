@@ -58,7 +58,7 @@ Feature: An approving device enrolls another browser
     Given a pending enrollment whose app and device names are very long and carry control characters
     When pendingEnrollments is called
     Then both names come back on one line, at most the rejection bound long
-    And its id and namespaces are returned unchanged
+    And its id is returned unchanged and its namespace keys come back on one line, at most the rejection bound long, with their values unchanged
 
   Scenario: approves the request as filed, with no namespaces of its own
     Given a pending enrollment e1

@@ -462,8 +462,9 @@ class BridgeSession {
 
   /// The requests awaiting a decision, each `{id, appName, deviceName,
   /// namespaces}` with `namespaces` mapping a namespace to its access.
-  /// `appName` and `deviceName` are peer-chosen, so both take the rejection
-  /// bound: one line, at most [maxErrorMessageLength] long.
+  /// `appName`, `deviceName` and each namespace key are peer-chosen, so each
+  /// takes the rejection bound: one line, at most [maxErrorMessageLength]
+  /// long. `id` is the atServer's own enrollment id, returned as served.
   @JSExport()
   JSPromise<JSArray<JSObject>> pendingEnrollments() => _promise(() async => [
         for (final e in await _session.pendingEnrollments())
@@ -471,7 +472,10 @@ class BridgeSession {
             'id': e.id,
             'appName': boundedRejectionText(e.appName),
             'deviceName': boundedRejectionText(e.deviceName),
-            'namespaces': e.namespaces,
+            'namespaces': {
+              for (final MapEntry(:key, :value) in e.namespaces.entries)
+                boundedRejectionText(key): value,
+            },
           })
       ].toJS);
 

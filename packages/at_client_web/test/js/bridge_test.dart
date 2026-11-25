@@ -1953,7 +1953,7 @@ void main() {
             id: 'e1',
             appName: '${'a' * 300}\nsecond line',
             deviceName: 'Phone \u202Eevil',
-            namespaces: {'tally': 'rw'}
+            namespaces: {'tally\n\u202E${'n' * 300}': 'rw'}
           )
         ];
 
@@ -1962,13 +1962,19 @@ void main() {
         final entry = entries.single as Map;
         final appName = entry['appName'] as String;
         final deviceName = entry['deviceName'] as String;
+        final namespaces = entry['namespaces'] as Map;
+        final namespace = namespaces.keys.single as String;
 
         expect(appName, isNot(contains('\n')));
         expect(deviceName, isNot(contains('\u202E')));
         expect(appName.length, lessThanOrEqualTo(maxErrorMessageLength));
         expect(deviceName.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(namespace, isNot(contains('\n')));
+        expect(namespace, isNot(contains('\u202E')));
+        expect(namespace.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(namespace, startsWith('tally'));
+        expect(namespaces[namespace], 'rw');
         expect(entry['id'], 'e1');
-        expect(entry['namespaces'], {'tally': 'rw'});
       });
 
       test('approve and deny pass the id and resolve undefined', () async {
