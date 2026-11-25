@@ -126,20 +126,26 @@ Stream<void> networkChanges() {
 /// A rejection reason: a plain object with `code` and `message`, never an
 /// `Error`; a collection failure adds `id`, `owner`, `kind` and `failures`
 /// where it has them, and the rejection of a bad address owner adds `id`.
+/// `id` and `owner` are peer-chosen and so take the message's bound: one line,
+/// at most [maxErrorMessageLength] long.
 JSObject _toRejection(Object error) {
   final code = errorCodeOf(error);
   final reason = JSObject()..['code'] = code.toJS;
   reason['message'] = atErrorMessage(error).toJS;
   switch (error) {
     case JsCollectionsError():
-      if (error.id case final id?) reason['id'] = id.toJS;
-      if (error.owner case final owner?) reason['owner'] = owner.toJS;
+      if (error.id case final id?) {
+        reason['id'] = boundedRejectionText(id).toJS;
+      }
+      if (error.owner case final owner?) {
+        reason['owner'] = boundedRejectionText(owner).toJS;
+      }
       if (error.causeType case final kind?) reason['kind'] = kind.toJS;
       if (error.failures.isNotEmpty) {
         reason['failures'] = _toJs(error.failures);
       }
     case InvalidArgumentException(:final id?):
-      reason['id'] = id.toJS;
+      reason['id'] = boundedRejectionText(id).toJS;
     default:
   }
   return reason;
@@ -537,13 +543,16 @@ class BridgeCollection {
     }
   }
 
+  /// `{items, unreadable}`: the unreadable records carry a peer-chosen id and
+  /// owner, so both take the rejection bound: one line, at most
+  /// [maxErrorMessageLength] long.
   JSObject _listing(JsListing listing) => JSObject()
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
     ..['unreadable'] = _toJs([
       for (final u in listing.unreadable)
         {
-          'id': u.id,
-          'owner': u.owner.toString(),
+          'id': boundedRejectionText(u.id),
+          'owner': boundedRejectionText(u.owner.toString()),
           'code': collectionErrorCode(u.kind)
         }
     ]);

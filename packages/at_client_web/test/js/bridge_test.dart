@@ -21,6 +21,7 @@ import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/js/bridge.dart';
 import 'package:at_client_web/src/keys/indexeddb_store.dart';
+import 'package:at_client_web/src/log_text.dart' show singleLine;
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
 import 'package:at_client_web/src/session/web_passkey_entry.dart'
@@ -1491,6 +1492,21 @@ void main() {
         }
       });
 
+      test('a peer-chosen id and owner are bounded in a rejection', () async {
+        adapter.failure = JsCollectionsError(CollectionFailure.notFound,
+            id: 'i' * 600,
+            owner: '@bob\n${String.fromCharCode(0x202e)}${'x' * 600}');
+
+        final r = await rejected(invoke(c, 'list'));
+
+        final id = r.field('id')! as String;
+        final owner = r.field('owner')! as String;
+        for (final field in [id, owner]) {
+          expect(singleLine(field), field, reason: 'one line');
+          expect(field.length, lessThanOrEqualTo(maxErrorMessageLength));
+        }
+      });
+
       test(
           'list and query report each unreadable record with the same code as before',
           () async {
@@ -1525,6 +1541,31 @@ void main() {
               'code': collectionErrorCode(CollectionFailure.tooDeep)
             },
           ]);
+        }
+      });
+
+      test("an unreadable record's id and owner are bounded in a listing",
+          () async {
+        final direction = String.fromCharCode(0x202e);
+        adapter.listing = (
+          items: const [],
+          unreadable: [
+            (
+              id: 'u' * 600 + '\n$direction',
+              owner: Atsign('@bob$direction'),
+              kind: CollectionFailure.unreadable
+            ),
+          ]
+        );
+
+        final listing = (await resolved(invoke(c, 'list')))! as JSObject;
+        final record =
+            (listing['unreadable']! as JSArray).toDart.single! as JSObject;
+        final id = record['id'].dartify()! as String;
+        final owner = record['owner'].dartify()! as String;
+        for (final field in [id, owner]) {
+          expect(singleLine(field), field, reason: 'one line');
+          expect(field.length, lessThanOrEqualTo(maxErrorMessageLength));
         }
       });
 

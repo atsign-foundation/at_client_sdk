@@ -8,8 +8,9 @@ import '../log_text.dart';
 // Both are pure functions of the thrown type and its structured fields: no
 // exception's own text ever chooses a code, and the bridge authors every
 // message JS sees. The only text it passes through from an exception is the id
-// refusal AtCollection words itself (CollectionRefusal.itemId), bounded to one
-// line; every other message is fixed here or built from structured fields.
+// refusal AtCollection words itself (CollectionRefusal.itemId) and the id and
+// owner an error carries, each bounded by [boundedRejectionText]; every other
+// message is fixed here or built from structured fields.
 
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
@@ -85,7 +86,10 @@ String atErrorMessage(Object error) => switch (error) {
       _ => 'internal error',
     };
 
-String _bounded(String value) =>
+/// [value] on one line and at most [maxErrorMessageLength] long: the one bound
+/// every message and every echoed rejection field shares, so a peer-chosen id
+/// or owner cannot carry control characters or unbounded text into JS.
+String boundedRejectionText(String value) =>
     truncateText(singleLine(value), maxErrorMessageLength);
 
 /// What each parameter the session validates by itself has to be, for an
@@ -95,7 +99,8 @@ const _expectedOf = {
   'regex': 'a valid regular expression',
 };
 
-String _keyMessage(InvalidKeyException error) => _bounded(switch (error) {
+String _keyMessage(InvalidKeyException error) =>
+    boundedRejectionText(switch (error) {
       InvalidKeyException(:final field?) => _argumentMessage(field),
       InvalidKeyException(:final refusal) => switch (refusal) {
           KeyRefusal.publicKey => 'public keys cannot be sent with notify',
@@ -116,15 +121,15 @@ String _keyMessage(InvalidKeyException error) => _bounded(switch (error) {
 
 String _argumentMessage(InvalidArgumentException error) {
   final name = error.parameter;
-  if (error.missing) return _bounded('$name must not be null');
+  if (error.missing) return boundedRejectionText('$name must not be null');
   final expected = error.expected ?? _expectedOf[error.parameter] ?? 'valid';
-  return _bounded('$name must be $expected');
+  return boundedRejectionText('$name must be $expected');
 }
 
 String _collectionMessage(JsCollectionsError error) {
   final id = _token(error.id ?? '');
   final owner = _atSign(error.owner);
-  return _bounded(switch (error.kind) {
+  return boundedRejectionText(switch (error.kind) {
     CollectionFailure.invalidArgument => _refusalMessage(error),
     CollectionFailure.notFound => 'item not found',
     CollectionFailure.notOwner =>

@@ -240,6 +240,12 @@ Feature: Collections store, read and share items through the session
     When list or query is called
     Then unreadable holds {id, owner, code} with COLLECTION_ITEM_UNREADABLE for the first and COLLECTION_ITEM_TOO_DEEP for the second
 
+  @dos @forgery
+  Scenario: an unreadable record's id and owner are bounded in a listing
+    Given an unreadable record carrying a very long id and an owner holding a direction character
+    When list is called
+    Then the unreadable record's id and owner are each at most 128 characters and one line
+
   Scenario: a repeated collection call builds a fresh adapter each time
     Given an open session
     When collection is called three times for one name, type and options, once with the name already ending in the namespace

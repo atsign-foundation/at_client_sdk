@@ -57,6 +57,12 @@ Feature: Every failure carries a code the caller branches on
     Then the rejection is a plain object whose only keys are code and message, plus id for the bad address owner rejection that keeps it
     And the message is at most 128 characters, is one line and holds no part of the argument
 
+  @dos @forgery
+  Scenario: a peer-chosen id and owner are bounded in a rejection
+    Given a collection failure carrying a very long id and an owner holding a newline and a direction character
+    When the failure reaches JS
+    Then the rejection's id and owner are each at most 128 characters and one line
+
   @forgery
   Scenario: an ArgumentError from inside at_client rejects internal with the fixed message
     Given an open session whose client throws an ArgumentError, or at_commons' IllegalArgumentException, with a message that names a parameter
