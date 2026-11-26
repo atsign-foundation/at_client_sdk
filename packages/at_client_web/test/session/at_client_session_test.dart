@@ -11,7 +11,14 @@ class _FakeNotifications extends Fake implements NotificationService {
   final events = StreamController<AtNotification>.broadcast();
   final params = <NotificationParams>[];
   var status = NotificationStatusEnum.delivered;
-  Object? exception;
+
+  /// The failure the result carries, wrapped by
+  /// `AtExceptionManager.createException` as the real service wraps it.
+  AtException? exception;
+
+  /// When set, `notify` throws it after the send, as the real service's
+  /// awaited poll rethrows what reading the final status throws.
+  AtException? pollFailure;
   String? lastRegex;
   bool? lastShouldDecrypt;
   var starts = 0;
@@ -40,17 +47,14 @@ class _FakeNotifications extends Fake implements NotificationService {
       Function(NotificationResult)? onSentToSecondary}) async {
     params.add(notificationParams);
     final failure = exception;
-    if (failure != null && failure is! AtClientException) {
-      // Awaited polling rethrows what reading the final status throws, as the
-      // real service does; only an AtClientException is reported in the result.
-      throw failure;
-    }
     final result = NotificationResult()
       ..notificationID = 'n${nextId++}'
       ..notificationStatusEnum = status
-      ..atClientException = failure as AtClientException?;
+      ..atClientException =
+          failure == null ? null : AtExceptionManager.createException(failure);
     if (reportsSent) onSentToSecondary?.call(result);
     await hold?.future;
+    if (pollFailure case final thrown?) throw thrown;
     return result;
   }
 
@@ -299,16 +303,22 @@ void main() {
       expect(await session.notify('@bob:k.wavi@alice', 'v'), isFalse);
     });
 
-    test('an undelivered notification is a recipient failure', () async {
-      final cause = AtClientException('AT0001', 'Unable to connect');
-      service
-        ..status = NotificationStatusEnum.undelivered
-        ..exception = cause;
+    test('a send at_client reports failed is a send failure', () async {
+      for (final cause in [
+        UnAuthorizedException('not authorized'),
+        AtKeyException('Key cannot contain @'),
+      ]) {
+        service
+          ..reportsSent = false
+          ..status = NotificationStatusEnum.undelivered
+          ..exception = cause;
 
-      await expectLater(
-          session.notify('@bob:k.wavi@alice', 'v'),
-          throwsA(isA<NotifyFailedException>().having(
-              (e) => e.kind, 'kind', NotifyFailure.recipientUnreachable)));
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', NotifyFailure.sendFailed)),
+            reason: '${cause.runtimeType}');
+      }
     });
 
     test(
@@ -346,6 +356,12 @@ void main() {
         '@a@b:k.wavi@alice',
         '@bob:k..x.wavi@alice',
         '@bob:k wavi@alice',
+        '@bob:k.wavi.@alice',
+        'Public:k.wavi@alice',
+        'CACHED:k.wavi@alice',
+        'LOCAL:k.wavi@alice',
+        'bob:k.wavi@alice',
+        'privatekey:privatekey',
       ]) {
         await expectLater(
             session.notify(bad, 'v'), throwsA(isA<InvalidKeyException>()),
@@ -354,26 +370,41 @@ void main() {
       expect(service.params, isEmpty);
     });
 
-    test('a key the atServer refuses is a key failure, not an internal one',
+    test(
+        'a notify that cannot reach the atServer is an offline failure, or a timeout when it does not answer',
         () async {
-      service
-        ..status = NotificationStatusEnum.undelivered
-        ..exception = AtKeyException('the key is invalid');
+      for (final (cause, kind) in [
+        (SecondaryConnectException('unable to connect'), NotifyFailure.offline),
+        (AtTimeoutException('no response'), NotifyFailure.timeout),
+      ]) {
+        service
+          ..reportsSent = false
+          ..status = NotificationStatusEnum.undelivered
+          ..exception = cause
+          ..pollFailure = cause;
 
-      await expectLater(
-          session.notify('@bob:k.wavi@alice', 'v'),
-          throwsA(isA<NotifyFailedException>()
-              .having((e) => e.kind, 'kind', NotifyFailure.keyRefused)));
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', kind)),
+            reason: '${cause.runtimeType}');
+      }
     });
 
-    test('a transport failure reaches the caller as the connectivity exception',
+    test('a failure where an atServer answered is not an offline failure',
         () async {
-      service
-        ..status = NotificationStatusEnum.undelivered
-        ..exception = SecondaryConnectException('unable to connect');
+      for (final cause in [
+        UnAuthorizedException('not authorized'),
+        UnAuthenticatedException('not authenticated'),
+        HandShakeException('handshake failed'),
+        SecondaryNotFoundException('no atServer'),
+      ]) {
+        service.pollFailure = cause;
 
-      await expectLater(session.notify('@bob:k.wavi@alice', 'v'),
-          throwsA(isA<SecondaryConnectException>()));
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'), throwsA(same(cause)),
+            reason: '${cause.runtimeType}');
+      }
     });
 
     test('notify interrupted by close rejects with closed', () async {

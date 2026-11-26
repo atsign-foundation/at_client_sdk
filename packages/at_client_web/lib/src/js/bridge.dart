@@ -404,8 +404,7 @@ class BridgeSession {
 
   /// Sends [value] on the atKey [key] gives as text; true only once the
   /// atServer reports it delivered. Bad key text rejects with `bad_key`, and
-  /// a send that could not be made with `notify_failed`, `offline` or
-  /// `timeout`.
+  /// a failed notify with `notify_failed`, `offline` or `timeout`.
   @JSExport()
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);

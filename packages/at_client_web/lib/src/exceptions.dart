@@ -158,23 +158,21 @@ class ManageAccessRequiredException extends AtException {
       'ManageAccessRequiredException: $manageAccessRequiredMessage';
 }
 
-/// Why a `notify` could not be sent, for a [NotifyFailedException]. The
+/// Why a `notify` failed, for a [NotifyFailedException]. The
 /// bridge words each one; none carries an at_client message.
 enum NotifyFailure {
-  /// The atServer could not deliver the notification to its recipient.
-  recipientUnreachable,
+  /// Sending the notification failed.
+  sendFailed,
 
-  /// The atServer refused the notification's key.
-  keyRefused,
+  /// The atServer could not be reached.
+  offline,
 
-  /// The atServer rejected the notification for another reason.
-  serverError,
+  /// The atServer did not answer in time.
+  timeout,
 }
 
-/// Thrown when a notification was not sent: the atServer reported it
-/// undelivered, refused its key, or rejected it. A transport failure on the
-/// way to the atServer is not this; it is rethrown as the connectivity
-/// exception the bridge maps to `offline` or `timeout`.
+/// Thrown when a notify failed: sending it failed, or the atServer could not
+/// be reached or did not answer in time.
 ///
 /// It carries a [kind], never finished text: the bridge words what JS sees
 /// (lib/src/js/error_codes.dart).

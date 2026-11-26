@@ -584,7 +584,7 @@ value.
 | Notifications | `notify`, `subscribe(regex?)` returns an `AsyncIterable<AtNotification>`; a stream error rejects one `next()` (`overflow` if buffered events exceed the queue limit) |
 | Pairing | `otp`, `pendingEnrollments`, `approve`, `deny`, only on a session whose enrollment holds `__manage` rw |
 | Status | `status` and `onStatus(cb) => off` |
-| Notify key | `notify(key, value)` takes the atKey as text, for example `@bob:note.wavi@alice`: the recipient, the key with its namespace, and the owner. The session parses it once with `AtKey.fromString` and checks it with `AtKeyValidators`; the text carries its own namespace, so the session's is not applied. `public:`, `cached:public:` and `cached:` text rejects with `bad_key`, as does text the parsers refuse or a key that is not a string. A `notify` that could not be sent rejects `notify_failed` (recipient unreachable, key refused, server error), `offline` or `timeout` |
+| Notify key | `notify(key, value)` takes the atKey as text, for example `@bob:note.wavi@alice`: the recipient, the key with its namespace, and the owner. The session parses it once with `AtKey.fromString` and checks it with `AtKeyValidators`; the text carries its own namespace, so the session's is not applied. `public:`, `cached:public:` and `cached:` text rejects with `bad_key`, as does a recipient not written with `@`, text the parsers refuse or a key that is not a string. A failed `notify` rejects `notify_failed`, `offline` or `timeout` |
 | Not in the alpha | `storage`, `waitUntilCaughtUp`, `isInSync`, `notificationStatus`, `retry`, onboarding and enrollment of new browsers |
 
 **Status shape.** `ConnectionStatus` is one of `'connecting'`, `'connected'`,
@@ -698,9 +698,8 @@ land. Until then no adapter operation validates data against a schema.
 | Code | Raised when |
 |---|---|
 | `pkam_refused` | `AtOpenRefusedException`: the atServer refuses the open (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
-| `offline` | `PortalSessionOfflineException`, `SecondaryConnectException`, `AtConnectException` or `AtIOException`: the open did not come online and was not classed as a refusal, or a notify could not reach the atServer |
-| `timeout` | `AtTimeoutException` or `TimeoutException`: a transport or atServer wait expired |
-| `refused` | `UnAuthorizedException`: the atServer answered and refused the request |
+| `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal; or `NotifyFailedException` on `notify`: the atServer could not be reached |
+| `timeout` | `NotifyFailedException` on `notify`: the atServer did not answer in time |
 | `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
 | `enrollment_denied` | `AtEnrollmentException`: `approve` or `deny` names an enrollment id that is not pending, the atServer refuses the verb, or the enrolment failed locally (an approval that landed and then lost its record, a missing key package, remaining approved enrollments). The code means the enrolment did not complete, not only that the atServer said no |
@@ -708,8 +707,8 @@ land. Until then no adapter operation validates data against a schema.
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, an invalid `address.owner`, or a missing or mistyped `create` option such as `passkey`, `rpId` or `rpName`; the message names the parameter and never its value, at most 128 characters on one line |
 | `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); `UnsupportedOperationException` (`create` on a page that is not a secure context); or an `UnsupportedError`, mapped by its type alone: its text is never read or shown, and the message is always `the operation is not supported here` (the passkey setup lock raises one on a browser without `navigator.locks`) |
-| `bad_key` | `InvalidKeyException` (notify key text that cannot be sent, such as `public:`, `cached:`, no recipient, a mismatched owner, or text the parsers refuse; or a non-JSON `keys` document), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
-| `notify_failed` | `NotifyFailedException` on `notify`: the notification was not sent. The session classifies the at_client failure into recipient unreachable, key refused or server error, and the bridge words each; no at_client text reaches JS |
+| `bad_key` | `InvalidKeyException` (notify key text that cannot be sent, such as `public:`, `cached:`, no recipient or one not written with `@`, a mismatched owner, or text the parsers refuse; or a non-JSON `keys` document), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
+| `notify_failed` | `NotifyFailedException` on `notify`: sending the notification failed; no at_client text reaches JS |
 | `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
 
 When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation. For a passkey session `rpId` and `rpName` take the place of `keys` in that order.

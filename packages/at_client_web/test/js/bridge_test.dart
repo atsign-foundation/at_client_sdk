@@ -877,13 +877,13 @@ void main() {
         () async {
       // The session turns an at_client send failure into a typed
       // NotifyFailedException; the bridge never sees the raw AtClientException.
-      session.failure = NotifyFailedException(NotifyFailure.serverError);
+      session.failure = NotifyFailedException(NotifyFailure.sendFailed);
 
       final r = await rejected(
           invoke(s, 'notify', ['@bob:rpc.wavi@alice'.toJS, 'x'.toJS]));
 
       expect(r.code, 'notify_failed');
-      expect(r.message, 'the atServer rejected the notification');
+      expect(r.message, 'sending the notification failed');
     });
 
     test('subscribe delivers events and returns an unsubscribe function',
