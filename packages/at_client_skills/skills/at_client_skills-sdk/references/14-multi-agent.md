@@ -34,7 +34,9 @@ verbose, etc.). This is the same pattern the canonical TUI example uses
 (`packages/at_client/example/bin/collections_todos.dart`).
 
 `CLIBase` waits for the client to come online, and otherwise stops it and
-throws: `AtCredentialRefusedException` when the atServer refuses the keys,
+throws: `AtKeysUnusableException` for keys it cannot use, such as a missing
+keyfile or one recorded for another Atsign, before any connection;
+`AtCredentialRefusedException` when the atServer refuses the keys,
 `SecondaryNotFoundException` when the atDirectory has no atServer for the
 Atsign, and `SecondaryServerConnectivityException` only when no atServer
 accepted or refused the keys in time: an atServer not reached, or one that
@@ -126,9 +128,9 @@ if (lease != null && !lease.isSpent) {
   stays held until its ttl runs out.
 - The ttl is the only release, so a crashed winner cannot hold the lock
   forever; it must be at least a millisecond and at most 15 minutes. Do the
-  task within the lease: `lease.isSpent` says when it has run out, counting
-  the time elapsed since the lease was taken, so a change to the wall clock
-  does not move it.
+  task within the lease: `lease.isSpent` says when it has run out, and
+  `lease.remaining` is the time left, both counting the time elapsed since the
+  lease was taken, so a change to the wall clock does not move either.
 - The lock is written straight to the atServer, never to the local store, and
   the key must be a self key of the client's own atSign, used as given (no
   namespace is added).
@@ -208,8 +210,9 @@ atClient.enrollments.requests.listen((r) => ...);   // new requests as they arri
 final passcode = await atClient.enrollments.otp();  // what the new device quotes
 ```
 
-From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do the
-same.
+`client.enrollments.requests` reports only notifications from the client's own
+atSign. From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do
+the same.
 
 The Flutter-side enrollment flows (the requesting device) are in
 [05-flutter-auth.md](05-flutter-auth.md) (Flow 4).

@@ -70,8 +70,16 @@ final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
     rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-    lookUps: lookUps, secondaryAddressFinder: finder);
+    lookUps: lookUps, secondaryAddressFinder: finder,
+    particulars: preference.atClientParticulars);
 ```
+
+`activate` also takes an optional `apkamKeyPair`, which the first activation
+enrolls in place of a minted one. `authenticatesAs` and `PendingEnrollment`
+take an optional `particulars:` (`preference.atClientParticulars`) to name the
+app on their `from:`; with none it is named after the program file, and a
+client with no `appName` logs one warning when it starts. `pending.progress`
+reports what its wait is doing, as `ProgressEvent`s.
 
 In at_client 4.0 every verb is handed what it builds a client from, and the
 compiler insists: `storage:` on `open`, `activate` and `pending.client`, and
@@ -101,6 +109,13 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`, or another wait for the same request cancelled it before its approval was filed | Nothing after a cancel of its own; otherwise show the message, since an approval may have landed                |
 | `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                                                    | `resumeEnrollment` later; the request is kept                                                                   |
 | `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                                                 | Show the cause                                                                                                  |
+
+A `FileAtKeysIo` keyfile whose passphrase is missing or does not open it sets
+`AtKeysUnusableException`'s `error` to `AtKeysPassphraseException`, an
+`AtDecryptionException` exported by at_client 4.1.0; any other refusal of the
+keyfile's envelope is a plain `AtDecryptionException` saying what is wrong.
+`AtNoCredentialException` and `AtEnrollmentPendingException` name the AtKeys
+store they came from in `source` when `Atsign.open` throws them.
 
 `AtEnrollmentExpiredException`, `AtEnrollmentDeniedException` and
 `AtEnrollmentCancelledException` are also `AtEnrollmentException`s, so their
@@ -287,6 +302,18 @@ final sub = client.notificationService
   wait for the final status (`waitForFinalDeliveryStatus: false`) reports a
   failure through `onError`; either way, a stop ends the status poll and the
   result says so.
+- `AtClientPreference.notificationReplay` decides where the monitor replays
+  from when it connects: `connect` (nothing earlier), `resume` (the default,
+  the last notification the store holds), `window()` (the default one hour) or
+  `full` (everything the atServer retains). It is read once, when the service
+  first resolves its start; `fetchOfflineNotifications` is a deprecated alias.
+- A notification is delivered once per `(from, id)` pair, even after a
+  reconnect; a conflicting duplicate id is logged and reported on
+  `droppedEvents`.
+- When the atServer refuses the notification connection,
+  `client.connection` reads `refused` with that cause while the monitor keeps
+  retrying, waiting up to 5 minutes between attempts. Any other answer that
+  does not let it in leaves the state as it was.
 - `stopAllSubscriptions()` cancels every subscription and, by default, the
   monitor. `stop()` on the client does this for you.
 

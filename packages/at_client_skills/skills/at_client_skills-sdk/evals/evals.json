@@ -130,6 +130,16 @@
       "id": 26,
       "prompt": "How do I know whether my AtClient is online, and what happens if the device has no network when the app starts?",
       "expected_output": "Explains that Atsign.open (and PkamDialog) makes one bounded connect attempt and hands the client back either way: client.connection.current is online, offline or refused with a cause, client.connection.changes streams every change, awaitOnline(budget:) waits and attempt() retries now. Offline, the client serves its local store and writes sync when the atServer is reached; refused (revoked, unauthenticated, invalidEnrollment, enrollmentNotApproved, enrollmentDenied) means the atServer rejected the keys and the app decides. Mentions the one throw: the first open of these keys on a device that is refused throws AtOpenRefusedException because nothing is held locally. Does NOT describe an offline open as a failed login."
+    },
+    {
+      "id": 27,
+      "prompt": "My AtCollection holds objects whose Dart type has no fromJson factory, but I still want each created item to carry a stable type tag. How?",
+      "expected_output": "Pass writeTypeTag: '<tag>' to atClient.collection<T>(...) without fromJson or typeTag; it stamps items created with no factory registered for their type with that stable tag (a Uint8List is always 'binary'). The tag must be non-blank, and must equal typeTag when both are given or the call throws ArgumentError. Does NOT derive the tag from T.toString() or runtimeType. May mention that sub-collections do not inherit the parent's writeTypeTag and must be given their own."
+    },
+    {
+      "id": 28,
+      "prompt": "My app misses notifications that were sent while it was offline or between restarts. How do I control where the notification monitor replays from?",
+      "expected_output": "Sets AtClientPreference.notificationReplay to a NotificationReplay: connect() (nothing sent before the service), resume() (the default; from the last notification the store holds), window([Duration], default one hour) or full() (everything the atServer retains). Notes the service reads the policy once, when it first connects, so set it before that connect. Notes fetchOfflineNotifications is a deprecated alias and that a notification is delivered once per (from, id) pair even across a reconnect. Does NOT recommend treating notifications as a history; durable history belongs in AtCollection records."
     }
   ]
 }

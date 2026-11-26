@@ -232,6 +232,8 @@ These still compile, with a deprecation warning. Avoid them in new code.
 | Deprecated                                                   | Instead                                                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AtClientPreference.hiveStoragePath`                         | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage:`; at_client ignores the field, and at_client_flutter's dialogs read it only when given no storage |
+| `AtClientPreference.fetchOfflineNotifications` (4.1)          | `notificationReplay`: `NotificationReplay.connect()`, `.resume()`, `.window()` or `.full()` |
+| `resumeEnrollment(app:, device:)`, and `AtsignFlows.resumeEnrollment`'s (4.1, ignored) | Omit them; the AtKeys store's one pending request is resumed whatever app and device it was filed under |
 
 ---
 
