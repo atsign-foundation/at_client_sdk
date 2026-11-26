@@ -57,6 +57,12 @@ or decryption — it only excludes other apps' unrelated keys.
   change made on another device or atsign surfaces within about 30 seconds
   even when the live push didn't land. It is not configurable; at_client 4.0
   removed `AtClientPreference.syncIntervalMins`, which set nothing.
+- **Notification replay is a choice.** `AtClientPreference.notificationReplay`
+  decides where the monitor replays from when it connects: `connect` (nothing
+  earlier), `resume` (the default, the last notification the store holds),
+  `window()` (the default one hour) or `full` (everything the atServer retains).
+  Notifications are not a history — keep history in records. A notification is
+  also delivered once per `(from, id)` pair, even after a reconnect.
 
 ---
 
@@ -81,6 +87,11 @@ sync.addProgressListener(listener);
 // ... later:
 sync.removeProgressListener(listener);
 ```
+
+`client.syncService.waitUntilCaughtUp(timeout: ...)` is the convenience form: it
+completes once the local commit id reaches the atServer's as it stood at the
+call, and throws `TimeoutException` when the budget elapses and
+`StoppedException` when the service stops.
 
 `SyncProgress` carries `syncStatus` (`SyncStatus`:
 `started` / `notStarted` / `inProgress` / `success` / `failure`),

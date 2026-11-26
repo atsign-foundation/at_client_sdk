@@ -117,7 +117,7 @@ final todos = await atClient.collection<Todo>(
   const Duration(days: 7),           // defaultExpiration for new items
   fromJson: Todo.fromJson,           // auto-registers factory; typeTag required with this
   typeTag: 'Todo',                   // pin as a string literal — NOT T.toString()
-  cleanupOrphansOnCreation: true,    // recommended when using sub-collections
+  cleanupOrphansOnCreation: true,    // sweeps before returning; use with sub-collections
   eventSource: EventSource.both,     // default (see below)
 );
 ```
@@ -125,7 +125,18 @@ final todos = await atClient.collection<Todo>(
 - **Cached per `(namespace, eventSource)` pair** — same namespace + different
   eventSource = separate instances
 - **`namespace` must contain `.`** (e.g. `'todos.my_app'`) — throws
-  `ArgumentError` otherwise
+  `ArgumentError` otherwise. It is folded to lower case, as atProtocol keys
+  are, so `Todos.my_app` and `todos.my_app` hand back the same collection
+- **Reopening an open namespace with another tag throws `ArgumentError`** —
+  while any collection of the namespace is open on this client, an open that
+  would stamp a new `T` with a different tag is refused and caches nothing.
+  The tag is `typeTag`, else the factory tag registered for `T`, else
+  `writeTypeTag`, else `n/a`
+- **`writeTypeTag`** stamps items created with no factory registered for their
+  type, without a `fromJson`: pass it (and neither `fromJson` nor `typeTag`)
+  to store untyped payloads under a stable tag. It must be non-blank, and must
+  equal `typeTag` when both are given. Reading such an item back into a typed
+  `T` still needs a factory registered for its tag
 - **At `pqActive`, `namespace` ends with `.` and the client's
   `preference.namespace`** (or a namespace its enrollment is granted):
   `'todos.my_app'` under `my_app`. In any other namespace the client's
@@ -262,7 +273,7 @@ Read [references/03-query-api.md](references/03-query-api.md) for all terminals
 // Create a sub-collection — NEVER call atClient.collection(composedNamespace)
 final notes = todos.subCollection<TodoNote>(
   parent: todo,
-  subName: 'notes',                           // no '.', ':', '@' or whitespace
+  subName: 'notes',                           // folded; no '.', ':', '@', whitespace or '__rr'
   defaultExpiration: const Duration(days: 30),
   fromJson: TodoNote.fromJson,
   typeTag: 'TodoNote',
@@ -279,6 +290,10 @@ final leaf = await todos.getDescendant<Reply>(
 //    CAncestor.owner IS null on CSubItemDeleted events — never call getDescendant from a delete handler.
 //    Cache the ancestry from the preceding CSubItemUpdated if you need it on delete.
 ```
+
+`subName` is folded to lower case, may start with `_`, and `__rr` is reserved
+for the built-in read-receipt sub-collection. Sub-collections are not cached,
+so opening the same composed namespace again with another tag is not refused.
 
 For 3+ levels use `watchWithTree` with `SubSpec<U>`. Each `TreeNode<T>` has a
 `parent` (`CItem<T>`) and `branches` (`Map<String, List<TreeNode<dynamic>>>`).
@@ -443,6 +458,14 @@ takes `storage: await storageOrDefault(atSign, preference)`. at_client 4.0 remov
 `decryptPackets`, `pathToCerts` and `tlsKeysSavePath`: a `SecureSocketConfig`
 carries them.
 
+Every connection that authenticates names the app to its atServer: set
+`AtClientPreference.atClientParticulars.appName` and `appVersion`. Unset,
+`appName` is the program file's name (or `unknown` where there is none) and
+`appVersion` is `unknown`; the SDK's name and version are sent too, and a
+client with no `appName` logs one warning when it starts.
+`Atsign.authenticatesAs` and `PendingEnrollment` take an optional
+`particulars:` for the same purpose.
+
 **Posture — how far into post-quantum the client runs**, fixed when the
 preference is built. **A new app names `PqPosture.pqActive`** and sets
 `namespace`, as every snippet here does:
@@ -510,7 +533,9 @@ await client.connection.attempt();                  // try again now
   across restarts.
 - **refused** (`revoked`, `unauthenticated`, `invalidEnrollment`,
   `enrollmentNotApproved`, `enrollmentDenied`): the atServer rejected the keys
-  — the app decides. An `error:` reply to a connection's `from:`, `pkam:` or
+  — the app decides (`otherRefusal` is reserved and nothing reports it; a
+  refused notification connection reads here too, while the monitor retries).
+  An `error:` reply to a connection's `from:`, `pkam:` or
   `cram:` is an `AtAuthErrorReplyException` (exported by at_client 4.1.0)
   whose `errorCode` is the reply's code, or null when it names none: a
   refusal code gives the cause and no code gives `unauthenticated`. A verb
@@ -538,6 +563,15 @@ await client.connection.attempt();                  // try again now
   connected**: wait for `listening` (or `currentListenerStateStream`) before a
   notify you expect to receive, or the send reports `delivered` and nothing
   arrives.
+- `AtClientPreference.notificationReplay` chooses where the monitor's replay
+  starts: `connect` (nothing sent before the service was created), `resume`
+  (the default; from the last notification the store holds), `window()` (the
+  default one hour) or `full` (everything the atServer retains). The service
+  reads it once, when it first connects; `fetchOfflineNotifications` is a
+  deprecated alias.
+- A notification is delivered once per `(from, id)` pair, even after a
+  reconnect; a conflicting duplicate id is logged and reported on
+  `droppedEvents`.
 
 **Own it, then stop it:**
 
@@ -717,7 +751,10 @@ final AtClient atClient =
   Atsign, and `SecondaryServerConnectivityException` only when no atServer
   accepted or refused the keys: an outage, or an atServer that answers with
   a server error such as AT0011 or no challenge to sign. That is the one
-  exception a retry loop around opening should catch. A keyfile holding only
+  exception a retry loop around opening should catch. Keys `CLIBase` cannot
+  use, such as a missing keyfile or one recorded for another Atsign, throw
+  `AtKeysUnusableException` before any connection; it is neither an
+  `ArgumentError` nor an `UnAuthenticatedException`. A keyfile holding only
   an enrollment request is resumed: `CLIBase` waits for its approval, as
   at_activate does, saying that `at_activate cancel` gives the request up,
   and throws `AtEnrollmentDeniedException` when it is denied and
@@ -736,7 +773,7 @@ final AtClient atClient =
 - **Multiple instances of one agent** coordinate via a server mutex
   (`atClient.tryAcquireServerMutex(key, ttl: …)`, which returns null when
   an immutable record already exists at the lock's key and throws any other
-  failure; it needs an
+  failure; a lease's `isSpent` / `remaining` count elapsed time; it needs an
   atServer from p3.13.0), or run
   stateless with `Atsign(a).open(..., serviceFactory:
   ServiceFactoryWithNoOpSyncService())` (from `at_client_cli`, NOT
@@ -815,6 +852,8 @@ longer compiles:
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
 | `at_cli_commons`, `at_onboarding_cli` (their last majors re-export `at_client_cli`)                                                                          | `at_client_cli`                                  |
 | `AtClientPreference.hiveStoragePath` (at_client ignores it; at_client_flutter's dialogs read it when given no storage); removed in 5.0                       | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage` |
+| `AtClientPreference.fetchOfflineNotifications` (deprecated in 4.1)                                                                                          | `notificationReplay` — `NotificationReplay.connect()`, `.resume()`, `.window()` or `.full()` |
+| `resumeEnrollment(app:, device:)` (deprecated and ignored)                                                                                                   | Omit them; it resumes the AtKeys store's one pending request |
 | `at_common_flutter`                                                                                                                                          | `at_client_flutter`                              |
 | `at_backupkey_flutter`                                                                                                                                       | Copy `at_client_flutter` backup-key snippet      |
 | `at_invitation_flutter`                                                                                                                                      | `AtClientInvitations` in `at_client`             |

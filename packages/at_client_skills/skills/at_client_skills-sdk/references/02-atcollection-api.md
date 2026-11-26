@@ -10,25 +10,36 @@ final collection = await atClient.collection<T>(
   defaultExpiration,               // Duration: default TTL for new items
   fromJson: T.fromJson,            // T Function(Map<String,dynamic>)? — auto-registers factory
   typeTag: 'T',                    // String? — required when fromJson is supplied
-  cleanupOrphansOnCreation: false, // bool: run orphan sweep at startup (default: false)
+  writeTypeTag: 'T',               // String? — untyped collection; match typeTag if both
+  cleanupOrphansOnCreation: false, // bool: run orphan sweep before this call returns
   eventSource: EventSource.both,   // EventSource: default EventSource.both
 );
 ```
 
 The call is **cached per `(namespace, eventSource)` pair** — subsequent calls
 with the same namespace AND the same `eventSource` return the same
-`AtCollection<T>` instance. Different `eventSource` values for the same
-namespace produce separate instances.
+`AtCollection<T>` instance. The namespace is folded to lower case before it is
+cached, so `Todos.my_app` and `todos.my_app` are one collection. Different
+`eventSource` values for the same namespace produce separate instances.
+
+While any collection of a namespace is open on the client, an open that would
+stamp a new `T` with another tag throws `ArgumentError` and caches nothing. The
+tag is `typeTag`, else the factory tag registered for `T`, else `writeTypeTag`,
+else `n/a`. The check holds on that client only, and sub-collections (which are
+not cached) are not checked.
 
 ---
 
 ## Constructor Validation Rules
 
 - `namespace` must contain `.` → throws
-  `ArgumentError('namespace must be fully qualified')`
+  `ArgumentError('namespace must be fully qualified')`; it is folded to lower
+  case
 - `fromJson` and `typeTag` must be supplied together → throws `ArgumentError`
   if one is given without the other
 - `typeTag` must be non-empty / non-whitespace → throws `ArgumentError`
+- `writeTypeTag` must be non-blank, and must equal `typeTag` when both are
+  given → throws `ArgumentError` otherwise
 
 ---
 
@@ -60,7 +71,7 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 | ------------------- | ---------- | -------------------------------------------- |
 | `atSign`            | `Atsign`   | The atsign this `atClient` is acting as      |
 | `self`              | `Atsign`   | Alias for `atSign` — use for ownership tests |
-| `namespace`         | `String`   | The fully-qualified namespace                |
+| `namespace`         | `String`   | The fully-qualified namespace, folded to lower case |
 | `defaultExpiration` | `Duration` | Default TTL for new items                    |
 | `isSubCollection`   | `bool`     | True if created via `subCollection(parent:)` |
 
@@ -78,6 +89,9 @@ Builds an in-memory item without persisting. Use `create` to persist.
   character
 - `expiresAt` — defaults to `now + defaultExpiration`
 - `availableAt` — `null` = visible immediately
+- `type` — the tag the item is stamped with: the factory tag registered for
+  its type, else this collection's `writeTypeTag`, else `n/a`; a `Uint8List`
+  is always `binary`
 
 ---
 
@@ -195,16 +209,21 @@ Cheap presence check. Prefers the `_seenSelfIds` cache for self-owned items.
 
 ## Sub-collection Construction
 
-### `AtCollection<U> subCollection<U>({required CItem<T> parent, required String subName, required Duration defaultExpiration, U Function(Map<String,dynamic>)? fromJson, String? typeTag})`
+### `AtCollection<U> subCollection<U>({required CItem<T> parent, required String subName, required Duration defaultExpiration, U Function(Map<String,dynamic>)? fromJson, String? typeTag, String? writeTypeTag})`
 
 Opens a typed sub-collection scoped to `parent`. Sub-collections inherit the
 parent's `eventSource`.
 
 **Constraints:**
 
-- `subName` is folded to lower case, must be non-empty, and must NOT contain
-  `.`, `:`, `@`, whitespace, a control character or a character a key's name
-  cannot hold
+- `subName` is folded to lower case and may start with `_`. It must be
+  non-empty, and must NOT contain `.`, `:`, `@`, whitespace, a control
+  character or a character a key's name cannot hold
+- `subName` must not be `__rr`, which is reserved for the built-in read-receipt
+  sub-collection
+- `writeTypeTag` is not inherited from the parent; sub-collections are not
+  cached, so opening the same composed namespace again with another tag is not
+  refused
 - `ArgumentError` thrown if the composed namespace would exceed 128 chars, the
   cap that keeps keys inside the atServer key length (max ~11 levels)
 
@@ -227,8 +246,9 @@ fetches the leaf item. Returns `null` if any ancestor is unavailable/expired.
 Sweeps the local keystore and removes sub-collection items whose parent chain
 is broken (parent has been deleted or expired). Returns a list of `OpResult`
 entries — inspect them to see which keys were removed and whether any
-deletions failed. Runs asynchronously in the background when
-`cleanupOrphansOnCreation: true` is passed to `atClient.collection()`.
+deletions failed. `atClient.collection(cleanupOrphansOnCreation: true)` runs it
+before the returned `Future` completes, at most once per collection instance; a
+failure is logged at warning (a `StoppedException` is rethrown).
 
 ---
 
