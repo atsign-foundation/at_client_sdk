@@ -245,7 +245,53 @@ the `src/` + `dist/` tree in [§8](#8-npm-packaging) — now lives in the `at_js
 as `packages/at_client_web` (`@atsign/at_client_web`), to be published only under the
 `alpha` dist-tag. See [§5a](#5a-the-npm-api-alpha).
 
-**Bridge releases.** The workflow that publishes the bundle as a prerelease ships separately from this change. The npm package pins a released tag and checksum.
+**Bridge releases.** A release is started by hand: run the workflow
+`at_client_web_bridge_release.yaml` (`workflow_dispatch`, with a `target` input defaulting
+to `dart2js`) from `trunk`. It resolves the workspace's dependencies at dispatch time
+(`dart pub get` in `packages/at_client_web`) and attaches the declared target's files to a
+prerelease of this repository: `at_client_web.js` and `at_client_web.js.sha256` under
+`at_client_web-bridge-<first 12 characters of the commit SHA>` for `dart2js` (the tag is
+unchanged), or `at_client_web.wasm` and `at_client_web.mjs` under
+`at_client_web-bridge-wasm-<sha12>` for `dart2wasm` (advisory, OQ-16). Both targets also attach
+`bridge-manifest.json`. One `SHA256SUMS` covers the target's compiled files plus the manifest —
+the dart2js `.sha256` sidecar is a copy of the js digest and is not hashed itself — and each
+published file plus `SHA256SUMS` carries a build provenance attestation. The bundle is built
+in a read-only job; a separate job verifies it, attests it and creates the prerelease; and a
+final job adds an SLSA provenance file (`multiple.intoto.jsonl`) for the release's files. The
+npm package pins one tag and verifies its files against `SHA256SUMS`.
+
+**The bridge manifest.** `packages/at_client_web/bridge-manifest.json` lists every exported
+bridge method (`surface`), the closed `errorCodes` and `collectionErrorCodes`, and a
+`schemaVersion` (1). `tool/manifest.dart` generates it from Dart constants
+(`bridgeSurface`, `atErrorCodes`, `collectionErrorCodes`); the file is committed, and
+`test/js/manifest_test.dart` fails when it differs from the generator's output or when
+`bridgeSurface` disagrees with the `@JSExport` classes. The bytes do not depend on the compile
+target. The release build compares the manifest it builds with the committed one. Additive
+changes keep `schemaVersion` 1; a rename or removal is a bridge-contract major.
+
+The build resolves dependencies at dispatch time: `dart pub get` runs in
+`packages/at_client_web`, and no dependency lock is committed. The release uses the Dart
+stable channel (`dart-channel: stable`), as the package's CI does, through the shared setup
+action, which installs Flutter first and the Dart SDK last; setup-dart prepends its
+directory to PATH, so Flutter's bundled dart cannot shadow it. The release notes record the
+Dart SDK version and the resolved `pubspec.lock`'s sha256, so a published bundle stays
+traceable.
+
+```mermaid
+flowchart LR
+  A["dispatch from trunk: target dart2js or dart2wasm"] --> B{"tag or release already published?"}
+  B -- yes --> N["notice: nothing published"]
+  B -- no --> C["build: contents read"]
+  C --> C1["tool/build.sh --target, then its manifest bytes compared with the committed bridge-manifest.json"]
+  C1 --> D["one artifact"]
+  D --> E["release: contents, id-token, attestations write"]
+  E --> E1["tag and asset list derived from target and commit"]
+  E1 --> F{"bundle and SHA256SUMS exactly the expected set, manifest included?"}
+  F -- no --> X["fail: nothing published"]
+  F -- yes --> G["sha256sum --strict, attest"]
+  G --> H["publish prerelease: bundle, bridge-manifest.json, SHA256SUMS"]
+  H --> I["provenance job: SLSA provenance for the release's files"]
+```
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
 also serving Node. Now that the JS surface exposes the collection API via `BridgeCollection`

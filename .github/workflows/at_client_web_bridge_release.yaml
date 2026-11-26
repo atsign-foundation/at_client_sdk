@@ -1,0 +1,317 @@
+name: at_client_web_bridge_release
+
+# Builds one declared bridge compile target from the workspace and attaches it,
+# with the contract manifest (bridge-manifest.json), a SHA256SUMS file, a build
+# provenance attestation and an SLSA provenance file, to a prerelease.
+# The target is chosen when the release is dispatched (workflow_dispatch) and
+# names the tag: at_client_web-bridge-<sha12> for dart2js (unchanged) and
+# at_client_web-bridge-wasm-<sha12> for dart2wasm. dart2js builds
+# at_client_web.js (and keeps at_client_web.js.sha256); dart2wasm builds
+# at_client_web.wasm and at_client_web.mjs. The manifest is the same for both.
+# It is started by hand from trunk; nothing triggers it automatically.
+# Three jobs: `build` runs the toolchain on the Dart stable channel with read-only
+# permissions and uploads the bundle; `release` has the write scopes, takes no
+# checkout or toolchain, derives the target's tag and file list itself, verifies
+# the bundle holds exactly those files and their checksums, attests the bundle and
+# creates the prerelease; `provenance` publishes the SLSA provenance for the
+# release's files.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Compile target to build and release
+        type: choice
+        options:
+          - dart2js
+          - dart2wasm
+        default: dart2js
+        required: true
+
+permissions: {} # nothing by default; each job states what it needs
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/trunk'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # checkout and the tag/release lookup
+    env:
+      TARGET: ${{ inputs.target }}
+    outputs:
+      exists: ${{ steps.tag.outputs.exists }}
+      lock: ${{ steps.build.outputs.lock_sha }}
+      dart: ${{ steps.build.outputs.dart_version }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Skip when the tag or release exists
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          case "$TARGET" in
+            dart2js)
+              prefix=at_client_web-bridge-
+              assets=(at_client_web.js)
+              absent=(at_client_web.wasm at_client_web.mjs)
+              ;;
+            dart2wasm)
+              prefix=at_client_web-bridge-wasm-
+              assets=(at_client_web.wasm at_client_web.mjs)
+              absent=(at_client_web.js at_client_web.js.sha256)
+              ;;
+            *)
+              echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
+              exit 1
+              ;;
+          esac
+          echo "ASSETS=${assets[*]}" >> "$GITHUB_ENV"
+          echo "ABSENT=${absent[*]}" >> "$GITHUB_ENV"
+          tag="${prefix}${GITHUB_SHA::12}"
+          set +e
+          tag_out=$(git ls-remote --exit-code --tags origin "refs/tags/$tag" 2>&1)
+          tag_rc=$?
+          set -e
+          if [ "$tag_rc" -eq 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::tag $tag already exists; this run publishes nothing"
+          elif [ "$tag_rc" -ne 2 ]; then
+            echo "git ls-remote failed ($tag_rc): $tag_out" >&2
+            exit "$tag_rc"
+          else
+            set +e
+            release=$(gh api --include "repos/$GITHUB_REPOSITORY/releases/tags/$tag" 2>&1)
+            release_rc=$?
+            set -e
+            if [ "$release_rc" -eq 0 ]; then
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::release $tag already exists; this run publishes nothing"
+            else
+              # gh api prints the HTTP status line. Only a 404 means the
+              # release is absent; every other failure fails the step rather
+              # than being read as an absent release.
+              # The last status line is the response gh acted on; a redirect
+              # or an interim response appears before it.
+              status=$(awk '/^HTTP\//{code=$2} END{print code}' <<< "$release")
+              if [ "$status" != 404 ]; then
+                echo "gh api release lookup failed ($release_rc): $release" >&2
+                exit "$release_rc"
+              fi
+            fi
+          fi
+
+      - uses: ./actions/setup-flutter-and-dart
+        if: steps.tag.outputs.exists != 'true'
+        with:
+          # The stable channel, as the package's CI uses. The shared action
+          # installs Flutter first and the Dart SDK last, so Flutter's bundled
+          # dart cannot shadow the SDK.
+          dart-channel: "stable"
+
+      - name: Build the bridge bundle
+        id: build
+        if: steps.tag.outputs.exists != 'true'
+        run: |
+          cd packages/at_client_web
+          # Resolve the workspace at dispatch time; no dependency lock is
+          # committed. The workspace writes one lock at the repository root.
+          dart pub get --no-example
+          lock=$(sha256sum ../../pubspec.lock | awk '{print $1}')
+          echo "lock_sha=$lock" >> "$GITHUB_OUTPUT"
+          # The release notes name the SDK, so a published bundle says what built it.
+          dart_version=$(dart --version 2>&1 |
+            sed -n 's/^Dart SDK version: \([^ ]*\).*/\1/p')
+          test -n "$dart_version" || {
+            echo "could not read the Dart version" >&2
+            exit 1
+          }
+          echo "dart_version=$dart_version" >> "$GITHUB_OUTPUT"
+          tool/build.sh at_client_bridge_entry --target "$TARGET"
+          cmp build/bridge-manifest.json bridge-manifest.json
+
+      - name: Stage the release assets
+        if: steps.tag.outputs.exists != 'true'
+        working-directory: packages/at_client_web/build
+        run: |
+          read -r -a assets <<< "$ASSETS"
+          read -r -a absent <<< "$ABSENT"
+          for file in "${absent[@]}"; do
+            if [ -e "$file" ]; then
+              echo "unexpected file for $TARGET: $file" >&2
+              exit 1
+            fi
+          done
+          for file in "${assets[@]}" bridge-manifest.json; do
+            if [ ! -f "$file" ]; then
+              echo "missing file for $TARGET: $file" >&2
+              exit 1
+            fi
+          done
+          sha256sum "${assets[@]}" bridge-manifest.json > SHA256SUMS
+          if [ "$TARGET" = dart2js ]; then
+            # at_js reads at_client_web.js.sha256 today. Keep it until at_js
+            # consumes SHA256SUMS; remove it after 2027-03-31.
+            sha256sum at_client_web.js > at_client_web.js.sha256
+            assets+=(at_client_web.js.sha256)
+          fi
+          mkdir release
+          cp "${assets[@]}" bridge-manifest.json SHA256SUMS release/
+
+      - name: Upload the bundle
+        if: steps.tag.outputs.exists != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: at_client_web-bridge-${{ env.TARGET }}
+          path: packages/at_client_web/build/release
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/trunk' && needs.build.outputs.exists != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # create the prerelease and upload its assets
+      id-token: write # sign the build provenance attestation
+      attestations: write # store the attestation with the repository
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+      tag: ${{ steps.tag.outputs.name }}
+    env:
+      TARGET: ${{ inputs.target }}
+      LOCK_SHA: ${{ needs.build.outputs.lock }}
+      DART_VERSION: ${{ needs.build.outputs.dart }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+
+      - name: Derive the release tag
+        id: tag
+        run: |
+          case "$TARGET" in
+            dart2js) prefix=at_client_web-bridge- ;;
+            dart2wasm) prefix=at_client_web-bridge-wasm- ;;
+            *)
+              echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
+              exit 1
+              ;;
+          esac
+          # Derived here, from the target and the commit being released, so the
+          # write-scoped job trusts no tag it has not computed itself.
+          echo "name=${prefix}${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: at_client_web-bridge-${{ env.TARGET }}
+          path: bridge
+
+      - name: Verify the bundle and checksums
+        working-directory: bridge
+        run: |
+          case "$TARGET" in
+            dart2js)
+              assets=(at_client_web.js)
+              sidecar=at_client_web.js.sha256
+              ;;
+            dart2wasm)
+              assets=(at_client_web.wasm at_client_web.mjs)
+              sidecar=
+              ;;
+            *)
+              echo "unknown target '$TARGET'; expected dart2js or dart2wasm" >&2
+              exit 1
+              ;;
+          esac
+          hashed=("${assets[@]}" bridge-manifest.json)
+          bundle=("${assets[@]}" ${sidecar:+"$sidecar"} bridge-manifest.json SHA256SUMS)
+          # A directory, symlink or other non-file is never part of a bundle,
+          # even when its name is one the target expects.
+          nonfiles=$(find . -mindepth 1 -maxdepth 1 ! -type f |
+            sed 's|^\./||' | LC_ALL=C sort)
+          if [ -n "$nonfiles" ]; then
+            echo "bundle for $TARGET holds non-file entries:" >&2
+            printf '%s\n' "$nonfiles" >&2
+            exit 1
+          fi
+          expected=$(printf '%s\n' "${bundle[@]}" | LC_ALL=C sort)
+          found=$(find . -mindepth 1 -maxdepth 1 -type f |
+            sed 's|^\./||' | LC_ALL=C sort)
+          if [ "$expected" != "$found" ]; then
+            echo "bundle for $TARGET holds the wrong files:" >&2
+            printf '%s\n' "$found" >&2
+            exit 1
+          fi
+          # SHA256SUMS must list exactly the hashed set: a short file would
+          # otherwise pass `sha256sum -c`, which checks only what it lists.
+          expected_hashed=$(printf '%s\n' "${hashed[@]}" | LC_ALL=C sort)
+          listed=$(awk '{print $2}' SHA256SUMS | LC_ALL=C sort)
+          if [ "$expected_hashed" != "$listed" ]; then
+            echo "SHA256SUMS for $TARGET covers the wrong files:" >&2
+            printf 'expected:\n%s\nlisted:\n%s\n' \
+              "$expected_hashed" "$listed" >&2
+            exit 1
+          fi
+          sha256sum --strict -c SHA256SUMS
+          if [ -n "$sidecar" ]; then
+            sha256sum --strict -c "$sidecar"
+          fi
+          echo "ASSETS=${bundle[*]}" >> "$GITHUB_ENV"
+
+      # The step above proved bridge/ holds exactly this target's files.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: bridge/*
+
+      - name: Create the prerelease
+        working-directory: bridge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          notes="Bridge bundle for the ${TARGET} target, built from commit ${GITHUB_SHA} with Dart SDK ${DART_VERSION}. Dependencies were resolved at dispatch time; pubspec.lock sha256 ${LOCK_SHA}. Verify with SHA256SUMS and the build provenance attestations."
+          if [ "$TARGET" = "dart2wasm" ]; then
+            notes="$notes This dart2wasm bundle is a preview: dart2js remains the primary JS/TS target."
+          fi
+          read -r -a assets <<< "$ASSETS"
+          gh release create "$TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "at_client_web bridge ${TARGET} ${GITHUB_SHA::12}" \
+            --notes "$notes"
+
+      - name: Pass the published files' hashes to the provenance job
+        id: hashes
+        working-directory: bridge
+        run: echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
+
+  provenance:
+    needs: release
+    if: needs.release.outputs.hashes != ''
+    permissions:
+      actions: read # the generator inspects this run
+      id-token: write # sign the provenance
+      contents: write # attach multiple.intoto.jsonl to the release
+    # The generator rejects a commit SHA in `uses:` and names its own ref in the
+    # provenance, so this is the one action here referenced by version tag; the
+    # comment names the commit that tag resolves to.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # 5a775b367a56d5bd118a224a811bba288150a563
+    with:
+      base64-subjects: ${{ needs.release.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.tag }}

@@ -1,5 +1,8 @@
 ## Unreleased
 
+- `tool/build.sh` builds `dart2js` (default) or `dart2wasm` for one target and accepts an optional bridge entry (proposed decision D-38, pending review).
+- The release workflow builds one target per dispatch, resolves the workspace's dependencies at dispatch time (no lock is committed), records the Dart SDK version and the resolved `pubspec.lock`'s sha256 in the release notes, and publishes its files under a target-specific tag with build provenance and an SLSA provenance file.
+- `bridge-manifest.json` publishes the exported bridge surface and error codes, generated from the Dart constants.
 - `PortalSessionOfflineException` and `UnsupportedKeyMaterialException` now extend `AtException` (D-41), so a caller catching `AtException` starts catching them; both keep their names.
 - Browser bridge (`web/at_client_bridge_entry.dart`, built as `build/at_client_web.js` by the release build): `create` opens a keys-file session, or a passkey session when asked, and returns `@JSExport` session and collection objects. Rejections carry `{code, message}`, with `id`, `owner`, `kind` and `failures` for collection failures; item data crosses as objects with no prototype.
 - Passkey sign-in: `create` with `passkey: true`, `rpId` and `rpName` opens a passkey session (`passkeyLogin`) and returns the same `@JSExport` session; it needs no `keys` document, and a missing or mistyped field rejects with `invalid_argument` naming the field.

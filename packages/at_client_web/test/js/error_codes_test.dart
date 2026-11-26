@@ -133,11 +133,15 @@ void main() {
     final produced = cases.values.map((c) => c.$2).toSet();
     expect(produced.containsAll(mapped), isTrue,
         reason: '${mapped.difference(produced)}');
-    expect(produced.where((c) => !c.startsWith('COLLECTION_')).toSet(), mapped);
+    final sessionCodes =
+        produced.where((c) => !c.startsWith('COLLECTION_')).toSet();
+    expect(sessionCodes, mapped);
+    expect(atErrorCodes.toSet(), sessionCodes);
     final collection = {
       for (final kind in CollectionFailure.values) collectionErrorCode(kind)
     };
     expect(collection, hasLength(11));
+    expect(collectionErrorCodes.toSet(), collection);
     expect(
         produced.where((c) => c.startsWith('COLLECTION_')).toSet(), collection);
   });
