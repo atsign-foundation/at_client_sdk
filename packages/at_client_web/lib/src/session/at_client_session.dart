@@ -110,13 +110,19 @@ abstract interface class Session {
   /// Stops the client and every subscription. The first call starts the
   /// teardown; every later call, concurrent or sequential, returns that same
   /// future, whether it succeeded or failed, so nothing re-runs and a close
-  /// whose teardown failed stays failed and returns the same error.
+  /// whose teardown failed stays failed and returns the same error. Every step
+  /// runs even when one fails: a failed cancel is logged, and a failed client
+  /// stop is rethrown once every step has run.
   Future<void> close();
 }
 
 /// A [Session] on an [AtClient], keying each value as
 /// `<key>.<namespace>@<sharedBy>` with the namespace folded to lower case.
 class AtClientSession implements Session {
+  /// [namespace] is the session's namespace, folded to lower case and
+  /// validated here unless [namespaceIsNormalized] says it is already the
+  /// [normalizeSessionNamespace] result (as [SessionOptions] gives it), in
+  /// which case it must still equal that result and is refused otherwise.
   /// [stop] ends what opened the client, by default the client's own stop;
   /// [close] awaits it. [warn] receives the warnings the session raises, by
   /// default through the atSign logger; [isNavigatorOnline] tells a
@@ -129,13 +135,14 @@ class AtClientSession implements Session {
   /// one.
   AtClientSession(this._client,
       {required String namespace,
+      bool namespaceIsNormalized = false,
       void Function(String message)? warn,
       bool Function()? isNavigatorOnline,
       Stream<void>? networkChanges,
       Future<void> Function()? stop,
       ItemLocks? itemLocks,
       Set<StreamSubscription<Object?>>? subscriptions})
-      : _namespace = normalizeSessionNamespace(namespace),
+      : _namespace = _checkedNamespace(namespace, namespaceIsNormalized),
         _itemLocks = itemLocks ?? ItemLocks(),
         _subscriptions = subscriptions ?? {},
         _warn = warn ?? _logger.warning,
@@ -146,6 +153,19 @@ class AtClientSession implements Session {
         _client.connection.changes.listen((state) => _reportStatusOf(state));
     _network = networkChanges
         ?.listen((_) => _reportStatusOf(_client.connection.current));
+  }
+
+  /// [namespace] folded and validated, or, when [isNormalized], the same
+  /// value unchanged if it is already the [normalizeSessionNamespace] result.
+  /// A value that is not is refused with the error [SessionOptions] uses.
+  static String _checkedNamespace(String namespace, bool isNormalized) {
+    if (!isNormalized) return normalizeSessionNamespace(namespace);
+    try {
+      if (normalizeSessionNamespace(namespace) == namespace) return namespace;
+    } on InvalidArgumentException {
+      // Refused below, as an un-folded value is.
+    }
+    throw ArgumentError('is not a valid namespace segment', 'namespace');
   }
 
   static final _logger = AtSignLogger('AtClientSession');
@@ -483,6 +503,10 @@ class AtClientSession implements Session {
     subscription = service
         .subscribe(regex: pattern.pattern, shouldDecrypt: true)
         .map((n) {
+          // A server stats notification (id `-1`) reports the server's state,
+          // not an item write, and its key names no owner to check; skip it
+          // before the ownership check rather than warn about every one.
+          if (n.id == '-1') return null;
           final from = _verifiedSender(n, own: own);
           if (from == null) {
             // Never the value: it is the sender's, decrypted for this client.
@@ -644,6 +668,15 @@ class AtClientSession implements Session {
   /// future, whether it succeeded or failed, so nothing re-runs and a close
   /// whose stop failed stays failed.
   ///
+  /// Every step runs (A17): a cancel step that throws an `Exception` is
+  /// logged as a warning and stepped over, and a Dart `Error` from any step,
+  /// or any failure of the client's stop, is held and rethrown once every
+  /// later step has run, so one failing step never hides another. The stop's
+  /// failure is held even when it is an `Exception`, not only an `Error`:
+  /// a passkey session's stop closes the vault and zeroes keys, so swallowing
+  /// its failure would lose data. When more than one step fails this way the
+  /// first failure is the one rethrown, and each later one is logged.
+  ///
   /// A keys session's close makes no time bound of its own: it awaits the
   /// client's `stop()`, whatever that takes. A passkey session's close is
   /// bounded by D-30's vault settle, the client's stop plus 10 seconds plus
@@ -655,30 +688,44 @@ class AtClientSession implements Session {
     _closed = true;
     _itemLocks.clear();
     _statusListeners.clear();
-    for (final cancel in [_connection.cancel, _network?.cancel]) {
+    Object? heldError;
+    StackTrace? heldStack;
+    Future<void> step(Future<void> Function() action, String what,
+        {bool holdFailures = false}) async {
       try {
-        await cancel?.call();
-      } on Object catch (_) {
-        _warn('Failed to cancel status subscription on close');
+        await action();
+      } on Object catch (error, stack) {
+        final hold = holdFailures || error is Error;
+        if (hold && heldError == null) {
+          heldError = error;
+          heldStack = stack;
+        } else {
+          // A cancel step's Exception, or a later failure while one is
+          // already held: log it, never drop it, so a second failed step is
+          // not hidden.
+          _warn('Failed to $what');
+        }
       }
     }
+
+    for (final cancel in [_connection.cancel, _network?.cancel]) {
+      await step(() async {
+        await cancel?.call();
+      }, 'cancel status subscription on close');
+    }
     for (final subscription in [..._subscriptions]) {
-      try {
-        await subscription.cancel();
-      } on Object catch (_) {
-        _warn('Failed to cancel notification subscription on close');
-      }
+      await step(
+          subscription.cancel, 'cancel notification subscription on close');
     }
     _subscriptions.clear();
     for (final cancelWatch in [..._watchCancels]) {
-      try {
-        await cancelWatch();
-      } on Object catch (_) {
-        _warn('Failed to cancel collection watch on close');
-      }
+      await step(cancelWatch, 'cancel collection watch on close');
     }
     _watchCancels.clear();
-    await _stop();
+    await step(_stop, 'stop the client on close', holdFailures: true);
+    if (heldError case final error?) {
+      Error.throwWithStackTrace(error, heldStack!);
+    }
   }
 }
 
@@ -689,52 +736,53 @@ class SessionBoundCollection implements ItemCollection {
   final ItemCollection _inner;
 
   @override
-  Future<JsItem> create(Map<String, dynamic> data,
-      {String? id, List<String> sharedWith = const []}) async {
+  Future<CItem<Map<String, dynamic>>> create(Map<String, dynamic> data,
+      {String? id, List<Atsign> sharedWith = const []}) async {
     _session._open();
     return _inner.create(data, id: id, sharedWith: sharedWith);
   }
 
   @override
-  Future<JsItem?> get(JsItemAddress address) async {
+  Future<CItem<Map<String, dynamic>>?> get(ItemAddress address) async {
     _session._open();
     return _inner.get(address);
   }
 
   @override
-  Future<JsListing> list() async {
+  Future<ItemListing> list() async {
     _session._open();
     return _inner.list();
   }
 
   @override
-  Future<JsListing> query(List<JsWhereClause> clauses) async {
+  Future<ItemListing> query(List<WhereClause> clauses) async {
     _session._open();
     return _inner.query(clauses);
   }
 
   @override
-  Future<JsItem> update(
-      JsItemAddress address, Map<String, dynamic> data) async {
+  Future<CItem<Map<String, dynamic>>> update(
+      ItemAddress address, Map<String, dynamic> data) async {
     _session._open();
     return _inner.update(address, data);
   }
 
   @override
-  Future<JsItem> share(JsItemAddress address, List<String> atSigns) async {
+  Future<CItem<Map<String, dynamic>>> share(
+      ItemAddress address, List<Atsign> atSigns) async {
     _session._open();
     return _inner.share(address, atSigns);
   }
 
   @override
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) async {
+  Future<void> remove(ItemAddress address, {bool cascade = false}) async {
     _session._open();
     return _inner.remove(address, cascade: cascade);
   }
 
   @override
   Future<void> Function() watch(
-    void Function(JsEvent event) onEvent, {
+    void Function(CEvent event) onEvent, {
     required void Function(JsCollectionsError error) onError,
   }) {
     _session._open();

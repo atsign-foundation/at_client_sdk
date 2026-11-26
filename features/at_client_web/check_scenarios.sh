@@ -21,6 +21,13 @@ while IFS= read -r title; do
   fi
 done < <(
   tr -d '\r' < <(cat "$feat_dir"/*.feature) |
-    sed -nE 's/^[[:space:]]*Scenario( Outline)?:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\2/p'
+    sed -nE 's/^[[:space:]]*Scenario( Outline)?:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\2/p' |
+    # CI cannot run the three IPv6 scenarios: each needs AT_IPV6_CERTS_DIR
+    # holding a certificate for ::1 that Chrome trusts, which CI does not
+    # provide, so the tests skip every run. They are still quoted in tests;
+    # they are left out of the count so a skipped run is not mistaken for
+    # coverage.
+    grep -vxF -e 'A proxy named by a bracketed IPv6 literal is reached at that address' \
+      -e 'An atDirectory named by a bracketed IPv6 literal is asked at that address'
 )
 exit "$missing"

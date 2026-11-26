@@ -403,7 +403,7 @@ const at = await AtClient.create({
 const todos = await at.collection<Todo>('todos', {
   type: 'Todo',                // the wire typeTag — mandatory (TS erases T)
   expiration: 7 * 24 * 3600_000,  // ms; defaulted if omitted
-  eventSource: 'data',         // 'data' | 'notifs' | 'both', default 'data'
+  eventSource: 'both',         // 'data' | 'notifs' | 'both', default 'both'
 });
 
 const item = await todos.create({ title: 'ship wasm' }, { sharedWith: ['@bob'] });
@@ -467,7 +467,7 @@ paragraph as the code above, not buried in §10:**
 | `CItem<T>` | `{ id, owner, type, data, sharedWith, createdAt, expiresAt, availableAt }` | `type` is the wire tag; `data` replaces `obj` (§5.3's fixes) |
 | `CItem.ancestors` → `List<({Atsign owner, String id})>` | `{owner, id}[]` | Dart record — no natural JS shape, flattened |
 | `Duration defaultExpiration` (positional, required upstream) | `expiration?: number` (ms), defaulted by the facade | positional-required upstream; optional in the facade |
-| `EventSource` | `'data' \| 'notifs' \| 'both'` | default `'data'` in the facade (upstream defaults `'both'`, which double-fires) |
+| `EventSource` | `'data' \| 'notifs' \| 'both'` | default `'both'`, the same as upstream |
 | `CEvent` + 7 subclasses (`CItemUpdated`, `CItemDeleted`, `CItemAvailable`, `CItemExpiringSoon`, `CSubItemUpdated`, `CSubItemDeleted`, `CReadReceipt`) | discriminated union on `type` | **not sealed upstream** — the encoder and every consumer switch need a default branch |
 | `Atsign` (`extension type Atsign._(String)`, erased at runtime) | `string` | `toAtsign()` normalises (lowercase, prepend `@`, strip right-side dots) and validates — route through Dart, never replicate in JS |
 | `Predicate` AST (`PathField`, `CmpPredicate`, `AndPredicate`, `OrPredicate`, `NotPredicate`) | `.where(path, op, value)` chain | not serializable upstream (private `CmpPredicate._`, closure `PathField.extract`) — the facade builds the AST from primitives, JS never sees it |
@@ -697,17 +697,27 @@ land. Until then no adapter operation validates data against a schema.
 
 | Code | Raised when |
 |---|---|
-| `pkam_refused` | `AtOpenRefusedException`: the atServer refuses the open (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
-| `offline` | `PortalSessionOfflineException`: the open did not come online and was not classed as a refusal |
-| `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with |
+| `pkam_refused` | `AtOpenRefusedException`, `AtCredentialRefusedException`, `PkamRefusedException` or `UnAuthenticatedException`: the atServer refuses the open or the credential (a revoked or unauthenticated credential, an unapproved or expired enrollment) or there is no atServer for the atSign |
+| `offline` | `PortalSessionOfflineException`, `SecondaryConnectException`, `AtConnectException` (handshake, connection-invalid, root/secondary connectivity, no atServer), `AtIOException` or `AtCertificateValidationException`: a network drop, an unreachable atServer, or a TLS/handshake failure. A browser offline and a WebSocket that errors or closes before opening surface here |
+| `timeout` | `AtTimeoutException` or `TimeoutException`: a transport or atServer wait expired |
+| `storage_failed` | `IndexedDbException` (the message names the browser error, such as `QuotaExceededError`, and never a value), `SetupLockTimeoutException` (the setup lock was not granted), or `AtServerAtKeysWriteException`: IndexedDB, keystore or setup-lock failure |
+| `refused` | `UnAuthorizedException`; the at_commons server-refusal types — `AtServerException` itself, `InternalServerError`, `InternalServerException`, `ServerIsPausedException`, the inbound/outbound connection-limit types, `LookupException`, `AtThrottleLimitExceeded`, `InvalidSyntaxException`, `InvalidRequestException`, `IllegalStateException` and `IllegalArgumentException`; or an `AtLookUpException` with any other code: the atServer answered and refused the request. A type with no arm falls to `internal` |
+| `already_open` | `AlreadyOpenException` (a second `create` for an atSign that already has a live client in this process) or `AtStorageInUseException` (a store another client holds open): nothing was opened |
+| `onboarding_incomplete` | `AtEnrollmentPendingException`: the keys hold only a pending enrollment, with no credential to authenticate with; `PasskeyOnboardingIncompleteException` or `MissingAtKeysDocumentException`: the passkey onboarding has to be finished by logging in with the passkey |
 | `enrollment_conveyance_failed` | `EnrollmentConveyanceException`: the server-side `enroll:approve` succeeded and the enrollment is live on the atServer, but key conveyance failed |
 | `enrollment_denied` | `AtEnrollmentException`: `approve` or `deny` names an enrollment id that is not pending, the atServer refuses the verb, or the enrolment failed locally (an approval that landed and then lost its record, a missing key package, remaining approved enrollments). The code means the enrolment did not complete, not only that the atServer said no |
 | `enrollment_in_flight` | `EnrollmentInFlightException`: `approve` or `deny` names an enrollment id that already has a decision in flight; nothing is sent for the second call |
 | `closed` | `SessionClosedException`, or at_client's `StoppedException` from a call already in flight when the session closed: a call on a session or its collection after `close`; the message is `the session is closed` |
 | `invalid_argument` | `InvalidArgumentException`: a caller mistake, such as a malformed argument shape, an invalid namespace or regex, an invalid `address.owner`, or a missing or mistyped `create` option such as `passkey`, `rpId` or `rpName`; the message names the parameter and never its value, at most 128 characters on one line |
-| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); `UnsupportedOperationException` (`create` on a page that is not a secure context); or an `UnsupportedError`, mapped by its type alone: its text is never read or shown, and the message is always `the operation is not supported here` (the passkey setup lock raises one on a browser without `navigator.locks`) |
-| `bad_key` | `InvalidKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or non-JSON `keys`), `AtNoCredentialException` (keys hold no usable credential), or `InvalidAtSignException` |
-| `internal` | any other error (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error` |
+| `unsupported` | `UnsupportedKeyMaterialException` (keys with ML-DSA-65 signing or namespace key material); `ManageAccessRequiredException` (a pairing call on a session without `__manage`); `UnsupportedOperationException` (`create` on a page that is not a secure context); `PrfUnavailableException` (this browser or authenticator has no passkey PRF); `UnsupportedPasskeyRecordException`; or an `UnsupportedError`, mapped by its type alone: its text is never read or shown, and the message is always `the operation is not supported here` (the passkey setup lock raises one on a browser without `navigator.locks`) |
+| `bad_key` | `InvalidKeyException` (a key cannot do what was asked, such as a notify with no `sharedWith`, `public: true`, `cached: true`, mismatched `sharedBy`, invalid key/namespace, or a non-JSON `keys` document), `AtNoCredentialException` or another `AtKeysUnusableException` (keys hold no usable credential), `AtKeys*` validation, parse, format, source or overwrite failures, an atKey/signing/encryption failure, a passkey that cannot be used (`PasskeyLostException`, `PasskeyRecordAuthenticationException`, `PublicKeyMismatchException`, `PasskeyCeremonyException`), `AtAuthenticationException` or `InvalidAtSignException` |
+| `internal` | a Dart `Error` (a `StateError` outside the documented caller misuse, a `TypeError`, a null-check failure, an `ArgumentError`, or an `UnsupportedError`'s neighbours) or a type nothing above names (or `overflow` from the npm wrapper's bounded stream queues); the message is the fixed text `internal error`. Every failure a bridge path can name has its own code above |
+
+`internal` means our bug: only a Dart `Error` (a `StateError` outside the documented
+caller misuse, a `TypeError`, a null-check failure) or a type the mapping does not name
+reaches it. Every failure a bridge path can explain — keys, connectivity, timeouts,
+storage, enrolment, notification — has its own code above, and its message is written
+here from the exception's type and structured fields, never taken from at_client's text.
 
 When `create()` gets several bad inputs, the first error reported follows this order: type checks and key decoding, then options validation. For a passkey session `rpId` and `rpName` take the place of `keys` in that order.
 

@@ -97,8 +97,11 @@ class SessionKeysIo extends WrittenAtKeysIo {
 /// Opens for one atSign as one enrollment run one at a time: an open started
 /// while another for the same atSign and enrollment is running waits for it
 /// to end, then fails as it would after it (a [StateError] while that client
-/// is live) or builds afresh. Opens for different enrollments of an atSign,
-/// which at_client allows side by side, do not wait on each other.
+/// is live) or builds afresh. At most [openQueueCap] opens may wait for one
+/// atSign and enrollment; the next is refused with [QueueLimitException]
+/// rather than waiting, so a caller looping on open cannot grow the queue.
+/// Opens for different enrollments of an atSign, which at_client allows side
+/// by side, do not wait on each other.
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].

@@ -3,10 +3,12 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart' as web;
+import 'package:at_client_web/src/collections/item_locks.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:test/test.dart';
 
@@ -31,12 +33,18 @@ final _bridgeCodes = {
   'enrollment_in_flight',
   'pkam_refused',
   'offline',
+  // `timeout` is a code but also an ordinary field name in the package
+  // (`passkey_creation_options.dart`), so the literal scan cannot own it;
+  // error_codes_test pins the code.
+  'storage_failed',
+  'refused',
   'onboarding_incomplete',
   'enrollment_conveyance_failed',
   'enrollment_denied',
   'closed',
   'unsupported',
   'bad_key',
+  'already_open',
   'internal',
 };
 
@@ -71,11 +79,13 @@ void main() {
       ManageAccessRequiredException(),
       EnrollmentInFlightException(),
       SessionClosedException(),
+      AlreadyOpenException(),
       PortalSessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       UnsupportedKeyMaterialException('@alice'),
       UnsupportedOperationException(UnsupportedOperation.secureContext),
       SetupLockTimeoutException('lock'),
+      QueueLimitException(64),
       IndexedDbException('QuotaExceededError'),
       JsCollectionsError(CollectionFailure.failed),
     ];
@@ -171,14 +181,38 @@ void main() {
     }
   });
 
-  test(
-      'an item id on an exception is folded to lower case once, where it is built',
-      () {
-    expect(InvalidArgumentException('x', id: 'ItEm-A').id, 'item-a');
+  test('an item id on an exception passes as the caller gave it', () {
+    // at_client folds the ids it stores; an id a rejection only reports is
+    // not folded again here.
+    expect(InvalidArgumentException('x', id: 'ItEm-A').id, 'ItEm-A');
     expect(JsCollectionsError(CollectionFailure.notFound, id: 'ItEm-A').id,
-        'item-a');
+        'ItEm-A');
     expect(InvalidArgumentException('x').id, isNull);
-    expect(foldItemId('ItEm-A'), 'item-a');
+  });
+
+  test('the per-item lock folds the ids it must compare', () async {
+    final locks = ItemLocks();
+    final first = Completer<void>();
+    final second = Completer<void>();
+    final started = <String>[];
+
+    final a = locks.run('ns', 'ItEm-A', Atsign('@alice'), () async {
+      started.add('a');
+      await first.future;
+    });
+    final b = locks.run('ns', 'item-a', Atsign('@alice'), () async {
+      started.add('b');
+      await second.future;
+    });
+    await pumpEventQueue();
+    expect(started, ['a'], reason: 'one folded key, so the calls queue');
+
+    first.complete();
+    await a;
+    await pumpEventQueue();
+    expect(started, ['a', 'b']);
+    second.complete();
+    await b;
   });
 
   test('the closed message and the message bound have one owner', () {

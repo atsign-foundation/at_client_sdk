@@ -180,10 +180,11 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter shares an id that does not exist
     Then the share rejects with COLLECTION_ITEM_NOT_FOUND
 
-  Scenario: A share with an invalid atSign rejects with COLLECTION_INVALID_ARGUMENT
-    Given an item
-    When the adapter shares it with "@a@b"
-    Then the share rejects with COLLECTION_INVALID_ARGUMENT and sharedWith is unchanged
+  Scenario: a recipient that is not an atSign rejects a collection refusal
+    Given a collection
+    When a caller shares an item with "@a@b" or creates one shared with it
+    Then the bridge rejects with COLLECTION_INVALID_ARGUMENT naming the invalid atSign
+    And the adapter never sees the call
 
   Scenario: A partial write failure rejects with COLLECTION_PARTIAL_FAILURE naming the recipient
     Given writes of @bob's recipient copy fail
@@ -226,8 +227,12 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter queries that path with "<"
     Then the query rejects with COLLECTION_TYPE_MISMATCH
 
-  Scenario: An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT
-    When the adapter queries with "like", "~", "=<" with a map value, an empty path segment or a map value for "<"
+  Scenario: an unknown where operator rejects a collection refusal
+    When a caller queries with "like", "~" or "=<"
+    Then each rejects with COLLECTION_INVALID_ARGUMENT naming the operator
+
+  Scenario: A bad path or value rejects with COLLECTION_INVALID_ARGUMENT
+    When the adapter queries with an empty path segment or a map value for "<"
     Then each rejects with COLLECTION_INVALID_ARGUMENT naming the problem
 
   Scenario: A query returns matching readable items and reports unreadable ones
@@ -261,19 +266,19 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter creates an item with the id "A1"
     Then the returned item's id is "a1"
 
-  Scenario: A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"
+  Scenario: A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "A1"
     Given an item created through the adapter with the id "a1"
     When the adapter creates an item with the id "A1"
-    Then it rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"
+    Then it rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "A1"
 
-  Scenario: An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"
+  Scenario: An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "B1"
     Given no item with the id "b1"
     When the adapter updates, shares or removes the id "B1" owned by @alice
-    Then it rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"
+    Then it rejects with COLLECTION_ITEM_NOT_FOUND and the id "B1"
 
-  Scenario: An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"
+  Scenario: An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "B1"
     When the adapter updates the id "B1" owned by @bob
-    Then it rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"
+    Then it rejects with COLLECTION_ITEM_NOT_OWNER and the id "B1"
 
   Scenario: A get with the id "A1" returns the item created as "a1"
     Given an item created through the adapter with the id "a1"

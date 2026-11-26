@@ -8,6 +8,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
+import 'package:at_client_web/src/keyed_queue.dart';
 import 'package:at_utils/at_utils.dart' show LoggingHandler;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -36,6 +37,57 @@ final class _LaterEvent extends CEvent {
 /// An error type the adapter has no name for, standing in for one a later
 /// at_client throws.
 final class _LaterError {}
+
+/// A [CEvent] as the comparable plain values a test asserts on: its type,
+/// the subject it names, and the fields belonging to that type.
+Map<String, Object?> _shape(CEvent event) => switch (event) {
+      CItemUpdated() => {
+          'type': 'updated',
+          'id': event.id,
+          'owner': event.owner,
+        },
+      CItemDeleted(:final wasExpired) => {
+          'type': 'deleted',
+          'id': event.id,
+          'owner': event.owner,
+          'wasExpired': wasExpired,
+        },
+      CItemAvailable(:final availableAt) => {
+          'type': 'available',
+          'id': event.id,
+          'owner': event.owner,
+          'availableAt': availableAt,
+        },
+      CItemExpiringSoon(:final expiresAt, :final leadTime) => {
+          'type': 'expiringSoon',
+          'id': event.id,
+          'owner': event.owner,
+          'expiresAt': expiresAt,
+          'leadTime': leadTime,
+        },
+      CReadReceipt(:final from, :final readAt) => {
+          'type': 'readReceipt',
+          'id': event.id,
+          'owner': event.owner,
+          'from': from,
+          'readAt': readAt,
+        },
+      CSubItemUpdated(:final ancestry) || CSubItemDeleted(:final ancestry) => {
+          'type':
+              event is CSubItemUpdated ? 'subItemUpdated' : 'subItemDeleted',
+          'id': event.id,
+          'owner': event.owner,
+          'ancestry': [
+            for (final a in ancestry)
+              {'id': a.id, 'subName': a.subName, 'owner': a.owner}
+          ],
+        },
+      _ => {
+          'type': 'unknown',
+          'id': event.id,
+          'owner': event.owner,
+        },
+    };
 
 /// Collects each log record as `LEVEL|logger|message`.
 final class _Collect implements LoggingHandler {
@@ -104,16 +156,18 @@ void main() {
       JsCollectionsAdapter.open(alice.mock,
           namespace: _ns, type: type, expirationMs: _day.inMilliseconds);
 
-  JsItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
-  JsItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
+  ItemAddress mine(String id) => (id: id, owner: '@alice'.toAtsign());
+  ItemAddress bobs(String id) => (id: id, owner: '@bob'.toAtsign());
 
-  List<String> ids(List<JsItem> items) =>
-      [for (final item in items) item['id'] as String];
+  List<String> ids(List<CItem<Map<String, dynamic>>> items) =>
+      [for (final item in items) item.id];
 
-  Future<List<JsItem>> itemsOf(Future<JsListing> listing) async =>
+  Future<List<CItem<Map<String, dynamic>>>> itemsOf(
+          Future<ItemListing> listing) async =>
       (await listing).items;
 
-  Future<List<JsUnreadable>> unreadableOf(Future<JsListing> listing) async =>
+  Future<List<UnreadableItem>> unreadableOf(
+          Future<ItemListing> listing) async =>
       (await listing).unreadable;
 
   /// @bob writes [id], shared with @alice, and makes @alice's copy of it
@@ -156,7 +210,7 @@ void main() {
           'create': () => todos.create({'t': 1}, id: id),
           'get': () => todos.get(mine(id)),
           'update': () => todos.update(mine(id), {'t': 2}),
-          'share': () => todos.share(mine(id), ['@bob']),
+          'share': () => todos.share(mine(id), ['@bob'.toAtsign()]),
           'remove': () => todos.remove(mine(id)),
         }.entries) {
           await expectLater(
@@ -208,7 +262,7 @@ void main() {
 
       await expectLater(
           JsCollectionsAdapter(where)
-              .query([(path: 'status', op: '==', value: 'open')]),
+              .query([(path: 'status', op: PredicateOp.eq, value: 'open')]),
           throwsA(isA<JsCollectionsError>()
               .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
               .having((e) => e.causeType, 'kind', 'ArgumentError')
@@ -249,7 +303,7 @@ void main() {
 
       final item = await todos.create({'t': 1}, id: 'A1');
 
-      expect(item['id'], 'a1');
+      expect(item.id, 'a1');
       expect(server.hasKey('a1.$_ns@alice'), isTrue);
     });
 
@@ -259,43 +313,43 @@ void main() {
 
       final item = await todos.get(mine('A1'));
 
-      expect(item?['id'], 'a1');
-      expect(item?['data'], {'t': 1});
+      expect(item?.id, 'a1');
+      expect(item?.obj, {'t': 1});
     });
 
     test(
-        'A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "a1"',
+        'A create with the id "A1" when "a1" exists rejects with COLLECTION_ITEM_ALREADY_EXISTS and the id "A1"',
         () async {
       final todos = await open();
       await todos.create({'t': 1}, id: 'a1');
 
       await expectLater(todos.create({'t': 2}, id: 'A1'),
-          _rejectsWith(CollectionFailure.alreadyExists, id: 'a1'));
+          _rejectsWith(CollectionFailure.alreadyExists, id: 'A1'));
     });
 
     test(
-        'An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "b1"',
+        'An update, share or remove of the missing id "B1" rejects with COLLECTION_ITEM_NOT_FOUND and the id "B1"',
         () async {
       final todos = await open();
 
       for (final call in <String, Future<Object?> Function()>{
         'update': () => todos.update(mine('B1'), {'t': 2}),
-        'share': () => todos.share(mine('B1'), ['@bob']),
+        'share': () => todos.share(mine('B1'), ['@bob'.toAtsign()]),
         'remove': () => todos.remove(mine('B1')),
       }.entries) {
         await expectLater(
-            call.value(), _rejectsWith(CollectionFailure.notFound, id: 'b1'),
+            call.value(), _rejectsWith(CollectionFailure.notFound, id: 'B1'),
             reason: call.key);
       }
     });
 
     test(
-        'An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "b1"',
+        'An update of the id "B1" owned by @bob rejects with COLLECTION_ITEM_NOT_OWNER and the id "B1"',
         () async {
       final todos = await open();
 
       await expectLater(todos.update(bobs('B1'), {'t': 2}),
-          _rejectsWith(CollectionFailure.notOwner, id: 'b1'));
+          _rejectsWith(CollectionFailure.notOwner, id: 'B1'));
     });
 
     test('A get addresses an item already stored under a 65-character id',
@@ -310,9 +364,9 @@ void main() {
 
       final item = await todos.get(mine(long));
 
-      expect(item?['id'], long);
-      expect(item?['owner'], '@alice');
-      expect(item?['data'], {'t': 1});
+      expect(item?.id, long);
+      expect(item?.owner, '@alice');
+      expect(item?.obj, {'t': 1});
     });
 
     test('An item id of 64 allowed characters round-trips', () async {
@@ -322,7 +376,7 @@ void main() {
 
       await todos.create({'t': 1}, id: id);
 
-      expect((await todos.get(mine(id)))?['id'], id);
+      expect((await todos.get(mine(id)))?.id, id);
     });
   });
 
@@ -450,7 +504,8 @@ void main() {
             TimeoutException('t'));
 
         await expectLater(
-          todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+          todos.create({'title': 'a'},
+              id: 'i1', sharedWith: ['@bob'.toAtsign()]),
           throwsA(
               isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'TimeoutException'}
@@ -473,7 +528,8 @@ void main() {
             (key) => key.sharedWith?.toAtsign() == '@bob', _LaterError());
 
         await expectLater(
-          todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+          todos.create({'title': 'a'},
+              id: 'i1', sharedWith: ['@bob'.toAtsign()]),
           throwsA(
               isA<JsCollectionsError>().having((e) => e.failures, 'failures', [
             {'op': 'put', 'recipient': '@bob', 'kind': 'Unknown'}
@@ -500,17 +556,17 @@ void main() {
         () async {
       final todos = await open();
 
-      final item =
-          await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['bob']);
+      final item = await todos.create({'title': 'a'},
+          id: 'i1', sharedWith: ['bob'.toAtsign()]);
 
-      expect(item['id'], 'i1');
-      expect(item['owner'], '@alice');
-      expect(item['type'], 'Todo');
-      expect(item['data'], {'title': 'a'});
-      expect(item['sharedWith'], ['@bob']);
-      expect(item['expiresAt'], isA<int>());
-      expect(item['createdAt'], isA<int>());
-      expect(item['availableAt'], isNull);
+      expect(item.id, 'i1');
+      expect(item.owner, '@alice');
+      expect(item.type, 'Todo');
+      expect(item.obj, {'title': 'a'});
+      expect(item.sharedWith, ['@bob']);
+      expect(item.expiresAt.millisecondsSinceEpoch, isA<int>());
+      expect(item.createdAt.millisecondsSinceEpoch, isA<int>());
+      expect(item.availableAt?.millisecondsSinceEpoch, isNull);
     });
 
     test(
@@ -565,8 +621,8 @@ void main() {
         second.then<Object?>((item) => item, onError: (Object e) => e),
       ]);
 
-      expect(outcomes[0], isA<JsItem>());
-      expect((outcomes[0] as JsItem)['data'], {'title': 'a'});
+      expect(outcomes[0], isA<CItem<Map<String, dynamic>>>());
+      expect((outcomes[0] as CItem<Map<String, dynamic>>).obj, {'title': 'a'});
       expect(
         outcomes[1],
         isA<JsCollectionsError>()
@@ -589,10 +645,10 @@ void main() {
       final theirs = await todos.get(bobs('a1'));
       final ours = await todos.get(mine('a1'));
 
-      expect(theirs?['owner'], '@bob');
-      expect(theirs?['data'], {'title': 'bob'});
-      expect(ours?['owner'], '@alice');
-      expect(ours?['data'], {'title': 'mine'});
+      expect(theirs?.owner, '@bob');
+      expect(theirs?.obj, {'title': 'bob'});
+      expect(ours?.owner, '@alice');
+      expect(ours?.obj, {'title': 'mine'});
       expect(await todos.get(mine('nope')), isNull);
     });
 
@@ -634,9 +690,9 @@ void main() {
       final got = await todos.get(bobs('f1'));
       final listed = (await todos.list()).items;
 
-      expect(got?['owner'], '@bob');
+      expect(got?.owner, '@bob');
       expect(ids(listed), ['f1']);
-      expect(listed.single['owner'], '@bob');
+      expect(listed.single.owner, '@bob');
       expect(await todos.get(mine('f1')), isNull);
       await expectLater(
           todos.update((id: 'f1', owner: '@carol'.toAtsign()), {'x': 1}),
@@ -679,7 +735,7 @@ void main() {
       await bobShares('deep', _nested(65));
 
       final listing =
-          await todos.query([(path: 'title', op: '==', value: 'a')]);
+          await todos.query([(path: 'title', op: PredicateOp.eq, value: 'a')]);
 
       expect(ids(listing.items), ['a1']);
       expect(listing.unreadable,
@@ -734,7 +790,7 @@ void main() {
       await seedOwnDeep('mine');
       final todos = await open();
 
-      await expectLater(todos.share(mine('mine'), ['@bob']),
+      await expectLater(todos.share(mine('mine'), ['@bob'.toAtsign()]),
           _rejectsWith(CollectionFailure.tooDeep, id: 'mine'));
 
       final stored = await rawCollection(alice, _ns).get('mine', alice.atSign);
@@ -749,8 +805,8 @@ void main() {
 
       final updated = await todos.update(mine('mine'), {'title': 'fixed'});
 
-      expect(updated['data'], {'title': 'fixed'});
-      expect((await todos.get(mine('mine')))?['data'], {'title': 'fixed'});
+      expect(updated.obj, {'title': 'fixed'});
+      expect((await todos.get(mine('mine')))?.obj, {'title': 'fixed'});
     });
 
     test(
@@ -814,7 +870,8 @@ void main() {
       // 'a' ('a.todos…'): neither creation order nor id order.
       const created = ['c', 'a', 'a-b'];
       for (final id in created) {
-        await todos.create({'title': id}, id: id, sharedWith: ['@zed', '@amy']);
+        await todos.create({'title': id},
+            id: id, sharedWith: ['@zed'.toAtsign(), '@amy'.toAtsign()]);
       }
 
       final listed = await itemsOf(todos.list());
@@ -826,9 +883,9 @@ void main() {
       expect(ids(listed),
           isNot(orderedEquals([...created]..sort((a, b) => b.compareTo(a)))));
       for (final (i, item) in listed.indexed) {
-        expect(item['sharedWith'], upstream[i].sharedWith.toList());
+        expect(item.sharedWith, upstream[i].sharedWith.toList());
       }
-      expect(listed.first['sharedWith'], ['@zed', '@amy']);
+      expect(listed.first.sharedWith, ['@zed', '@amy']);
     });
 
     test('Items of every type tag are listed with their type', () async {
@@ -840,7 +897,7 @@ void main() {
           .create(obj: {'title': 'untagged'}, id: 'n1');
 
       final types = {
-        for (final item in await itemsOf(todos.list())) item['id']: item['type']
+        for (final item in await itemsOf(todos.list())) item.id: item.type
       };
 
       expect(types, {'t1': 'Todo', 'o1': 'Other', 'n1': 'n/a'});
@@ -863,12 +920,14 @@ void main() {
       final after = (await todos.get(mine('i1')))!;
 
       for (final item in [updated, after]) {
-        expect(item['data'], {'title': 'b'});
-        expect(item['sharedWith'], ['@bob']);
-        expect(item['expiresAt'], DateTime.utc(2100).millisecondsSinceEpoch);
-        expect(item['availableAt'], before['availableAt']);
+        expect(item.obj, {'title': 'b'});
+        expect(item.sharedWith, ['@bob']);
+        expect(item.expiresAt.millisecondsSinceEpoch,
+            DateTime.utc(2100).millisecondsSinceEpoch);
+        expect(item.availableAt?.millisecondsSinceEpoch,
+            before.availableAt?.millisecondsSinceEpoch);
       }
-      expect(before['data'], {'title': 'a'});
+      expect(before.obj, {'title': 'a'});
       expect(server.hasKey('@bob:i1.$_ns@alice'), isTrue);
     });
 
@@ -883,8 +942,8 @@ void main() {
           _rejectsWith(CollectionFailure.wrongType, id: 'o1', owner: '@alice'));
 
       final stored = (await todos.get(mine('o1')))!;
-      expect(stored['type'], 'Other');
-      expect(stored['data'], {'title': 'other'});
+      expect(stored.type, 'Other');
+      expect(stored.obj, {'title': 'other'});
     });
 
     test('An update adopts an untagged item and returns its stored createdAt',
@@ -897,9 +956,10 @@ void main() {
 
       final updated = await todos.update(mine('n1'), {'title': 'adopted'});
 
-      expect(updated['type'], 'Todo');
-      expect(updated['createdAt'], before['createdAt']);
-      expect((await todos.get(mine('n1')))?['type'], 'Todo');
+      expect(updated.type, 'Todo');
+      expect(updated.createdAt.millisecondsSinceEpoch,
+          before.createdAt.millisecondsSinceEpoch);
+      expect((await todos.get(mine('n1')))?.type, 'Todo');
     });
 
     test('An update of a missing item rejects with COLLECTION_ITEM_NOT_FOUND',
@@ -920,13 +980,13 @@ void main() {
 
       await expectLater(todos.update(bobs('b1'), {'title': 'mine'}),
           _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
-      await expectLater(todos.share(bobs('b1'), ['@carol']),
+      await expectLater(todos.share(bobs('b1'), ['@carol'.toAtsign()]),
           _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
       await expectLater(todos.remove(bobs('b1')),
           _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'));
 
       expect(server.hasKey('b1.$_ns@alice'), isFalse);
-      expect((await todos.get(bobs('b1')))?['data'], {'title': 'bob'});
+      expect((await todos.get(bobs('b1')))?.obj, {'title': 'bob'});
     });
 
     test(
@@ -938,16 +998,17 @@ void main() {
 
       final updated = await todos.update(mine('a1'), {'title': 'changed'});
 
-      expect(updated['owner'], '@alice');
-      expect(updated['data'], {'title': 'changed'});
-      expect((await todos.get(mine('a1')))?['data'], {'title': 'changed'});
+      expect(updated.owner, '@alice');
+      expect(updated.obj, {'title': 'changed'});
+      expect((await todos.get(mine('a1')))?.obj, {'title': 'changed'});
     });
 
     test(
         'An update keeps a recipient copy another device writes during the update',
         () async {
       final todos = await open();
-      await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']);
+      await todos.create({'title': 'a'},
+          id: 'i1', sharedWith: ['@bob'.toAtsign()]);
       alice.beforeNextPut(
         (key) => key.toString() == 'i1.$_ns@alice',
         () => server.putRaw('@carol:i1.$_ns@alice', '{}'),
@@ -961,12 +1022,13 @@ void main() {
 
     test('A share adds recipients and keeps existing ones', () async {
       final todos = await open();
-      await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@carol']);
+      await todos.create({'title': 'a'},
+          id: 'i1', sharedWith: ['@carol'.toAtsign()]);
 
-      final shared = await todos.share(mine('i1'), ['bob']);
+      final shared = await todos.share(mine('i1'), ['bob'.toAtsign()]);
 
-      expect(shared['sharedWith'], unorderedEquals(['@carol', '@bob']));
-      expect((await todos.get(mine('i1')))?['sharedWith'],
+      expect(shared.sharedWith, unorderedEquals(['@carol', '@bob']));
+      expect((await todos.get(mine('i1')))?.sharedWith,
           unorderedEquals(['@carol', '@bob']));
       expect(server.hasKey('@carol:i1.$_ns@alice'), isTrue);
       expect(server.hasKey('@bob:i1.$_ns@alice'), isTrue);
@@ -976,13 +1038,14 @@ void main() {
         'A share keeps a recipient copy another device writes during the share',
         () async {
       final todos = await open();
-      await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']);
+      await todos.create({'title': 'a'},
+          id: 'i1', sharedWith: ['@bob'.toAtsign()]);
       alice.beforeNextPut(
         (key) => key.toString().endsWith('i1.$_ns@alice'),
         () => server.putRaw('@carol:i1.$_ns@alice', '{}'),
       );
 
-      await todos.share(mine('i1'), ['@dave']);
+      await todos.share(mine('i1'), ['@dave'.toAtsign()]);
 
       expect(server.hasKey('@carol:i1.$_ns@alice'), isTrue);
       expect(server.hasKey('@bob:i1.$_ns@alice'), isTrue);
@@ -994,22 +1057,9 @@ void main() {
       final todos = await open();
 
       await expectLater(
-        todos.share(mine('nope'), ['@bob']),
+        todos.share(mine('nope'), ['@bob'.toAtsign()]),
         _rejectsWith(CollectionFailure.notFound, id: 'nope', owner: '@alice'),
       );
-    });
-
-    test(
-        'A share with an invalid atSign rejects with COLLECTION_INVALID_ARGUMENT',
-        () async {
-      final todos = await open();
-      await todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']);
-
-      await expectLater(
-        todos.share(mine('i1'), ['@a@b']),
-        _rejectsWith(CollectionFailure.invalidArgument),
-      );
-      expect((await todos.get(mine('i1')))?['sharedWith'], ['@bob']);
     });
 
     test(
@@ -1019,7 +1069,7 @@ void main() {
       alice.failPutsFor((key) => key.sharedWith?.toAtsign() == '@bob');
 
       await expectLater(
-        todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob']),
+        todos.create({'title': 'a'}, id: 'i1', sharedWith: ['@bob'.toAtsign()]),
         throwsA(isA<JsCollectionsError>()
             .having(errorCodeOf, 'code',
                 collectionErrorCode(CollectionFailure.partialFailure))
@@ -1036,7 +1086,7 @@ void main() {
       alice.failPutsFor((key) => key.sharedWith?.toAtsign() == '@bob');
 
       final error = await todos
-          .create({'title': 'a'}, sharedWith: ['@bob'])
+          .create({'title': 'a'}, sharedWith: ['@bob'.toAtsign()])
           .then<JsCollectionsError?>((_) => null)
           .catchError((Object e) => e as JsCollectionsError);
 
@@ -1124,7 +1174,7 @@ void main() {
       final updating = todos.update(mine('i1'), {'title': 'v2'});
       await firstPutStarted.future;
       final getsBeforeSecond = getCount;
-      final sharing = todos.share(mine('i1'), ['@bob']);
+      final sharing = todos.share(mine('i1'), ['@bob'.toAtsign()]);
       await settle();
 
       // While update holds the per-item lock, share has not started reading.
@@ -1132,8 +1182,8 @@ void main() {
 
       releaseFirstPut.complete();
       final results = await Future.wait([updating, sharing]);
-      expect(results[1]['data'], {'title': 'v2'});
-      expect(results[1]['sharedWith'], ['@bob']);
+      expect(results[1].obj, {'title': 'v2'});
+      expect(results[1].sharedWith, ['@bob']);
       expect(jsonDecode(server.storedValue('@bob:i1.$_ns@alice')!)['obj'],
           {'title': 'v2'});
 
@@ -1165,12 +1215,54 @@ void main() {
       expect(server.hasKey('i2.$_ns@alice'), isFalse);
     });
 
+    test(
+        'a write queue saturated behind one item rejects with COLLECTION_FAILED',
+        () async {
+      final todos = await open();
+      final firstPutStarted = Completer<void>();
+      final releaseFirstPut = Completer<void>();
+      var stalled = false;
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (!stalled) {
+          stalled = true;
+          firstPutStarted.complete();
+          await releaseFirstPut.future;
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      final held = todos.create({'title': 'v1'}, id: 'i1');
+      await firstPutStarted.future;
+
+      final queued = [
+        for (var i = 0; i < KeyedQueue.defaultMaxQueuedPerKey; i++)
+          todos.create({'title': 'v2'}, id: 'i1').then<Object?>((_) => null,
+              onError: (Object error) => error),
+      ];
+
+      await expectLater(
+          todos.create({'title': 'late'}, id: 'i1'),
+          _rejectsWith(CollectionFailure.failed,
+              id: 'i1', owner: '@alice', causeType: 'QueueLimitException'));
+
+      releaseFirstPut.complete();
+      await held;
+      final outcomes = await Future.wait(queued);
+      expect(outcomes, everyElement(isA<JsCollectionsError>()));
+      expect([for (final e in outcomes) (e as JsCollectionsError).kind],
+          everyElement(CollectionFailure.alreadyExists));
+      expect(server.hasKey('i1.$_ns@alice'), isTrue);
+    });
+
     test('collection get errors carry id and owner', () async {
       final todos = await open();
       await expectLater(
           todos.get(mine('A:B')),
           _rejectsWith(CollectionFailure.invalidArgument,
-              id: 'a:b', owner: '@alice'));
+              id: 'A:B', owner: '@alice'));
 
       final mockCollection = MockAtCollection();
       when(() => mockCollection.atSign).thenReturn('@alice'.toAtsign());
@@ -1180,7 +1272,7 @@ void main() {
       await expectLater(
           wrapped.get(mine('I1')),
           _rejectsWith(CollectionFailure.failed,
-              id: 'i1', owner: '@alice', causeType: 'StateError'));
+              id: 'I1', owner: '@alice', causeType: 'StateError'));
 
       when(() => mockCollection.getOrNull(any(), any()))
           .thenThrow(StoppedException('stopped'));
@@ -1251,7 +1343,7 @@ void main() {
     }
 
     Future<Set<String>> where(JsCollectionsAdapter todos, String path,
-            String op, Object? value) async =>
+            PredicateOp op, Object? value) async =>
         ids(await itemsOf(todos.query([(path: path, op: op, value: value)])))
             .toSet();
 
@@ -1260,27 +1352,29 @@ void main() {
         () async {
       final todos = await seeded();
 
-      expect(await where(todos, 'done', '==', false), {'a', 'c'});
-      expect(await where(todos, 'done', '!=', false), {'b'});
-      expect(await where(todos, 'prio', '<', 5), {'a'});
-      expect(await where(todos, 'prio', '<=', 5), {'a', 'b'});
-      expect(await where(todos, 'prio', '>', 1), {'b'});
-      expect(await where(todos, 'prio', '>=', 5), {'b'});
-      expect(await where(todos, 'prio', 'isNull', null), {'c'});
-      expect(await where(todos, 'prio', 'isNotNull', null), {'a', 'b'});
-      expect(await where(todos, 'meta.prio', '>=', 7), {'b'});
-      expect(await where(todos, 'meta.prio', '==', 2), {'a'});
-      expect(await where(todos, 'nope', 'isNull', null), {'a', 'b', 'c'});
+      expect(await where(todos, 'done', PredicateOp.eq, false), {'a', 'c'});
+      expect(await where(todos, 'done', PredicateOp.neq, false), {'b'});
+      expect(await where(todos, 'prio', PredicateOp.lt, 5), {'a'});
+      expect(await where(todos, 'prio', PredicateOp.lte, 5), {'a', 'b'});
+      expect(await where(todos, 'prio', PredicateOp.gt, 1), {'b'});
+      expect(await where(todos, 'prio', PredicateOp.gte, 5), {'b'});
+      expect(await where(todos, 'prio', PredicateOp.isNull, null), {'c'});
       expect(
-          await where(todos, 'done.deeper', 'isNull', null), {'a', 'b', 'c'});
+          await where(todos, 'prio', PredicateOp.isNotNull, null), {'a', 'b'});
+      expect(await where(todos, 'meta.prio', PredicateOp.gte, 7), {'b'});
+      expect(await where(todos, 'meta.prio', PredicateOp.eq, 2), {'a'});
+      expect(await where(todos, 'nope', PredicateOp.isNull, null),
+          {'a', 'b', 'c'});
+      expect(await where(todos, 'done.deeper', PredicateOp.isNull, null),
+          {'a', 'b', 'c'});
     });
 
     test('Chained where clauses combine with AND', () async {
       final todos = await seeded();
 
       final both = await itemsOf(todos.query([
-        (path: 'done', op: '==', value: false),
-        (path: 'prio', op: '>', value: 0),
+        (path: 'done', op: PredicateOp.eq, value: false),
+        (path: 'prio', op: PredicateOp.gt, value: 0),
       ]));
 
       expect(ids(both), ['a']);
@@ -1295,13 +1389,12 @@ void main() {
       await todos.create({'prio': true}, id: 't');
 
       await expectLater(
-        todos.query([(path: 'prio', op: '<', value: 5)]),
+        todos.query([(path: 'prio', op: PredicateOp.lt, value: 5)]),
         _rejectsWith(CollectionFailure.typeMismatch),
       );
     });
 
-    test(
-        'An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT',
+    test('A bad path or value rejects with COLLECTION_INVALID_ARGUMENT',
         () async {
       final todos = await seeded();
       Matcher naming(String text) => throwsA(isA<JsCollectionsError>()
@@ -1310,30 +1403,15 @@ void main() {
           .having(atErrorMessage, 'message', contains(text)));
 
       await expectLater(
-          todos.query([(path: 'x', op: 'like', value: 'a%')]), naming('like'));
-      await expectLater(
-          todos.query([(path: 'x', op: '~', value: 1)]), naming('~'));
-      await expectLater(
-          todos.query([(path: 'x', op: '=<', value: <String, dynamic>{})]),
-          naming('unknown where operator "=<"'));
-      await expectLater(todos.query([(path: 'meta..prio', op: '==', value: 1)]),
+          todos.query([(path: 'meta..prio', op: PredicateOp.eq, value: 1)]),
           naming('meta..prio'));
       await expectLater(
-          todos.query([(path: 'prio', op: '<', value: <String, dynamic>{})]),
+          todos.query(
+              [(path: 'prio', op: PredicateOp.lt, value: <String, dynamic>{})]),
           naming('<'));
       await expectLater(
-          todos.query([(path: 'prio', op: '>=', value: null)]), naming('>='));
-
-      final longToken = 'x' * 200;
-      await expectLater(
-        todos.query([(path: 'x', op: longToken, value: 1)]),
-        throwsA(isA<JsCollectionsError>()
-            .having(errorCodeOf, 'code',
-                collectionErrorCode(CollectionFailure.invalidArgument))
-            .having((e) => atErrorMessage(e).length, 'bounded length',
-                lessThan(120))
-            .having(atErrorMessage, 'truncated', contains('...'))),
-      );
+          todos.query([(path: 'prio', op: PredicateOp.gte, value: null)]),
+          naming('>='));
     });
 
     test('A query returns matching readable items and reports unreadable ones',
@@ -1341,7 +1419,7 @@ void main() {
       final todos = await seeded();
       await bobSharesUnreadable('b1');
 
-      final clause = [(path: 'done', op: '==', value: false)];
+      final clause = [(path: 'done', op: PredicateOp.eq, value: false)];
 
       expect(ids(await itemsOf(todos.query(clause))).toSet(), {'a', 'c'});
       expect(await unreadableOf(todos.query(clause)),
@@ -1365,8 +1443,8 @@ void main() {
       await bobSharesUnreadable('zz');
 
       final clauses = [
-        (path: 'prio', op: '>=', value: 2),
-        (path: 'prio', op: '<', value: 4),
+        (path: 'prio', op: PredicateOp.gte, value: 2),
+        (path: 'prio', op: PredicateOp.lt, value: 4),
       ];
 
       expect(ids(await itemsOf(todos.query(clauses))), upstream);
@@ -1383,7 +1461,7 @@ void main() {
         () async {
       final todos = await open();
       await todos.create({'title': 'a'}, id: 't1');
-      final events = <JsEvent>[];
+      final events = <CEvent>[];
       final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1398,7 +1476,7 @@ void main() {
       alice.dataEvents.add(DataUpdated(AtKey.fromString('t1.$_ns@alice')));
       await settle();
 
-      expect(events, [
+      expect(events.map(_shape).toList(), [
         {'type': 'updated', 'id': 't1', 'owner': '@alice'},
         {'type': 'deleted', 'id': 't1', 'owner': '@alice', 'wasExpired': false},
       ]);
@@ -1409,7 +1487,7 @@ void main() {
         () async {
       await bobSharesUnreadable('b1');
       final todos = await open();
-      final events = <JsEvent>[];
+      final events = <CEvent>[];
       final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1418,7 +1496,7 @@ void main() {
       await settle();
       await cancel();
 
-      expect(events, [
+      expect(events.map(_shape).toList(), [
         {'type': 'updated', 'id': 'b1', 'owner': '@bob'}
       ]);
       expect(errors, isEmpty);
@@ -1433,7 +1511,7 @@ void main() {
         () async {
       await bobShares('deep', _nested(65));
       final todos = await open();
-      final events = <JsEvent>[];
+      final events = <CEvent>[];
       final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1442,7 +1520,7 @@ void main() {
       await settle();
       await cancel();
 
-      expect(events, [
+      expect(events.map(_shape).toList(), [
         {'type': 'updated', 'id': 'deep', 'owner': '@bob'}
       ]);
       expect(errors, isEmpty);
@@ -1453,7 +1531,7 @@ void main() {
       final todos = await open();
       await rawCollection(alice, _ns, writeTypeTag: 'Other')
           .create(obj: {'title': 'other'}, id: 'o1');
-      final events = <JsEvent>[];
+      final events = <CEvent>[];
       final errors = <JsCollectionsError>[];
 
       final cancel = todos.watch(events.add, onError: errors.add);
@@ -1467,7 +1545,7 @@ void main() {
       await settle();
       await cancel();
 
-      expect(events, [
+      expect(events.map(_shape).toList(), [
         {'type': 'updated', 'id': 'o1', 'owner': '@alice'},
         {'type': 'deleted', 'id': 'o1', 'owner': '@alice', 'wasExpired': true},
         {'type': 'updated', 'id': 'gone', 'owner': '@alice'},
@@ -1495,7 +1573,7 @@ void main() {
         final bob = '@bob'.toAtsign();
         final at = DateTime.utc(2030, 1, 2);
         final ancestry = [CAncestor(id: 'p1', subName: 'notes', owner: bob)];
-        final events = <JsEvent>[];
+        final events = <CEvent>[];
         final errors = <JsCollectionsError>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
@@ -1518,11 +1596,10 @@ void main() {
         await settle();
         await cancel();
 
-        final ms = at.millisecondsSinceEpoch;
         final chain = [
           {'id': 'p1', 'subName': 'notes', 'owner': '@bob'}
         ];
-        expect(events, [
+        expect(events.map(_shape).toList(), [
           {'type': 'updated', 'id': 'i1', 'owner': '@alice'},
           {
             'type': 'deleted',
@@ -1534,21 +1611,21 @@ void main() {
             'type': 'available',
             'id': 'i1',
             'owner': '@alice',
-            'availableAt': ms
+            'availableAt': at
           },
           {
             'type': 'expiringSoon',
             'id': 'i1',
             'owner': '@alice',
-            'expiresAt': ms,
-            'leadTimeMs': 300000
+            'expiresAt': at,
+            'leadTime': const Duration(minutes: 5)
           },
           {
             'type': 'readReceipt',
             'id': 'i1',
             'owner': '@alice',
             'from': '@bob',
-            'readAt': ms
+            'readAt': at
           },
           {
             'type': 'subItemUpdated',
@@ -1570,7 +1647,7 @@ void main() {
       test(
           'A stream error reaches onError as a collection error and later events still arrive',
           () async {
-        final events = <JsEvent>[];
+        final events = <CEvent>[];
         final errors = <JsCollectionsError>[];
 
         final cancel = todos.watch(events.add, onError: errors.add);
@@ -1583,7 +1660,7 @@ void main() {
         expect(errors.single.kind, CollectionFailure.unreadable);
         expect(errors.single.id, 'b1');
         expect(errors.single.owner, '@bob');
-        expect(events, [
+        expect(events.map(_shape).toList(), [
           {'type': 'updated', 'id': 'i1', 'owner': '@alice'}
         ]);
       });

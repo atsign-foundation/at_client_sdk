@@ -9,13 +9,23 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart'
     show
         AtClient,
+        AtCollection,
         AtConnection,
         AtConnectionCause,
         AtConnectionState,
         AtEnrollmentException,
         AtNoCredentialException,
         AtOpenRefusedException,
-        Atsign;
+        Atsign,
+        CAncestor,
+        CEvent,
+        CItem,
+        CItemUpdated,
+        CReadReceipt,
+        CSubItemUpdated,
+        DataEvent,
+        EventSource,
+        PredicateOp;
 import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
@@ -46,18 +56,9 @@ class _FakeAdapter implements ItemCollection {
   final calls = <String>[];
   Object? failure;
   var missing = false;
-  JsItem item = {
-    'id': 'i1',
-    'owner': '@alice',
-    'type': 'note',
-    'data': <String, Object?>{'n': 1},
-    'sharedWith': <String>[],
-    'createdAt': 1,
-    'expiresAt': 2,
-    'availableAt': null,
-  };
-  JsListing listing = (items: const [], unreadable: const []);
-  void Function(JsEvent)? onEvent;
+  CItem<Map<String, dynamic>> item = _item();
+  ItemListing listing = (items: const [], unreadable: const []);
+  void Function(CEvent)? onEvent;
   void Function(JsCollectionsError)? onError;
   Object? last;
   Object? cancelFailure;
@@ -72,35 +73,38 @@ class _FakeAdapter implements ItemCollection {
   }
 
   @override
-  Future<JsItem> create(Map<String, dynamic> data,
-          {String? id, List<String> sharedWith = const []}) =>
+  Future<CItem<Map<String, dynamic>>> create(Map<String, dynamic> data,
+          {String? id, List<Atsign> sharedWith = const []}) =>
       _run('create', () => item, (data, id, sharedWith));
 
   @override
-  Future<JsItem?> get(JsItemAddress address) => _run('get',
+  Future<CItem<Map<String, dynamic>>?> get(ItemAddress address) => _run('get',
       () => missing ? null : item, (address.id, address.owner.toString()));
 
   @override
-  Future<JsListing> list() => _run('list', () => listing);
+  Future<ItemListing> list() => _run('list', () => listing);
 
   @override
-  Future<JsListing> query(List<JsWhereClause> clauses) => _run('query',
+  Future<ItemListing> query(List<WhereClause> clauses) => _run('query',
       () => listing, [for (final c in clauses) (c.path, c.op, c.value)]);
 
   @override
-  Future<JsItem> update(JsItemAddress address, Map<String, dynamic> data) =>
+  Future<CItem<Map<String, dynamic>>> update(
+          ItemAddress address, Map<String, dynamic> data) =>
       _run('update', () => item, (address.id, address.owner.toString(), data));
 
   @override
-  Future<JsItem> share(JsItemAddress address, List<String> atSigns) => _run(
-      'share', () => item, (address.id, address.owner.toString(), atSigns));
+  Future<CItem<Map<String, dynamic>>> share(
+          ItemAddress address, List<Atsign> atSigns) =>
+      _run(
+          'share', () => item, (address.id, address.owner.toString(), atSigns));
 
   @override
-  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
+  Future<void> remove(ItemAddress address, {bool cascade = false}) =>
       _run('remove', () {}, (address.id, address.owner.toString(), cascade));
 
   @override
-  Future<void> Function() watch(void Function(JsEvent event) onEvent,
+  Future<void> Function() watch(void Function(CEvent event) onEvent,
       {required void Function(JsCollectionsError error) onError}) {
     if (_isClosed()) throw SessionClosedException();
     if (failure case final error?) throw error;
@@ -111,6 +115,35 @@ class _FakeAdapter implements ItemCollection {
       cancelled++;
     };
   }
+}
+
+/// A client that only supplies what [AtCollection.draft] needs, so the fake
+/// adapter can hand the bridge real [CItem]s.
+class _DraftingClient extends Fake implements AtClient {
+  @override
+  final Atsign atSign = Atsign('@alice');
+
+  @override
+  final Stream<DataEvent> dataEvents = const Stream.empty();
+}
+
+final _drafting = AtCollection<Map<String, dynamic>>(
+    _DraftingClient(), 'bridge.test', const Duration(days: 1),
+    eventSource: EventSource.data, writeTypeTag: 'note');
+
+/// A [CItem] the fake adapter hands the bridge, with [data] and otherwise
+/// the fields the bridge's item conversions assert on.
+CItem<Map<String, dynamic>> _item({Map<String, dynamic>? data}) {
+  final item =
+      _drafting.draft(obj: data ?? <String, dynamic>{'n': 1}, id: 'i1');
+  item.createdAt = DateTime.fromMillisecondsSinceEpoch(1);
+  item.expiresAt = DateTime.fromMillisecondsSinceEpoch(2);
+  return item;
+}
+
+/// A [CEvent] subtype the bridge does not know, arriving as `unknown`.
+final class _LaterEvent extends CEvent {
+  _LaterEvent({required super.owner, required super.id});
 }
 
 /// Collects the lines the bridge's logger writes, as the other tests do. The
@@ -300,6 +333,7 @@ void main() {
   late List<SessionOptions> opened;
   late bool secure;
   late Object? openFailure;
+  late bool liveClient;
   late JSObject api;
 
   setUp(() {
@@ -307,13 +341,15 @@ void main() {
     opened = [];
     secure = true;
     openFailure = null;
+    liveClient = false;
     api = createJSInteropWrapper(BridgeEntry(
         open: (o) async {
           opened.add(o);
           if (openFailure case final error?) throw error;
           return session;
         },
-        isSecureContext: () => secure));
+        isSecureContext: () => secure,
+        hasLiveClient: (_) => liveClient));
   });
 
   const keysJson = '{"@alice":{"k":"v"}}';
@@ -594,13 +630,38 @@ void main() {
 
     test('an unmapped exception rejects internal with a fixed message',
         () async {
-      openFailure = StateError('sentinel-secret-5');
+      openFailure = Exception('sentinel-secret-5');
 
       final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
 
       expect(r.code, 'internal');
       expect(r.message, 'internal error');
       expect(r.message, isNot(contains('sentinel')));
+    });
+
+    test('a second create for an open atSign rejects already_open', () async {
+      // at_client refuses a second live client for the same atSign, and its
+      // registry still holds that client when the refusal reaches the bridge.
+      openFailure = StateError('a client for the atSign is already live');
+      liveClient = true;
+
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
+
+      expect(r.code, 'already_open');
+      expect(r.message, isNot(contains('already live')));
+    });
+
+    test('a StateError that is not the live-client refusal rejects internal',
+        () async {
+      // Every other StateError is a Dart Error; only the atSign that already
+      // has a live client is already_open.
+      openFailure = StateError('a key store was used after close');
+
+      final r = await rejected(invoke(api, 'create', [jsObject(opts())]));
+
+      expect(r.code, 'internal');
+      expect(r.message, 'internal error');
+      expect(r.message, isNot(contains('key store')));
     });
 
     test(
@@ -975,35 +1036,29 @@ void main() {
       expect(session.listeners, isEmpty);
     });
 
-    test('a peer-chosen notification id and key are bounded in the envelope',
-        () async {
+    test('a peer-chosen notification id and key reach JS whole', () async {
       final seen = <Object?>[];
       invoke(s, 'subscribe', [
         '.*'.toJS,
         ((JSAny? event) => seen.add(event.dartify())).toJS,
       ]);
-      final direction = String.fromCharCode(0x202e);
-      final hostile = '${'n' * 600}\n$direction';
+      // An atServer key may be 248 characters; an id is the sender's to
+      // choose. Neither may be shortened on the way to JS.
+      final key = 'k' * 248;
+      final id = 'n' * 300;
 
       session.listeners.single((
-        id: hostile,
+        id: id,
         from: '@alice',
-        key: hostile,
+        key: key,
         value: 'ping',
         epochMillis: 42,
         operation: 'update',
       ));
 
       final event = seen.single! as Map;
-      for (final field in ['id', 'key']) {
-        final text = event[field]! as String;
-        expect(text, isNot(contains('\n')), reason: '$field holds no newline');
-        expect(text, isNot(contains(direction)),
-            reason: '$field holds no direction character');
-        expect(singleLine(text), text, reason: '$field is one line');
-        expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
-            reason: '$field takes the rejection bound');
-      }
+      expect(event['id'], id);
+      expect(event['key'], key);
       expect(event['value'], 'ping');
       expect(event['from'], '@alice');
       expect(event['epochMillis'], 42);
@@ -1264,7 +1319,7 @@ void main() {
         ])))! as JSObject;
 
         final (data, id, shared) =
-            adapter.last! as (Map<String, dynamic>, String?, List<String>);
+            adapter.last! as (Map<String, dynamic>, String?, List<Object?>);
         expect(data, {
           'title': 'a',
           'n': 2,
@@ -1278,17 +1333,14 @@ void main() {
       });
 
       test('collection item data is a null-prototype object (T6.3)', () async {
-        adapter.item = {
-          ...adapter.item,
-          'data': <String, Object?>{
-            '__proto__': 'p',
-            'toString': 'ts',
-            'inner': {'__proto__': 1},
-            'list': [
-              {'__proto__': 1}
-            ]
-          }
-        };
+        adapter.item = _item(data: <String, dynamic>{
+          '__proto__': 'p',
+          'toString': 'ts',
+          'inner': {'__proto__': 1},
+          'list': [
+            {'__proto__': 1}
+          ]
+        });
 
         final item = (await resolved(invoke(c, 'get', [
           jsObject({'id': 'i1'})
@@ -1365,13 +1417,14 @@ void main() {
         expect((queried['items']! as JSArray).length, 1);
         expect((queried['unreadable'].dartify() as List).single,
             containsPair('id', 'u1'));
-        expect(adapter.last, [('a.b', '>=', 3), ('c', 'isNull', null)]);
+        expect(adapter.last,
+            [('a.b', PredicateOp.gte, 3), ('c', PredicateOp.isNull, null)]);
       });
 
       test(
           'collection item data nested deeper than 64 levels rejects with COLLECTION_ITEM_TOO_DEEP',
           () async {
-        adapter.item = {...adapter.item, 'data': _nested(65)};
+        adapter.item = _item(data: _nested(65));
 
         final r = await rejected(invoke(c, 'get', [
           jsObject({'id': 'i1'})
@@ -1382,7 +1435,7 @@ void main() {
       });
 
       test('tooDeep from collection item preserves id and owner', () async {
-        adapter.item = {...adapter.item, 'data': _nested(65)};
+        adapter.item = _item(data: _nested(65));
 
         final r = await rejected(invoke(c, 'get', [
           jsObject({'id': 'i1'})
@@ -1395,7 +1448,7 @@ void main() {
 
       test('collection item data nested exactly 64 levels deep resolves',
           () async {
-        adapter.item = {...adapter.item, 'data': _nested(64)};
+        adapter.item = _item(data: _nested(64));
         adapter.listing = (items: [adapter.item], unreadable: const []);
 
         final got = (await resolved(invoke(c, 'get', [
@@ -1416,7 +1469,7 @@ void main() {
       test(
           'collection item data nested 100000 levels deep rejects without overflowing the stack',
           () async {
-        adapter.item = {...adapter.item, 'data': _nested(100000)};
+        adapter.item = _item(data: _nested(100000));
 
         final r = await rejected(invoke(c, 'get', [
           jsObject({'id': 'i1'})
@@ -1613,29 +1666,23 @@ void main() {
         }
       });
 
-      test("an unreadable record's id and owner are bounded in a listing",
+      test("an unreadable record's id and owner pass whole in a listing",
           () async {
         final direction = String.fromCharCode(0x202e);
+        final id = 'u' * 600 + '\n$direction';
+        final owner = Atsign('@bob$direction');
         adapter.listing = (
           items: const [],
           unreadable: [
-            (
-              id: 'u' * 600 + '\n$direction',
-              owner: Atsign('@bob$direction'),
-              kind: CollectionFailure.unreadable
-            ),
+            (id: id, owner: owner, kind: CollectionFailure.unreadable),
           ]
         );
 
         final listing = (await resolved(invoke(c, 'list')))! as JSObject;
         final record =
             (listing['unreadable']! as JSArray).toDart.single! as JSObject;
-        final id = record['id'].dartify()! as String;
-        final owner = record['owner'].dartify()! as String;
-        for (final field in [id, owner]) {
-          expect(singleLine(field), field, reason: 'one line');
-          expect(field.length, lessThanOrEqualTo(maxErrorMessageLength));
-        }
+        expect(record['id'].dartify(), id);
+        expect(record['owner'].dartify(), owner);
       });
 
       test('every collection code reaches JS unchanged', () async {
@@ -1671,6 +1718,53 @@ void main() {
           expect(r.code, 'invalid_argument');
           expect(r.message, contains(name));
         }
+      });
+
+      test('a recipient that is not an atSign rejects a collection refusal',
+          () async {
+        for (final call in <JSAny?>[
+          invoke(c, 'create', [
+            jsObject({'a': 1}),
+            jsObject({
+              'sharedWith': ['@a@b']
+            })
+          ]),
+          invoke(c, 'share', [
+            jsObject({'id': 'i1'}),
+            ['@a@b'].jsify()
+          ]),
+        ]) {
+          final r = await rejected(call);
+          expect(
+              r.code, collectionErrorCode(CollectionFailure.invalidArgument));
+          expect(r.message, contains('invalid atSign'));
+        }
+      });
+
+      test('an unknown where operator rejects a collection refusal', () async {
+        for (final op in ['like', '~', '=<']) {
+          final r = await rejected(invoke(c, 'query', [
+            [
+              {'path': 'x', 'op': op, 'value': 1},
+            ].jsify()
+          ]));
+          expect(r.code, collectionErrorCode(CollectionFailure.invalidArgument),
+              reason: op);
+          expect(r.message, contains(op), reason: op);
+        }
+      });
+
+      test('an unknown operator message is bounded', () async {
+        final longToken = 'x' * 200;
+        final r = await rejected(invoke(c, 'query', [
+          [
+            {'path': 'x', 'op': longToken, 'value': 1},
+          ].jsify()
+        ]));
+
+        expect(r.code, collectionErrorCode(CollectionFailure.invalidArgument));
+        expect(r.message.length, lessThanOrEqualTo(maxErrorMessageLength));
+        expect(r.message, contains('...'));
       });
 
       test('collection data that is an array or too deep rejects naming data',
@@ -1719,8 +1813,8 @@ void main() {
           ((JSAny? e) => errors.add(e.dartify())).toJS
         ])! as JSFunction;
 
-        adapter.onEvent!({'type': 'updated', 'id': 'i1', 'owner': '@alice'});
-        adapter.onEvent!({'type': 'unknown', 'id': 'i2', 'owner': '@bob'});
+        adapter.onEvent!(CItemUpdated(id: 'i1', owner: Atsign('@alice')));
+        adapter.onEvent!(_LaterEvent(id: 'i2', owner: Atsign('@bob')));
         adapter.onError!(JsCollectionsError(CollectionFailure.failed));
         off.callAsFunction();
 
@@ -1737,38 +1831,45 @@ void main() {
         expect(adapter.cancelled, 1);
       });
 
-      test('a peer-chosen watch event field is bounded', () async {
+      test("a watch event's identifiers pass whole and its subName is bounded",
+          () async {
         final seen = <Object?>[];
         invoke(c, 'watch', [
           ((JSAny? event) => seen.add(event.dartify())).toJS,
         ]);
         final direction = String.fromCharCode(0x202e);
+        // An atSign may carry an emoji joined by U+200D; both it and an
+        // atServer key of 248 characters must reach JS unchanged.
+        final exotic = Atsign('@a\u200d\ud83d\ude00');
+        final longId = 'k' * 248;
         final hostile = '${'n' * 600}\n$direction';
 
-        adapter.onEvent!({
-          'type': 'subItemUpdated',
-          'id': hostile,
-          'owner': hostile,
-          'from': hostile,
-          'ancestry': [
-            {'id': 'a1', 'subName': hostile, 'owner': '@alice'},
+        adapter.onEvent!(CReadReceipt(
+          id: longId,
+          owner: exotic,
+          from: exotic,
+          readAt: DateTime.fromMillisecondsSinceEpoch(7),
+        ));
+        adapter.onEvent!(CSubItemUpdated(
+          id: longId,
+          owner: exotic,
+          ancestry: [
+            CAncestor(id: longId, subName: hostile, owner: exotic),
           ],
-          'data': {'n': 1},
-        });
+        ));
 
-        final event = seen.single! as Map;
-        for (final field in ['id', 'owner', 'from']) {
-          final text = event[field]! as String;
-          expect(text, isNot(contains('\n')),
-              reason: '$field holds no newline');
-          expect(text, isNot(contains(direction)),
-              reason: '$field holds a direction character');
-          expect(singleLine(text), text, reason: '$field is one line');
-          expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
-              reason: '$field takes the rejection bound');
-        }
-        final subName =
-            ((event['ancestry']! as List).single as Map)['subName']! as String;
+        final receipt = seen[0]! as Map;
+        expect(receipt['id'], longId);
+        expect(receipt['owner'], exotic);
+        expect(receipt['from'], exotic);
+        expect(receipt['readAt'], 7);
+        final event = seen[1]! as Map;
+        expect(event['id'], longId);
+        expect(event['owner'], exotic);
+        final ancestor = (event['ancestry']! as List).single as Map;
+        expect(ancestor['id'], longId);
+        expect(ancestor['owner'], exotic);
+        final subName = ancestor['subName']! as String;
         expect(subName, isNot(contains('\n')),
             reason: 'subName holds no newline');
         expect(subName, isNot(contains(direction)),
@@ -1776,7 +1877,6 @@ void main() {
         expect(singleLine(subName), subName, reason: 'subName is one line');
         expect(subName.length, lessThanOrEqualTo(maxErrorMessageLength),
             reason: 'subName takes the rejection bound');
-        expect(event['data'], {'n': 1}, reason: 'the data is unchanged');
       });
 
       test('collection watch needs a function and never throws', () {

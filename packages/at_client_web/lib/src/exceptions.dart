@@ -10,6 +10,10 @@ import 'package:at_client/at_client.dart';
 /// What a closed session rejects with, to Dart and to JS alike.
 const sessionClosedMessage = 'the session is closed';
 
+/// What a bridge `create` rejects with when the atSign already has a live
+/// client in this process.
+const alreadyOpenMessage = 'the session for this atSign is already open';
+
 /// What a session without `__manage` rejects a pairing call with.
 const manageAccessRequiredMessage = 'this session cannot manage enrollments';
 
@@ -20,10 +24,6 @@ const enrollmentInFlightMessage =
 
 /// The longest message an `invalid_argument` or collection rejection carries.
 const maxErrorMessageLength = 128;
-
-/// [id] folded to lower case, as AtCollection folds an item id. Exceptions
-/// and the adapter's per-item lock take their ids through this one fold.
-String foldItemId(String id) => id.toLowerCase();
 
 /// Thrown when the caller passed something the call cannot use: a missing or
 /// mistyped option, a value that does not parse, a callback that is not a
@@ -36,9 +36,8 @@ String foldItemId(String id) => id.toLowerCase();
 class InvalidArgumentException extends AtException {
   /// [parameter] was not usable. [expected] is what it had to be (`a string`);
   /// left out, the bridge words it from [parameter].
-  InvalidArgumentException(this.parameter, {this.expected, String? id})
+  InvalidArgumentException(this.parameter, {this.expected, this.id})
       : missing = false,
-        id = id == null ? null : foldItemId(id),
         super('$parameter must be ${expected ?? 'valid'}');
 
   /// [parameter] was null or absent.
@@ -57,7 +56,7 @@ class InvalidArgumentException extends AtException {
   /// Whether [parameter] was null or absent.
   final bool missing;
 
-  /// The item id the rejected address named, folded to lower case.
+  /// The item id the rejected address named, as the caller gave it.
   final String? id;
 
   @override
@@ -72,6 +71,16 @@ class SessionClosedException extends AtException {
 
   @override
   String toString() => 'SessionClosedException: $message';
+}
+
+/// Thrown by a bridge `create` when the atSign already has a live client in
+/// this process, which at_client refuses before building a second. The first
+/// session has to be closed before another is opened.
+class AlreadyOpenException extends AtException {
+  AlreadyOpenException() : super(alreadyOpenMessage);
+
+  @override
+  String toString() => 'AlreadyOpenException: $message';
 }
 
 /// What the page or browser lacks, for an [UnsupportedOperationException].
@@ -220,13 +229,37 @@ class SetupLockTimeoutException extends AtException {
   String toString() => 'SetupLockTimeoutException: $lockName was not granted';
 }
 
+/// Thrown when a key already holds every waiter its queue allows.
+///
+/// A keyed queue caps the runs that may wait on one key, so a body that
+/// stalls cannot grow that key's queue without bound; the run that would
+/// exceed the cap fails fast instead. No barrel exports this type.
+class QueueLimitException extends AtException {
+  /// Creates the exception for a key that already holds [maxQueuedPerKey]
+  /// waiters.
+  QueueLimitException(this.maxQueuedPerKey)
+      : super('at most $maxQueuedPerKey runs may wait on one key');
+
+  /// The most waiters one key may hold.
+  final int maxQueuedPerKey;
+
+  @override
+  String toString() =>
+      'QueueLimitException: at most $maxQueuedPerKey runs may wait on one key';
+}
+
 /// Thrown when IndexedDB refuses an operation of the passkey stores.
 ///
-/// The message names the browser's error, such as `QuotaExceededError`, when
-/// the browser gave one, and never holds a stored value.
+/// [browserError] is the browser's own error name, such as
+/// `QuotaExceededError`, when it gave one; it is never a stored value. The
+/// bridge words what JS sees from it (lib/src/js/error_codes.dart).
 class IndexedDbException extends AtException {
-  /// Creates the exception with [message].
-  IndexedDbException(super.message);
+  /// Creates the exception with [message] and, when the browser gave one,
+  /// the name of its [browserError].
+  IndexedDbException(super.message, {this.browserError});
+
+  /// The browser's error name, such as `QuotaExceededError`, or null.
+  final String? browserError;
 
   @override
   String toString() => 'IndexedDbException: $message';
@@ -315,15 +348,14 @@ final class JsCollectionsError extends AtException {
     this.kind, {
     this.refusal,
     this.subject,
-    String? id,
+    this.id,
     this.owner,
     this.collectionOwner,
     this.foundType,
     this.expectedType,
     this.causeType,
     this.failures = const [],
-  })  : id = id == null ? null : foldItemId(id),
-        super(subject != null && refusal == CollectionRefusal.itemId
+  }) : super(subject != null && refusal == CollectionRefusal.itemId
             ? subject
             : refusal == null
                 ? kind.name
@@ -337,7 +369,7 @@ final class JsCollectionsError extends AtException {
   /// The raw token [refusal] names, such as the unknown operator.
   final String? subject;
 
-  /// The item the failure is about, when known, folded to lower case.
+  /// The item the failure is about, when known, as the caller gave it.
   final String? id;
   final String? owner;
 

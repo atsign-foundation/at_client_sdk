@@ -1,21 +1,43 @@
+/// Single-line and JSON-literal forms of untrusted log text.
+///
+/// The unprintable set covers controls (Cc), formats (Cf), line and paragraph
+/// separators (Zl, Zp) and lone surrogates, supplementary ranges included. It
+/// stays local, as D-48 records: at_commons keeps its own predicate private.
+///
+/// * [sanitizeLogText] keeps [jsonEncode]'s surrounding quotes, escapes each
+///   unprintable rune as a JSON escape (a surrogate pair for a supplementary
+///   rune) and bounds the input by inclusive UTF-16 code units
+///   ([truncateText]) rather than by characters as written;
+/// * [singleLine] flattens unprintable runes to spaces instead of escaping
+///   them, for a field a JS caller writes onto one line.
+library;
+
 import 'dart:convert';
 
-final _controlChars =
-    RegExp(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u2028-\u202e\u2066-\u2069]');
+/// Escapes control, format, separator and lone-surrogate characters in
+/// [value] as a single-line JSON string literal. [value] is cut to
+/// [maxLength] UTF-16 code units (see [truncateText]) before it is encoded,
+/// so the quotes and the escapes add to the result's length; a supplementary
+/// character is escaped as a surrogate pair, so the literal stays valid JSON.
+String sanitizeLogText(String value, {int maxLength = 256}) {
+  final encoded = jsonEncode(truncateText(value, maxLength));
+  final out = StringBuffer();
+  for (final rune in encoded.runes) {
+    out.write(
+        _isUnprintable(rune) ? _jsonEscape(rune) : String.fromCharCode(rune));
+  }
+  return out.toString();
+}
 
-/// Escapes control and bidirectional formatting characters in [value] as a
-/// single-line JSON string literal. [value] is cut to [maxLength] UTF-16 code
-/// units (see [truncateText]) before it is encoded, so the quotes and the
-/// escapes add to the result's length.
-String sanitizeLogText(String value, {int maxLength = 256}) =>
-    jsonEncode(truncateText(value, maxLength)).replaceAllMapped(
-      _controlChars,
-      (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
-    );
-
-/// [value] with every control and bidirectional formatting character
+/// [value] with every control, format, separator and lone-surrogate character
 /// replaced by a space, so it stays on one line.
-String singleLine(String value) => value.replaceAll(_controlChars, ' ');
+String singleLine(String value) {
+  final out = StringBuffer();
+  for (final rune in value.runes) {
+    out.write(_isUnprintable(rune) ? ' ' : String.fromCharCode(rune));
+  }
+  return out.toString();
+}
 
 /// [value] cut to at most [maxLength] UTF-16 code units, ending in `...`
 /// when it was cut, never splitting a surrogate pair.
@@ -29,3 +51,40 @@ String truncateText(String value, int maxLength) {
   }
   return '${value.substring(0, cut)}...';
 }
+
+/// Whether [rune] is a control (Cc), format (Cf), line or paragraph separator
+/// (Zl, Zp) character, or a surrogate.
+bool _isUnprintable(int rune) =>
+    rune < 0x20 ||
+    (rune >= 0x7f && rune <= 0x9f) ||
+    rune == 0xad ||
+    (rune >= 0x0600 && rune <= 0x0605) ||
+    rune == 0x061c ||
+    rune == 0x06dd ||
+    rune == 0x070f ||
+    (rune >= 0x0890 && rune <= 0x0891) ||
+    rune == 0x08e2 ||
+    rune == 0x180e ||
+    (rune >= 0x200b && rune <= 0x200f) ||
+    (rune >= 0x2028 && rune <= 0x202e) ||
+    (rune >= 0x2060 && rune <= 0x206f) ||
+    (rune >= 0xd800 && rune <= 0xdfff) ||
+    rune == 0xfeff ||
+    (rune >= 0xfff9 && rune <= 0xfffb) ||
+    rune == 0x110bd ||
+    rune == 0x110cd ||
+    (rune >= 0x13430 && rune <= 0x1343f) ||
+    (rune >= 0x1bca0 && rune <= 0x1bca3) ||
+    (rune >= 0x1d173 && rune <= 0x1d17a) ||
+    (rune >= 0xe0000 && rune <= 0xe007f);
+
+/// [rune] as a JSON escape, a surrogate pair for a supplementary rune so the
+/// enclosing string literal stays valid JSON.
+String _jsonEscape(int rune) {
+  if (rune <= 0xffff) return '\\u${_hex4(rune)}';
+  final offset = rune - 0x10000;
+  return '\\u${_hex4(0xd800 + (offset >> 10))}'
+      '\\u${_hex4(0xdc00 + (offset & 0x3ff))}';
+}
+
+String _hex4(int codeUnit) => codeUnit.toRadixString(16).padLeft(4, '0');

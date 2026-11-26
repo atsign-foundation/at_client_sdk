@@ -1,9 +1,26 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
+import 'package:at_client_web/src/log_text.dart' show singleLine;
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 import 'package:test/test.dart';
+
+import 'error_code_inventory.dart';
+
+/// A `TypeError` raised the way one is in practice.
+TypeError _typeError() {
+  try {
+    Object value = 'text';
+    value as int;
+  } on TypeError catch (e) {
+    return e;
+  }
+  throw StateError('unreachable');
+}
 
 void main() {
   final cases = <String, (Object, String)>{
@@ -63,6 +80,28 @@ void main() {
     ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
+    'AtClientException': (
+      AtClientException('AT0001', 'Unable to connect'),
+      'internal'
+    ),
+    'AlreadyOpenException': (AlreadyOpenException(), 'already_open'),
+    'SetupLockTimeoutException': (
+      SetupLockTimeoutException('lock'),
+      'storage_failed'
+    ),
+    'QueueLimitException': (QueueLimitException(16), 'invalid_argument'),
+    'IndexedDbException': (
+      IndexedDbException('open failed', browserError: 'QuotaExceededError'),
+      'storage_failed'
+    ),
+    'AtTimeoutException': (AtTimeoutException('slow'), 'timeout'),
+    'TimeoutException': (TimeoutException('slow'), 'timeout'),
+    'UnAuthorizedException': (UnAuthorizedException('no'), 'refused'),
+    'AtLookUpException AT0001': (AtLookUpException('AT0001', 'x'), 'refused'),
+    'AtLookUpException AT0401': (
+      AtLookUpException('AT0401', 'x'),
+      'pkam_refused'
+    ),
     'JsCollectionsError carries its own code': (
       JsCollectionsError(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
@@ -108,18 +147,36 @@ void main() {
       'COLLECTION_ITEM_TOO_DEEP'
     ),
     'an unknown Exception': (Exception('x'), 'internal'),
-    'an unknown Error': (StateError('x'), 'internal'),
     'a non-exception value': ('text', 'internal'),
   };
 
   for (final MapEntry(key: name, value: (error, code)) in cases.entries) {
     test('$name maps to $code', () => expect(errorCodeOf(error), code));
+
+    test('an at_lookup code keeps its transport meaning', () {
+      for (final code in ['AT0004', 'AT0007', 'AT0021']) {
+        expect(
+            errorCodeOf(AtLookUpException(code, inventorySentinel)), 'offline',
+            reason: code);
+      }
+      expect(errorCodeOf(AtLookUpException('AT0023', inventorySentinel)),
+          'timeout');
+      expect(errorCodeOf(AtLookUpException('AT0401', inventorySentinel)),
+          'pkam_refused');
+      expect(errorCodeOf(AtLookUpException('AT0015', inventorySentinel)),
+          'bad_key');
+      expect(errorCodeOf(AtLookUpException('AT9999', inventorySentinel)),
+          'refused');
+    });
   }
 
   test('every code the bridge can reject with is produced by one mapping', () {
     const mapped = {
       'pkam_refused',
       'offline',
+      'timeout',
+      'storage_failed',
+      'refused',
       'onboarding_incomplete',
       'enrollment_conveyance_failed',
       'enrollment_denied',
@@ -128,6 +185,7 @@ void main() {
       'closed',
       'unsupported',
       'bad_key',
+      'already_open',
       'internal',
     };
     final produced = cases.values.map((c) => c.$2).toSet();
@@ -146,6 +204,48 @@ void main() {
         produced.where((c) => c.startsWith('COLLECTION_')).toSet(), collection);
   });
 
+  test(
+      'every inventoried exception maps to the code the table pins and a bounded, one-line message that echoes no value',
+      () {
+    for (final (:error, :code) in exceptionInventory) {
+      final name = error.runtimeType.toString();
+      expect(errorCodeOf(error), code, reason: name);
+      final message = atErrorMessage(error);
+      expect(singleLine(message), message, reason: '$name is one line');
+      expect(message.length, lessThanOrEqualTo(maxErrorMessageLength),
+          reason: '$name is bounded');
+      expect(message, isNot(contains(inventorySentinel)),
+          reason: '$name echoes a value');
+      expect(message, isNot(contains('Exception')),
+          reason: '$name leaks a type');
+    }
+  });
+
+  test(
+      'a Dart Error and the types the table pins as unexpected map to internal',
+      () {
+    final errors = <Object>[
+      StateError(inventorySentinel),
+      ArgumentError(inventorySentinel),
+      RangeError(inventorySentinel),
+      AssertionError(inventorySentinel),
+      _typeError(),
+    ];
+    for (final error in errors) {
+      expect(errorCodeOf(error), 'internal', reason: '${error.runtimeType}');
+      expect(atErrorMessage(error), 'internal error');
+    }
+    // An unexpected non-Error type is internal too; FormatException is not
+    // the AtKeys format exception the map names.
+    for (final error in [
+      FormatException(inventorySentinel),
+      inventorySentinel
+    ]) {
+      expect(errorCodeOf(error), 'internal');
+      expect(atErrorMessage(error), 'internal error');
+    }
+  });
+
   test('every closed rejection carries the same fixed message', () {
     for (final error in [
       StoppedException('the session is closed'),
@@ -161,6 +261,34 @@ void main() {
       () {
     expect(atErrorMessage(SessionClosedException()),
         atErrorMessage(StoppedException('x')));
+  });
+
+  test('a transport failure is offline or timeout, never an internal error',
+      () {
+    for (final (error, code) in [
+      (SecondaryConnectException('x'), 'offline'),
+      (AtConnectException('x'), 'offline'),
+      (HandShakeException('x'), 'offline'),
+      (AtCertificateValidationException('x'), 'offline'),
+      (AtIOException('x'), 'offline'),
+      (AtTimeoutException('x'), 'timeout'),
+      (TimeoutException('x'), 'timeout'),
+    ]) {
+      expect(errorCodeOf(error), code, reason: '${error.runtimeType}');
+      expect(atErrorMessage(error), isNot(contains('notification')));
+    }
+  });
+
+  test('a storage failure names the browser error and never a value', () {
+    final quota = atErrorMessage(IndexedDbException(inventorySentinel,
+        browserError: 'QuotaExceededError'));
+    expect(quota, contains('QuotaExceededError'));
+    expect(quota, isNot(contains(inventorySentinel)));
+    final blocked = IndexedDbException('open blocked by another connection');
+    expect(errorCodeOf(blocked), 'storage_failed');
+    expect(atErrorMessage(blocked), 'the browser storage failed');
+    expect(atErrorMessage(SetupLockTimeoutException(inventorySentinel)),
+        'the setup lock could not be acquired');
   });
 
   test('an invalid_argument message is cut at the shared bound', () {
@@ -189,15 +317,16 @@ void main() {
   });
 
   test(
-      'an ArgumentError from inside at_client rejects internal with the fixed message',
+      'a Dart ArgumentError from inside at_client rejects internal with the fixed message',
       () {
-    for (final error in [
-      ArgumentError('namespace must be non-empty'),
-      IllegalArgumentException('namespace must be non-empty'),
-    ]) {
-      expect(errorCodeOf(error), 'internal');
-      expect(atErrorMessage(error), 'internal error');
-    }
+    expect(
+        errorCodeOf(ArgumentError('namespace must be non-empty')), 'internal');
+    expect(atErrorMessage(ArgumentError('namespace must be non-empty')),
+        'internal error');
+    // at_commons's IllegalArgumentException is an AtException, not a Dart
+    // Error: the atServer-answered refusal it reports gets a code.
+    expect(errorCodeOf(IllegalArgumentException('namespace must be empty')),
+        'refused');
   });
 
   test('an invalid_argument message is bounded and never echoes the value', () {
@@ -328,7 +457,7 @@ void main() {
         ]): '2 key-level write(s) failed',
         JsCollectionsError(CollectionFailure.notOwner,
                 id: 'A1', owner: '@bob', collectionOwner: '@alice'):
-            'item "a1" is owned by @bob, not @alice',
+            'item "A1" is owned by @bob, not @alice',
         JsCollectionsError(CollectionFailure.wrongType,
             id: 'a1',
             foundType: 'Note',

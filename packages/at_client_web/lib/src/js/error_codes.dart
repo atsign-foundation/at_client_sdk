@@ -1,4 +1,22 @@
+import 'dart:async';
+
+import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/passkey.dart'
+    show
+        PasskeyCeremonyException,
+        PasskeyRecordAuthenticationException,
+        PrfUnavailableException,
+        UnsupportedPasskeyRecordException;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/passkey.dart'
+    show
+        AtServerAtKeysWriteException,
+        MissingAtKeysDocumentException,
+        PasskeyLostException,
+        PasskeyOnboardingIncompleteException,
+        PkamRefusedException,
+        PublicKeyMismatchException;
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
 
 import '../collections/js_collections_adapter.dart' show maxItemDataDepth;
 import '../exceptions.dart';
@@ -11,33 +29,104 @@ import '../log_text.dart';
 // refusal AtCollection words itself (CollectionRefusal.itemId) and the id and
 // owner an error carries, each bounded by [boundedRejectionText]; every other
 // message is fixed here or built from structured fields.
+//
+// `internal` is reserved for a Dart `Error` (a StateError outside the
+// documented caller misuse, a TypeError, a null-check failure) and a type
+// nothing here expects. Every failure a bridge path can name has its own arm.
 
 /// The `AtError.code` for [error]: one string per typed exception the
 /// session layer throws, a `COLLECTION_*` code for a collection failure, and
-/// `internal` for anything else.
+/// `internal` only for a Dart `Error` or a genuinely unexpected type.
 String errorCodeOf(Object error) => switch (error) {
-      InvalidArgumentException() => 'invalid_argument',
+      InvalidArgumentException() || QueueLimitException() => 'invalid_argument',
       JsCollectionsError(:final kind) => collectionErrorCode(kind),
-      AtOpenRefusedException() => 'pkam_refused',
-      PortalSessionOfflineException() => 'offline',
+      AtOpenRefusedException() ||
+      AtCredentialRefusedException() ||
+      PkamRefusedException() ||
+      UnAuthenticatedException() =>
+        'pkam_refused',
+      PortalSessionOfflineException() ||
+      SecondaryConnectException() =>
+        'offline',
+      // `UnAuthorizedException` is an `AtConnectException`, but the atServer
+      // answered: it refused the request, so it is not a connectivity failure.
+      UnAuthorizedException() => 'refused',
+      AtCertificateValidationException() ||
+      AtIOException() ||
+      BlockedConnectionException() ||
+      AtConnectException() =>
+        'offline',
+      AtTimeoutException() || TimeoutException() => 'timeout',
+      SetupLockTimeoutException() ||
+      IndexedDbException() ||
+      AtServerAtKeysWriteException() =>
+        'storage_failed',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
+      PasskeyOnboardingIncompleteException() ||
+      MissingAtKeysDocumentException() =>
+        'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       EnrollmentInFlightException() => 'enrollment_in_flight',
-      // `AtEnrollmentException` is also thrown locally, for an approval that
-      // landed and then lost its record or for a missing key package, so this
-      // code means the enrolment failed, not only that the atServer refused it.
-      AtEnrollmentException() => 'enrollment_denied',
+      AtEnrollmentException() ||
+      AtInvalidEnrollmentException() =>
+        'enrollment_denied',
       SessionClosedException() || StoppedException() => 'closed',
       UnsupportedKeyMaterialException() ||
       UnsupportedOperationException() ||
       UnsupportedError() ||
-      ManageAccessRequiredException() =>
+      ManageAccessRequiredException() ||
+      PrfUnavailableException() ||
+      UnsupportedPasskeyRecordException() =>
         'unsupported',
+      AlreadyOpenException() || AtStorageInUseException() => 'already_open',
       InvalidKeyException() ||
-      AtNoCredentialException() ||
-      InvalidAtSignException() =>
+      InvalidAtSignException() ||
+      AtKeysUnusableException() ||
+      AtKeysValidationException() ||
+      AtKeysParseException() ||
+      AtKeysFormatException() ||
+      AtKeysSourceAbsentException() ||
+      AtKeysFileOverwriteException() ||
+      AtKeyException() ||
+      InvalidAtKeyException() ||
+      AtKeyNotFoundException() ||
+      KeyNotFoundException() ||
+      AtSigningException() ||
+      AtSigningVerificationException() ||
+      AtEncryptionException() ||
+      AtDecryptionException() ||
+      PasskeyLostException() ||
+      PasskeyRecordAuthenticationException() ||
+      PublicKeyMismatchException() ||
+      PasskeyCeremonyException() ||
+      AtAuthenticationException() =>
         'bad_key',
+      BufferOverFlowException() => 'invalid_argument',
+      // An at_commons exception that means the atServer, or the client on its
+      // behalf, refused the request; each atServer error code maps to one of
+      // these. Any other type is unnameable here and falls to `internal`, which
+      // the inventory test refuses to let a new bridge-reachable type take by
+      // accident.
+      AtServerException() ||
+      AtThrottleLimitExceeded() ||
+      InvalidSyntaxException() ||
+      InvalidRequestException() ||
+      IllegalStateException() ||
+      IllegalArgumentException() =>
+        'refused',
+      AtLookUpException(:final errorCode) => _lookUpCode(errorCode),
       _ => 'internal',
+    };
+
+/// The code for an at_lookup failure, from its own error code: the ones that
+/// name a transport failure, a timeout or a failed authentication keep their
+/// meaning, and any other is the atServer refusing the request.
+String _lookUpCode(String errorCode) => switch (errorCode) {
+      'AT0004' || 'AT0007' || 'AT0021' => 'offline',
+      'AT0023' => 'timeout',
+      'AT0401' => 'pkam_refused',
+      'AT0015' || 'AT0016' => 'bad_key',
+      _ => 'refused',
     };
 
 /// The `COLLECTION_*` code for a collection failure of [kind].
@@ -59,6 +148,7 @@ String collectionErrorCode(CollectionFailure kind) => switch (kind) {
 /// closed set, sorted. `tool/manifest.dart` publishes it as `errorCodes` in
 /// `bridge-manifest.json`.
 const atErrorCodes = <String>[
+  'already_open',
   'bad_key',
   'closed',
   'enrollment_conveyance_failed',
@@ -69,6 +159,9 @@ const atErrorCodes = <String>[
   'offline',
   'onboarding_incomplete',
   'pkam_refused',
+  'refused',
+  'storage_failed',
+  'timeout',
   'unsupported',
 ];
 
@@ -95,17 +188,25 @@ const collectionErrorCodes = <String>[
 /// and never its value.
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
+      QueueLimitException() =>
+        'too many opens are already waiting for this atSign',
       JsCollectionsError() => _collectionMessage(error),
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
+      AtCredentialRefusedException(:final state) =>
+        'the atServer refused the credential (${state.cause?.name ?? 'refused'})',
       PortalSessionOfflineException(:final state) =>
         'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
       AtEnrollmentPendingException() =>
         'onboarding is incomplete: no usable credential',
+      PasskeyOnboardingIncompleteException() ||
+      MissingAtKeysDocumentException() =>
+        'onboarding is incomplete: log in with the passkey to finish it',
       EnrollmentConveyanceException(:final keyPackageStatus) =>
         'enrollment approved on server, but key conveyance failed (${keyPackageStatus.name})',
       EnrollmentInFlightException() => enrollmentInFlightMessage,
-      AtEnrollmentException() =>
+      AtEnrollmentException() ||
+      AtInvalidEnrollmentException() =>
         'the enrollment request was denied or is not pending',
       SessionClosedException() || StoppedException() => sessionClosedMessage,
       UnsupportedKeyMaterialException() =>
@@ -118,9 +219,68 @@ String atErrorMessage(Object error) => switch (error) {
       // An UnsupportedError maps by type alone: its text is never read or
       // shown, whoever raised it (the setup lock's included).
       UnsupportedError() => 'the operation is not supported here',
+      PrfUnavailableException() =>
+        'passkey PRF is not available in this browser',
+      UnsupportedPasskeyRecordException() =>
+        'the stored passkey record is not supported',
       InvalidKeyException() => _keyMessage(error),
-      AtNoCredentialException() => 'keys hold no usable credential',
+      AtKeysUnusableException() ||
+      AtKeysValidationException() ||
+      AtKeysParseException() ||
+      AtKeysFormatException() ||
+      AtKeysSourceAbsentException() ||
+      AtKeysFileOverwriteException() =>
+        'the keys cannot be used',
+      AtKeyException() ||
+      InvalidAtKeyException() ||
+      AtKeyNotFoundException() ||
+      KeyNotFoundException() =>
+        'the key was refused',
+      AtSigningException() ||
+      AtSigningVerificationException() =>
+        'the key material cannot sign or be verified',
+      AtEncryptionException() ||
+      AtDecryptionException() =>
+        'the key material cannot encrypt or decrypt',
+      PasskeyLostException() => 'the passkey could not open the atSign',
+      PasskeyRecordAuthenticationException() =>
+        'the passkey record could not be authenticated',
+      PublicKeyMismatchException() =>
+        'the keys do not match the published public keys',
+      PasskeyCeremonyException() =>
+        'the passkey ceremony did not produce a credential',
+      AtAuthenticationException() => 'authentication failed',
       InvalidAtSignException() => 'atSign is not valid',
+      UnAuthenticatedException() ||
+      PkamRefusedException() =>
+        'the atServer refused the session',
+      UnAuthorizedException() => 'the atServer refused the request',
+      SecondaryConnectException() ||
+      AtConnectException() ||
+      AtIOException() ||
+      AtCertificateValidationException() =>
+        'the atServer could not be reached',
+      BlockedConnectionException() => 'the atServer blocked the connection',
+      AtTimeoutException() ||
+      TimeoutException() =>
+        'the atServer did not answer in time',
+      SetupLockTimeoutException() => 'the setup lock could not be acquired',
+      IndexedDbException(:final browserError) => browserError == null
+          ? 'the browser storage failed'
+          : 'the browser storage failed ($browserError)',
+      AtServerAtKeysWriteException() =>
+        'the passkey key store is not available',
+      AtServerException() ||
+      AtThrottleLimitExceeded() ||
+      InvalidSyntaxException() ||
+      InvalidRequestException() ||
+      IllegalStateException() ||
+      IllegalArgumentException() =>
+        'the atServer or the client refused the request',
+      BufferOverFlowException() =>
+        'the value is larger than the notification limit',
+      AlreadyOpenException() || AtStorageInUseException() => alreadyOpenMessage,
+      AtLookUpException() => 'the atServer refused the request',
       _ => 'internal error',
     };
 

@@ -71,8 +71,8 @@ Feature: Every failure carries a code the caller branches on
     And the failure's op and kind are unchanged
 
   @forgery
-  Scenario: an ArgumentError from inside at_client rejects internal with the fixed message
-    Given an open session whose client throws an ArgumentError, or at_commons' IllegalArgumentException, with a message that names a parameter
+  Scenario: a Dart ArgumentError from inside at_client rejects internal with the fixed message
+    Given an open session whose client throws a Dart ArgumentError with a message that names a parameter
     When create, notify, otp, approve or close reaches that failure
     Then it rejects with code internal and the message 'internal error'
     And nothing the error printed is in the message
@@ -98,11 +98,11 @@ Feature: Every failure carries a code the caller branches on
     When a passkey setup runs under the setup lock
     Then it throws UnsupportedError, as on trunk
 
-  Scenario: the shared log text sanitizer escapes, bounds and flattens untrusted text
-    Given untrusted text holding control characters, bidirectional formatting characters, a surrogate pair at the cut, and more than the bound
+  Scenario: the local log text sanitizer escapes, bounds and flattens untrusted text
+    Given untrusted text holding control characters, bidirectional formatting characters, a zero-width space, a supplementary format character, a surrogate pair at the cut, and more than the bound
     When it goes through sanitizeLogText, singleLine and truncateText
-    Then sanitizeLogText returns one JSON string literal with those characters as \u escapes, bounded with an ellipsis
-    And singleLine replaces each of them with a space
+    Then sanitizeLogText returns one JSON string literal with those characters, the zero-width space and the supplementary format character as \u escapes, bounded with an ellipsis
+    And singleLine replaces each of them, including the zero-width space and the supplementary format character, with a space
     And truncateText never splits a surrogate pair
 
   Scenario: every closed rejection carries the same fixed message
@@ -113,5 +113,5 @@ Feature: Every failure carries a code the caller branches on
 
   Scenario: every code the bridge can reject with is produced by one mapping
     Given the bridge's list of error codes
-    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, internal and the eleven COLLECTION_ codes, and no other
+    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, storage_failed, refused, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, already_open, internal and the eleven COLLECTION_ codes, and no other
     And each code is produced by at least one exception the mapping test names
