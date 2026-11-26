@@ -15,6 +15,9 @@
   built on 3.x moves to it through `pqReady` in two releases, with a table of
   what each posture writes, reads and needs.
 - A client never runs below its posture floor, set by its keyfile's keys.
+- Document that a keyfile changes after first use — start-up files each
+  namespace key's private in it, so an earlier copy put back loses that key;
+  back up after first use, and know the `.bak` and `.pre-v1` files beside it.
 - Under `pqActive`, a collection's namespace ends with `.` and
   `preference.namespace`, or its first write throws
   `NamespaceKeyUnavailableException`.

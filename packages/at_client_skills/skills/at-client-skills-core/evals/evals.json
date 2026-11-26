@@ -369,6 +369,18 @@
         "Does not use a git or path dependency, dependency_overrides, or a prerelease",
         "Files the issue only if the developer agrees"
       ]
+    },
+    {
+      "id": 47,
+      "prompt": "Our CLI agent worked fine against the test server. To keep test runs repeatable I added a step that copies the original .atKeys file from the repo over the agent's keyfile before every run. Now every write fails saying a private key 'has not yet been conveyed to this enrollment'. The server wasn't reset. What happened, and how do I set up repeatable runs?",
+      "expected_output": "Explains that start-up writes the namespace key's private into the keyfile, so the copy from the repo lacks it while the atServer still advertises the public half, and writes in that namespace fail. Says never to put an earlier keyfile copy back. For repeatable runs, copies the fixture to a fresh path for each run against a fresh atServer, never back over a keyfile the client has used. Mentions the .bak file beside the keyfile, and that a backup taken before first use has the same problem. Does not suggest deleting or regenerating keys as the routine fix.",
+      "expectations": [
+        "Says the client writes the namespace key's private into the keyfile on start-up",
+        "Says the repo copy lacks that private while the atServer still has the public half",
+        "Says never to copy an earlier keyfile back over one the client has used",
+        "For repeatable runs, copies the fixture to a fresh path each run against a fresh atServer",
+        "Mentions the .bak file kept beside the keyfile"
+      ]
     }
   ]
 }

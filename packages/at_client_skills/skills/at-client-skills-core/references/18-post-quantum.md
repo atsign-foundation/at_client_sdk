@@ -38,6 +38,28 @@ data signing, and reading and writing post-quantum. It seeds no namespace keys
 and mints no signing root that its configured posture would not, and
 `disallowLegacyEncryption` stays as configured.
 
+## The keyfile changes after first use
+
+Under `pqReady` or `pqActive`, start-up files each namespace key's private in
+the atsign's keys: it rewrites a `.atKeys` file in place, or updates the
+keychain entry. Later writes there record rotations and retired keys. So the
+keys are state the client keeps, not a fixed credential.
+
+- **Never put an earlier copy back.** A copy made before the client first
+  started in a namespace lacks that namespace key's private, while the
+  atServer still advertises its public half. Writes in that namespace then
+  throw `NskeyPrivateNotHeldException`, unless another of the atsign's devices
+  holds the private and conveys it. That includes a keyfile restored from
+  source control, a test fixture copied over the file before each run, and a
+  backup saved when the atsign was activated.
+- **Back up after first use.** A copy taken after the app has started once in
+  each namespace it writes holds those privates. A test copies its fixture to
+  a fresh path for each run, against a fresh atServer, and never back.
+- **Files beside it.** Each write keeps the previous file as `<file>.bak`,
+  replaced by the next write. Upgrading a keyfile from the older flat format
+  keeps the original once as `<file>.pre-v1`, the only copy older builds can
+  read.
+
 ## Running at `pqActive`
 
 - **Namespaces.** A client whose enrollment is granted `*` holds a namespace

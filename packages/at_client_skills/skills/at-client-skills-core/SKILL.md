@@ -5,7 +5,8 @@ description: >
   writes, shares or syncs data, or is upgraded to at_client 4.0. Covers
   AtCollection<T> — CItem, Query, sub-collections, events, read receipts — and
   when notifications+SQLite fits better; the post-quantum posture; opening,
-  stopping and switching an AtClient and its connection state; sending,
+  stopping and switching an AtClient and its connection state; a keyfile
+  that stopped working after a restore; sending,
   receiving and confirming delivery of notifications; waiting for sync to
   settle; RPC between atsigns; remote-versus-local atServer operations;
   publishing public data; which exceptions to catch; NoPorts tunnels;
@@ -341,7 +342,12 @@ handed a preference with no posture. The platform skills say more. An app
 already deployed on
 legacy moves in two steps, through `pqReady`. Read
 [references/18-post-quantum.md](references/18-post-quantum.md) for the floor,
-writes right after open, offline writes, mixed fleets and approvers.
+the keyfile, writes right after open, offline writes, mixed fleets and
+approvers.
+
+**The keyfile changes after first use.** Start-up writes each namespace key's
+private into the atsign's keys, so never put an earlier copy of a keyfile back,
+and back one up only after the app has started once.
 
 **Connection state — the client comes back whatever the network did:**
 

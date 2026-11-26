@@ -4,26 +4,39 @@
 skill, not user documentation. It is excluded from the published package
 (see [`.pubignore`](../.pubignore)).
 
-**Goal:** prove the skill is sufficient on its own. We have an AI agent build a
-deliberately comprehensive app using **only** the installed skill — the same way
-a real developer would in production. If the agent can build the app
-start-to-finish with no errors, the skill works. Any failure is a skill gap to
-fix (file an issue and patch the skill / its references).
+**Goal:** prove the skills are sufficient on their own. We have an AI agent
+build a deliberately comprehensive app using **only** the installed
+`at-client-skills-*` skills (core, cli and flutter) — the same way a real
+developer would in production. If the agent builds the app start to finish
+with no errors, the skills work. A failure is a lead, not a verdict: check it
+against the published source first, then classify it.
+
+- **Skill gap:** the SDK works and the skill doesn't say how. Fix the skill.
+- **SDK issue:** the code should change. File a ticket; the skill documents
+  the behaviour and doesn't teach a workaround.
+- **Agent error:** the skill already covers it. Fix nothing, but note it.
+  Repeated misses mean the guidance is hard to find.
+- **Harness or environment:** fix the test, not the skill.
 
 ---
 
 ## 1. Stand up the harness (agent-agnostic)
 
 The point is to reproduce a real consumer environment where the agent's **only**
-atSign knowledge is the installed skill. Two rules make the test honest:
+atsign knowledge is the installed skills. Three rules make the test honest:
 
 - **Build outside this monorepo.** If the test project sits inside
   `at_client_sdk/`, the agent can read `packages/at_client/lib/...` and learn the
-  API from source instead of the skill — a false pass. Use a fresh directory
+  API from source instead of the skills — a false pass. Use a fresh directory
   somewhere else (e.g. a temp dir or `~/`).
-- **Only `at_client_skills` is local.** Pull `at_client` / `at_client_flutter` as
-  normal published pub dependencies (a real consumer would). The skill package is
-  a **local path dev-dependency** so you can iterate on it without publishing.
+- **Every SDK package comes from pub.dev.** No `dependency_overrides`, no git or
+  path dependencies for `at_client_flutter` or anything under it. The test
+  checks the skills against what a real consumer gets from `pub add`.
+- **Only `at_client_skills` is local.** It is a **path dev-dependency** so you
+  can iterate on the skills without publishing.
+
+The harness adds no runtime dependencies. Choosing them is part of what the
+skills teach, so the agent adds them itself.
 
 ```sh
 # 1. Fresh app, OUTSIDE the monorepo
@@ -31,16 +44,14 @@ cd ~                       # anywhere that is not inside at_client_sdk/
 flutter create teamboard_skill_test
 cd teamboard_skill_test
 
-# 2. Published runtime deps + the skills CLI — the regular pub command,
-#    exactly as a real consumer would.
-dart pub add at_client_flutter at_auth path_provider
+# 2. The skills CLI
 dart pub add dev:skills
 ```
 
-Step 3 — add the skill from your **local** checkout as a path dev-dependency.
-The inline `dart pub add "pkg:{path: …}"` form is brittle, so edit
-`pubspec.yaml` directly and use a **relative** path to your `at_client_sdk`
-checkout:
+Step 3 — add the skills package from your **local** checkout as a path
+dev-dependency. The inline `dart pub add "pkg:{path: …}"` form is brittle, so
+edit `pubspec.yaml` directly and use a **relative** path to your
+`at_client_sdk` checkout:
 
 ```yaml
 dev_dependencies:
@@ -49,36 +60,36 @@ dev_dependencies:
     path: ../path/to/at_client_sdk/packages/at_client_skills   # RELATIVE path
 ```
 
-> Tell the agent to compute the relative path from this test app to your
-> `at_client_sdk` checkout. If you're also validating unreleased `at_client` /
-> `at_client_flutter` changes, wire those as relative path deps the same way;
-> otherwise leave them as the published deps from step 2 to mirror a real
-> consumer.
-
 ```sh
-# 4. Resolve deps, then install the skill into the IDE skills dir
+# 4. Resolve deps, then install all three skills into the agent's skills dir
 #    (.claude/skills, .cursor/skills, …)
 dart pub get
-dart run skills get --ide claude    # or cursor, cline, copilot, opencode, generic
+dart run skills get --agent claude --all    # or cursor, cline, copilot, opencode, generic
 ```
 
-`--ide` is required here: a freshly created project has no agent directory yet,
-and the CLI auto-detects only by finding one that already exists, so a bare
-`dart run skills get` stops with *"Could not auto-detect IDE"*.
+Pass both flags:
 
-After step 4, confirm the skill installed (it must — the dir name
-`at_client_skills-sdk` matches the `at_client_skills-` prefix the CLI requires):
+- `--agent` — a freshly created project has no agent directory yet, and the
+  CLI auto-detects only by finding one that already exists.
+- `--all` — without it the CLI asks which skills to install. In a terminal the
+  skills start **unticked**, so pressing Enter installs nothing; run by an
+  agent, with no terminal, it only lists them.
+
+Confirm all three installed:
 
 ```sh
 ls .claude/skills/            # or .cursor/skills/, etc. for your agent
-# expect: at_client_skills-sdk/
+# expect: at-client-skills-cli/  at-client-skills-core/  at-client-skills-flutter/
 ```
 
-**Iterate loop:** edit the skill in the monorepo → re-run `dart run skills get`
-→ re-test. No publish, ever.
+**Iterate loop:** edit the skills in the monorepo → re-run
+`dart run skills get --agent claude --all` → re-test. No publish, ever.
 
 **Run the test:** open `teamboard_skill_test/` in your agent with a **clean
-session** (no extra atSign context, no hints) and paste the prompt in §2.
+session** (no extra atsign context, no hints) and paste the prompt in §2.
+The walkthrough signs in for real, so have two activated atsigns and their
+`.atKeys` files ready, plus a third atsign that is not yet activated for the
+brand-new-account path.
 
 ---
 
@@ -151,8 +162,10 @@ session** (no extra atSign context, no hints) and paste the prompt in §2.
 After everything is built, paste this follow-up prompt:
 
 > Create a report summarizing your findings. If any bug was due to the
-> `at_client_skills-sdk` skill not documenting the correct way to do something,
-> identify the gap in the skill that should be fixed. Separately, list every
+> `at-client-skills-*` skills not documenting the correct way to do something,
+> identify the gap and which skill it is in (core, cli or flutter). List which
+> skill files you read. Say whether you added any SDK package other than
+> `at_client_flutter`, and why. Separately, list every
 > SDK API you used that the skill marks as deprecated, and say what you used
 > it for — if the skill steered you to a deprecated API, that is itself a gap.
 > Finally, paste the log from the clean-shutdown walkthrough and say whether
@@ -197,8 +210,10 @@ Every error the agent hits — or workaround it invents that the skill should ha
 told it — is a skill gap. For each:
 
 1. Note the failing step and the exact error.
-2. Decide whether the fix belongs in `SKILL.md` or a `references/*.md` file.
+2. Decide which skill the fix belongs in — core if every platform needs it,
+   cli or flutter if only that platform does — and whether it goes in
+   `SKILL.md` or a `references/*.md` file.
 3. File an issue (or patch directly) and re-run this validation to confirm.
 
 A pass = the agent builds and runs TeamBoard on macOS with no errors, using only
-the skill.
+the skills and packages from pub.dev.
