@@ -55,6 +55,41 @@ String collectionErrorCode(CollectionFailure kind) => switch (kind) {
       CollectionFailure.tooDeep => 'COLLECTION_ITEM_TOO_DEEP',
     };
 
+/// The codes [errorCodeOf] returns that are not `COLLECTION_*` ones: the
+/// closed set, sorted. `tool/manifest.dart` publishes it as `errorCodes` in
+/// `bridge-manifest.json`.
+const atErrorCodes = <String>[
+  'bad_key',
+  'closed',
+  'enrollment_conveyance_failed',
+  'enrollment_denied',
+  'enrollment_in_flight',
+  'internal',
+  'invalid_argument',
+  'offline',
+  'onboarding_incomplete',
+  'pkam_refused',
+  'unsupported',
+];
+
+/// Every [collectionErrorCode] value, sorted: the closed set of
+/// `COLLECTION_*` codes a [JsCollectionsError] can carry.
+/// `tool/manifest.dart` publishes it as `collectionErrorCodes` in
+/// `bridge-manifest.json`.
+const collectionErrorCodes = <String>[
+  'COLLECTION_FAILED',
+  'COLLECTION_INVALID_ARGUMENT',
+  'COLLECTION_ITEM_ALREADY_EXISTS',
+  'COLLECTION_ITEM_HAS_SUB_ITEMS',
+  'COLLECTION_ITEM_NOT_FOUND',
+  'COLLECTION_ITEM_NOT_OWNER',
+  'COLLECTION_ITEM_TOO_DEEP',
+  'COLLECTION_ITEM_UNREADABLE',
+  'COLLECTION_ITEM_WRONG_TYPE',
+  'COLLECTION_PARTIAL_FAILURE',
+  'COLLECTION_TYPE_MISMATCH',
+];
+
 /// The message JS sees for [error]: fixed here, or built from the exception's
 /// fields, each echoed field bounded to one line. A message names a parameter
 /// and never its value.
