@@ -1037,19 +1037,11 @@ void main() {
       await resolved(invoke(s, 'close'));
 
       expect(session.closed, isTrue);
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'k'}),
-        'v'.toJS
-      ]));
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:k.wavi@alice'.toJS, 'v'.toJS]));
       expect(r.code, 'closed');
       for (final (method, args) in [
-        (
-          'notify',
-          <JSAny?>[
-            jsObject({'key': 'k'}),
-            'v'.toJS
-          ]
-        ),
+        ('notify', <JSAny?>['@bob:k.wavi@alice'.toJS, 'v'.toJS]),
         (
           'collection',
           <JSAny?>[
