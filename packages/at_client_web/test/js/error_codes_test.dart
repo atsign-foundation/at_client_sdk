@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
@@ -63,6 +65,18 @@ void main() {
     ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
+    'NotifyFailedException send failed': (
+      NotifyFailedException(NotifyFailure.sendFailed),
+      'notify_failed'
+    ),
+    'NotifyFailedException offline': (
+      NotifyFailedException(NotifyFailure.offline),
+      'offline'
+    ),
+    'NotifyFailedException timeout': (
+      NotifyFailedException(NotifyFailure.timeout),
+      'timeout'
+    ),
     'JsCollectionsError carries its own code': (
       JsCollectionsError(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
@@ -120,6 +134,7 @@ void main() {
     const mapped = {
       'pkam_refused',
       'offline',
+      'timeout',
       'onboarding_incomplete',
       'enrollment_conveyance_failed',
       'enrollment_denied',
@@ -128,6 +143,7 @@ void main() {
       'closed',
       'unsupported',
       'bad_key',
+      'notify_failed',
       'internal',
     };
     final produced = cases.values.map((c) => c.$2).toSet();
@@ -284,6 +300,44 @@ void main() {
           text(InvalidKeyException.field(
               InvalidArgumentException('key', expected: 'a string'))),
           'key must be a string');
+    });
+
+    test('a notify failure is worded from its kind, never from at_client text',
+        () {
+      const expected = {
+        NotifyFailure.sendFailed: (
+          'notify_failed',
+          'sending the notification failed'
+        ),
+        NotifyFailure.offline: ('offline', 'the atServer could not be reached'),
+        NotifyFailure.timeout: (
+          'timeout',
+          'the atServer did not answer in time'
+        ),
+      };
+      expect(expected.keys.toSet(), NotifyFailure.values.toSet());
+      for (final MapEntry(key: kind, value: (code, message))
+          in expected.entries) {
+        final error = NotifyFailedException(kind);
+        expect(errorCodeOf(error), code, reason: kind.name);
+        expect(atErrorMessage(error), message, reason: kind.name);
+      }
+    });
+
+    test('a transport failure outside notify keeps the code and message it had',
+        () {
+      for (final error in [
+        AtConnectException('x'),
+        SecondaryConnectException('x'),
+        AtIOException('x'),
+        UnAuthorizedException('x'),
+        AtTimeoutException('x'),
+        TimeoutException('x'),
+      ]) {
+        expect(errorCodeOf(error), 'internal', reason: '${error.runtimeType}');
+        expect(atErrorMessage(error), 'internal error',
+            reason: '${error.runtimeType}');
+      }
     });
 
     test('an unsupported operation is worded by the bridge, not by its error',

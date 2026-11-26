@@ -111,12 +111,6 @@ enum KeyRefusal {
   /// A notify key whose `sharedBy` is not the session's atSign.
   sharedByMismatch,
 
-  /// A notify key whose name is not a key name.
-  keyName,
-
-  /// A notify key whose namespace is not valid.
-  namespace,
-
   /// A notify key that does not make a valid atKey.
   atKey,
 
@@ -130,8 +124,8 @@ enum KeyRefusal {
   field,
 }
 
-/// Thrown when a `NotifyKey` or a `.atKeys` document cannot do what was
-/// asked of it, such as a notify with no `sharedWith`.
+/// Thrown when atKey text or a `.atKeys` document cannot do what was
+/// asked of it, such as notify text with no recipient.
 ///
 /// It carries a [refusal], never finished text: the bridge words what JS sees.
 class InvalidKeyException extends AtException {
@@ -162,6 +156,35 @@ class ManageAccessRequiredException extends AtException {
   @override
   String toString() =>
       'ManageAccessRequiredException: $manageAccessRequiredMessage';
+}
+
+/// Why a `notify` failed, for a [NotifyFailedException]. The
+/// bridge words each one; none carries an at_client message.
+enum NotifyFailure {
+  /// Sending the notification failed.
+  sendFailed,
+
+  /// The atServer could not be reached.
+  offline,
+
+  /// The atServer did not answer in time.
+  timeout,
+}
+
+/// Thrown when a notify failed: sending it failed, or the atServer could not
+/// be reached or did not answer in time.
+///
+/// It carries a [kind], never finished text: the bridge words what JS sees
+/// (lib/src/js/error_codes.dart).
+class NotifyFailedException extends AtException {
+  /// Creates the exception for [kind].
+  NotifyFailedException(this.kind) : super(kind.name);
+
+  /// What the failure was.
+  final NotifyFailure kind;
+
+  @override
+  String toString() => 'NotifyFailedException: ${kind.name}';
 }
 
 /// Thrown by an approve or deny of an enrollment whose first decision has

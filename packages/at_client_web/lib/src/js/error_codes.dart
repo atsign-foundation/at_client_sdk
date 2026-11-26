@@ -18,6 +18,11 @@ import '../log_text.dart';
 String errorCodeOf(Object error) => switch (error) {
       InvalidArgumentException() => 'invalid_argument',
       JsCollectionsError(:final kind) => collectionErrorCode(kind),
+      NotifyFailedException(:final kind) => switch (kind) {
+          NotifyFailure.sendFailed => 'notify_failed',
+          NotifyFailure.offline => 'offline',
+          NotifyFailure.timeout => 'timeout',
+        },
       AtOpenRefusedException() => 'pkam_refused',
       PortalSessionOfflineException() => 'offline',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
@@ -66,9 +71,11 @@ const atErrorCodes = <String>[
   'enrollment_in_flight',
   'internal',
   'invalid_argument',
+  'notify_failed',
   'offline',
   'onboarding_incomplete',
   'pkam_refused',
+  'timeout',
   'unsupported',
 ];
 
@@ -96,6 +103,11 @@ const collectionErrorCodes = <String>[
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
       JsCollectionsError() => _collectionMessage(error),
+      NotifyFailedException(:final kind) => switch (kind) {
+          NotifyFailure.sendFailed => 'sending the notification failed',
+          NotifyFailure.offline => 'the atServer could not be reached',
+          NotifyFailure.timeout => 'the atServer did not answer in time',
+        },
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
       PortalSessionOfflineException(:final state) =>
@@ -148,8 +160,6 @@ String _keyMessage(InvalidKeyException error) =>
           KeyRefusal.sharedByInvalid => 'sharedBy must be a valid atSign',
           KeyRefusal.sharedByMismatch =>
             'sharedBy must match the session atSign',
-          KeyRefusal.keyName => 'key is not a valid key name',
-          KeyRefusal.namespace => 'namespace is not valid',
           KeyRefusal.atKey => 'key is not a valid atKey',
           KeyRefusal.keysJson => 'keys is not valid JSON',
           KeyRefusal.keysDocument => 'keys is not a usable .atKeys document',

@@ -127,7 +127,7 @@ class _Collect implements LoggingHandler {
 /// A [Session] that records each call.
 class _FakeSession implements Session {
   final calls = <String>[];
-  final keysSeen = <NotifyKey>[];
+  final keysSeen = <String>[];
   final values = <Object>[];
   final listeners = <void Function(ReceivedNotification)>[];
   var closed = false;
@@ -150,7 +150,7 @@ class _FakeSession implements Session {
   @override
   bool get isClosed => closed;
 
-  void _call(String name, [NotifyKey? key]) {
+  void _call(String name, [String? key]) {
     if (closed) throw SessionClosedException();
     calls.add(name);
     if (key != null) keysSeen.add(key);
@@ -158,7 +158,7 @@ class _FakeSession implements Session {
   }
 
   @override
-  Future<bool> notify(NotifyKey key, String value) async {
+  Future<bool> notify(String key, String value) async {
     _call('notify', key);
     values.add(value);
     return delivered;
@@ -791,35 +791,10 @@ void main() {
 
     test('session calls name the parameter without its value', () async {
       final s = await create();
-      await expectNamed(
-          invoke(s, 'notify', [
-            jsObject({'key': wrapped()}),
-            'v'.toJS
-          ]),
-          'key',
-          code: 'bad_key');
-      await expectNamed(invoke(s, 'notify', [sentinel.toJS, 'v'.toJS]), 'key',
+      await expectNamed(invoke(s, 'notify', [wrapped(), 'v'.toJS]), 'key',
           code: 'bad_key');
       await expectNamed(
-          invoke(s, 'notify', [
-            jsObject({'key': 'k', 'namespace': wrapped()}),
-            'v'.toJS
-          ]),
-          'namespace',
-          code: 'bad_key');
-      await expectNamed(
-          invoke(s, 'notify', [
-            jsObject({'key': 'k', 'public': sentinel}),
-            'v'.toJS
-          ]),
-          'public',
-          code: 'bad_key');
-      await expectNamed(
-          invoke(s, 'notify', [
-            jsObject({'key': 'k'}),
-            wrapped()
-          ]),
-          'value');
+          invoke(s, 'notify', ['@bob:k.wavi@alice'.toJS, wrapped()]), 'value');
       await expectNamed(invoke(s, 'approve', [wrapped()]), 'id');
       await expectNamed(invoke(s, 'collection', ['c'.toJS, wrapped()]), 'type');
       await expectNamed(
@@ -836,77 +811,38 @@ void main() {
 
     setUp(() async => s = await create());
 
-    test('notify maps the key fields', () async {
-      final key = jsObject({
-        'key': 'note',
-        'namespace': 'other',
-        'sharedWith': '@bob',
-        'sharedBy': '@carol'
-      });
-
-      await resolved(invoke(s, 'notify', [key, 'hello'.toJS]));
-      await resolved(invoke(s, 'notify', [
-        jsObject({'key': 'plain'}),
-        'v'.toJS
-      ]));
+    test('notify passes the key text whole', () async {
+      await resolved(
+          invoke(s, 'notify', ['@bob:note.other@carol'.toJS, 'hello'.toJS]));
+      await resolved(invoke(s, 'notify', ['@bob:plain@alice'.toJS, 'v'.toJS]));
 
       expect(session.values, ['hello', 'v']);
-      final first = session.keysSeen.first;
-      expect((first.key, first.namespace, first.sharedWith, first.sharedBy),
-          ('note', 'other', '@bob', '@carol'));
-      final second = session.keysSeen.last;
-      expect((second.namespace, second.sharedWith, second.sharedBy),
-          (null, null, null));
+      expect(session.keysSeen, ['@bob:note.other@carol', '@bob:plain@alice']);
     });
 
-    test('notify maps the public, cached and noNamespace flags', () async {
-      await resolved(invoke(s, 'notify', [
-        jsObject(
-            {'key': 'k', 'public': true, 'cached': true, 'noNamespace': true}),
-        'v'.toJS
-      ]));
-      await resolved(invoke(s, 'notify', [
-        jsObject({'key': 'k', 'public': false}),
-        'v'.toJS
-      ]));
-
-      final flagged = session.keysSeen.first;
-      expect((flagged.isPublic, flagged.isCached, flagged.noNamespace),
-          (true, true, true));
-      final plain = session.keysSeen.last;
-      expect((plain.isPublic, plain.isCached, plain.noNamespace),
-          (false, false, false));
-    });
-
-    test('bridge notify passes noNamespace as given and refuses a non-boolean',
-        () async {
-      await resolved(invoke(s, 'notify', [
-        jsObject({'key': 'k', 'noNamespace': true}),
-        'v'.toJS
-      ]));
-      expect(session.keysSeen.single.noNamespace, isTrue);
-
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'k', 'noNamespace': 'yes'}),
-        'v'.toJS
-      ]));
-
-      expect(r.code, 'bad_key');
-      expect(session.keysSeen, hasLength(1));
+    test('bridge notify takes key text and refuses a non-string key', () async {
+      for (final bad in <JSAny?>[
+        jsObject({'key': 'k'}),
+        5.toJS,
+        <JSAny?>[].toJS,
+      ]) {
+        final r = await rejected(invoke(s, 'notify', [bad, 'v'.toJS]));
+        expect(r.code, 'bad_key');
+        expect(r.message, contains('key'));
+      }
+      expect(session.keysSeen, isEmpty);
     });
 
     test('notify rejects a value that is not a string', () async {
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'k'}),
-        5.toJS
-      ]));
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:k.wavi@alice'.toJS, 5.toJS]));
 
       expect(r.code, 'invalid_argument');
       expect(session.calls, isNot(contains('notify')));
     });
 
     test('notify resolves true when delivered and false when not', () async {
-      final key = jsObject({'key': 'rpc', 'sharedWith': '@alice'});
+      final key = '@alice:k.wavi@alice'.toJS;
 
       expect(
           (await resolved(invoke(s, 'notify', [key, 'ping'.toJS]))).dartify(),
@@ -921,10 +857,8 @@ void main() {
     test('a failing call rejects with the code of its exception', () async {
       session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'rpc'}),
-        'x'.toJS
-      ]));
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:rpc.wavi@alice'.toJS, 'x'.toJS]));
 
       expect(r.code, 'bad_key');
     });
@@ -932,13 +866,24 @@ void main() {
     test('a mapped exception keeps its message', () async {
       session.failure = InvalidKeyException(KeyRefusal.sharedWithMissing);
 
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'rpc'}),
-        'x'.toJS
-      ]));
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:rpc.wavi@alice'.toJS, 'x'.toJS]));
 
       expect(r.code, 'bad_key');
       expect(r.message, contains('notify needs sharedWith'));
+    });
+
+    test('a notify failure rejects notify_failed by its kind, never its text',
+        () async {
+      // The session turns an at_client send failure into a typed
+      // NotifyFailedException; the bridge never sees the raw AtClientException.
+      session.failure = NotifyFailedException(NotifyFailure.sendFailed);
+
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:rpc.wavi@alice'.toJS, 'x'.toJS]));
+
+      expect(r.code, 'notify_failed');
+      expect(r.message, 'sending the notification failed');
     });
 
     test('subscribe delivers events and returns an unsubscribe function',
@@ -1092,19 +1037,11 @@ void main() {
       await resolved(invoke(s, 'close'));
 
       expect(session.closed, isTrue);
-      final r = await rejected(invoke(s, 'notify', [
-        jsObject({'key': 'k'}),
-        'v'.toJS
-      ]));
+      final r = await rejected(
+          invoke(s, 'notify', ['@bob:k.wavi@alice'.toJS, 'v'.toJS]));
       expect(r.code, 'closed');
       for (final (method, args) in [
-        (
-          'notify',
-          <JSAny?>[
-            jsObject({'key': 'k'}),
-            'v'.toJS
-          ]
-        ),
+        ('notify', <JSAny?>['@bob:k.wavi@alice'.toJS, 'v'.toJS]),
         (
           'collection',
           <JSAny?>[
@@ -1970,24 +1907,10 @@ void main() {
           await create();
           expect(opened.last.rootDomain, isNull);
 
-          await resolved(invoke(s, 'notify', [
-            jsObject({'key': 'k'}),
-            'v'.toJS
-          ]));
-          final sentKey = session.keysSeen.last;
-          expect((
-            sentKey.sharedWith,
-            sentKey.sharedBy,
-            sentKey.isPublic,
-            sentKey.isCached,
-            sentKey.noNamespace
-          ), (
-            null,
-            null,
-            false,
-            false,
-            false
-          ));
+          await resolved(
+              invoke(s, 'notify', ['@bob:k.wavi@alice'.toJS, 'v'.toJS]));
+          expect(session.keysSeen.last, '@bob:k.wavi@alice',
+              reason: 'key text is read as a string, so no polluted field is');
 
           await resolved(invoke(s, 'collection', [
             'clean'.toJS,

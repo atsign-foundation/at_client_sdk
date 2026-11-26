@@ -20,9 +20,11 @@
     "enrollment_in_flight",
     "internal",
     "invalid_argument",
+    "notify_failed",
     "offline",
     "onboarding_incomplete",
     "pkam_refused",
+    "timeout",
     "unsupported"
   ],
   "schemaVersion": 1,

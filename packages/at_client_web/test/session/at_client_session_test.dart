@@ -11,7 +11,14 @@ class _FakeNotifications extends Fake implements NotificationService {
   final events = StreamController<AtNotification>.broadcast();
   final params = <NotificationParams>[];
   var status = NotificationStatusEnum.delivered;
-  AtClientException? exception;
+
+  /// The failure the result carries, wrapped by
+  /// `AtExceptionManager.createException` as the real service wraps it.
+  AtException? exception;
+
+  /// When set, `notify` throws it after the send, as the real service's
+  /// awaited poll rethrows what reading the final status throws.
+  AtException? pollFailure;
   String? lastRegex;
   bool? lastShouldDecrypt;
   var starts = 0;
@@ -39,12 +46,15 @@ class _FakeNotifications extends Fake implements NotificationService {
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
     params.add(notificationParams);
+    final failure = exception;
     final result = NotificationResult()
       ..notificationID = 'n${nextId++}'
       ..notificationStatusEnum = status
-      ..atClientException = exception;
+      ..atClientException =
+          failure == null ? null : AtExceptionManager.createException(failure);
     if (reportsSent) onSentToSecondary?.call(result);
     await hold?.future;
+    if (pollFailure case final thrown?) throw thrown;
     return result;
   }
 
@@ -226,83 +236,58 @@ void main() {
 
   group('keys', () {
     // notify is the only call that takes a key until the collections surface
-    // lands, so these go through it; each key is shared, as notify requires.
-    Future<String> sentKey(NotifyKey key) async {
+    // lands, so these go through it; each key is complete atKey text, as
+    // notify requires (D-44).
+    Future<String> sentKey(String key) async {
       await session.notify(key, 'v');
       return service.params.last.atKey.toString();
     }
 
-    test('a shared key is <key>.<namespace> by the own atSign', () async {
-      expect(await sentKey(const NotifyKey('k', sharedWith: '@bob')),
-          '@bob:k.wavi@alice');
+    test('a shared key is sent as its atKey text', () async {
+      expect(await sentKey('@bob:k.wavi@alice'), '@bob:k.wavi@alice');
       expect(service.params.last.atKey.metadata.namespaceAware, isFalse);
     });
 
-    test('a given namespace replaces the default', () async {
-      expect(
-          await sentKey(
-              const NotifyKey('k', namespace: 'other', sharedWith: '@bob')),
-          '@bob:k.other@alice');
+    test("notify sends the key text's namespace, not the session's", () async {
+      expect(await sentKey('@bob:k.other@alice'), '@bob:k.other@alice');
+      expect(await sentKey('@bob:k@alice'), '@bob:k@alice');
+      expect(service.params.last.atKey.metadata.namespaceAware, isFalse);
     });
 
     test('a canonical own sharedBy is kept', () async {
-      await session.notify(
-          const NotifyKey('k', sharedWith: '@bob', sharedBy: 'A.LICE'), 'v');
+      await session.notify('@bob:k.wavi@A.LICE', 'v');
 
       expect(service.params.last.atKey.sharedBy, '@alice');
     });
 
-    test('notify with noNamespace true sends the key with no namespace',
-        () async {
-      expect(
-          await sentKey(
-              const NotifyKey('k', sharedWith: '@bob', noNamespace: true)),
-          '@bob:k@alice');
-    });
-
-    test('notify without noNamespace applies the session namespace', () async {
-      expect(await sentKey(const NotifyKey('k', sharedWith: '@bob')),
-          '@bob:k.wavi@alice');
-    });
-
-    test('notify with noNamespace true ignores a given namespace', () async {
-      expect(
-          await sentKey(const NotifyKey('k',
-              namespace: 'other', sharedWith: '@bob', noNamespace: true)),
-          '@bob:k@alice');
-    });
-
-    test(
-        'notify with noNamespace true still rejects a key name that carries more key text and sends nothing',
-        () async {
-      for (final name in ['k@carol', 'k:x', 'k..x']) {
+    test('public and cached key text is refused before the parse', () async {
+      for (final key in [
+        'public:k.wavi@alice',
+        'cached:public:k.wavi@alice',
+      ]) {
         await expectLater(
-            session.notify(
-                NotifyKey(name, sharedWith: '@bob', noNamespace: true), 'v'),
-            throwsA(isA<InvalidKeyException>()),
-            reason: name);
+            session.notify(key, 'v'), throwsA(isA<InvalidKeyException>()),
+            reason: key);
       }
+      await expectLater(session.notify('cached:@bob:k.wavi@alice', 'v'),
+          throwsA(isA<InvalidKeyException>()));
       expect(service.params, isEmpty);
-    });
-
-    test('an atSign without @ is put in @name form', () async {
-      await session.notify(const NotifyKey('k', sharedWith: 'bob'), 'v');
-
-      expect(service.params.last.atKey.sharedWith, '@bob');
     });
   });
 
   group('notify', () {
     test('without sharedWith it is a bad key and sends nothing', () async {
-      await expectLater(session.notify(const NotifyKey('k'), 'v'),
-          throwsA(isA<InvalidKeyException>()));
+      for (final key in ['', 'k.wavi@alice', '@alice']) {
+        await expectLater(
+            session.notify(key, 'v'), throwsA(isA<InvalidKeyException>()),
+            reason: key);
+      }
       expect(service.params, isEmpty);
     });
 
     test('sends an update on the shared key, outside the app namespace',
         () async {
-      final sent = await session.notify(
-          const NotifyKey('rpc', namespace: 'tally', sharedWith: '@bob'), 'hi');
+      final sent = await session.notify('@bob:rpc.tally@alice', 'hi');
 
       expect(sent, isTrue);
       final params = service.params.single;
@@ -312,40 +297,34 @@ void main() {
       expect(params.value, 'hi');
     });
 
-    test('folds a mixed-case notify namespace to lower case', () async {
-      await session.notify(
-          const NotifyKey('rpc', namespace: 'TaLLy', sharedWith: '@bob'), 'hi');
-
-      expect(service.params.single.atKey.toString(), '@bob:rpc.tally@alice');
-    });
-
     test('resolves false when the notification is not delivered', () async {
       service.status = NotificationStatusEnum.undelivered;
 
-      expect(
-          await session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
-          isFalse);
+      expect(await session.notify('@bob:k.wavi@alice', 'v'), isFalse);
     });
 
-    test('rethrows the exception an undelivered notification carries',
-        () async {
-      final cause = AtClientException('AT0001', 'Unable to connect');
-      service
-        ..status = NotificationStatusEnum.undelivered
-        ..exception = cause;
+    test('a send at_client reports failed is a send failure', () async {
+      for (final cause in [
+        UnAuthorizedException('not authorized'),
+        AtKeyException('Key cannot contain @'),
+      ]) {
+        service
+          ..reportsSent = false
+          ..status = NotificationStatusEnum.undelivered
+          ..exception = cause;
 
-      await expectLater(
-          session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
-          throwsA(same(cause)));
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', NotifyFailure.sendFailed)),
+            reason: '${cause.runtimeType}');
+      }
     });
 
     test(
         'notify with mismatched sharedBy rejects with bad_key and sends nothing',
         () async {
-      await expectLater(
-          session.notify(
-              const NotifyKey('k', sharedWith: '@bob', sharedBy: '@carol'),
-              'v'),
+      await expectLater(session.notify('@bob:k.wavi@carol', 'v'),
           throwsA(isA<InvalidKeyException>()));
       expect(service.params, isEmpty);
     });
@@ -353,14 +332,15 @@ void main() {
     test(
         'notify with public or cached flag rejects with bad_key and sends nothing',
         () async {
-      await expectLater(
-          session.notify(
-              const NotifyKey('k', sharedWith: '@bob', isPublic: true), 'v'),
-          throwsA(isA<InvalidKeyException>()));
-      await expectLater(
-          session.notify(
-              const NotifyKey('k', sharedWith: '@bob', isCached: true), 'v'),
-          throwsA(isA<InvalidKeyException>()));
+      for (final bad in [
+        'public:k.wavi@alice',
+        'cached:public:k.wavi@alice',
+        'cached:@bob:k.wavi@alice',
+      ]) {
+        await expectLater(
+            session.notify(bad, 'v'), throwsA(isA<InvalidKeyException>()),
+            reason: bad);
+      }
       expect(service.params, isEmpty);
     });
 
@@ -368,21 +348,63 @@ void main() {
         'notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing',
         () async {
       for (final bad in [
-        const NotifyKey('', sharedWith: '@bob'),
-        const NotifyKey('a:b', sharedWith: '@bob'),
-        const NotifyKey('a@b', sharedWith: '@bob'),
-        const NotifyKey('a b', sharedWith: '@bob'),
-        const NotifyKey('k', sharedWith: '@bob', namespace: ''),
-        const NotifyKey('k', sharedWith: '@bob', namespace: 'a b'),
-        const NotifyKey('k', sharedWith: '@a@b'),
-        const NotifyKey('k', sharedWith: '@bob '),
-        const NotifyKey('k', sharedWith: ''),
+        '',
+        '@bob',
+        'k.wavi@alice',
+        '@bob:k:x.wavi@alice',
+        'not:a:key@alice',
+        '@a@b:k.wavi@alice',
+        '@bob:k..x.wavi@alice',
+        '@bob:k wavi@alice',
+        '@bob:k.wavi.@alice',
+        'Public:k.wavi@alice',
+        'CACHED:k.wavi@alice',
+        'LOCAL:k.wavi@alice',
+        'bob:k.wavi@alice',
+        'privatekey:privatekey',
       ]) {
         await expectLater(
             session.notify(bad, 'v'), throwsA(isA<InvalidKeyException>()),
-            reason: '${bad.key}/${bad.namespace}/${bad.sharedWith}');
+            reason: bad);
       }
       expect(service.params, isEmpty);
+    });
+
+    test(
+        'a notify that cannot reach the atServer is an offline failure, or a timeout when it does not answer',
+        () async {
+      for (final (cause, kind) in [
+        (SecondaryConnectException('unable to connect'), NotifyFailure.offline),
+        (AtTimeoutException('no response'), NotifyFailure.timeout),
+      ]) {
+        service
+          ..reportsSent = false
+          ..status = NotificationStatusEnum.undelivered
+          ..exception = cause
+          ..pollFailure = cause;
+
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', kind)),
+            reason: '${cause.runtimeType}');
+      }
+    });
+
+    test('a failure where an atServer answered is not an offline failure',
+        () async {
+      for (final cause in [
+        UnAuthorizedException('not authorized'),
+        UnAuthenticatedException('not authenticated'),
+        HandShakeException('handshake failed'),
+        SecondaryNotFoundException('no atServer'),
+      ]) {
+        service.pollFailure = cause;
+
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'), throwsA(same(cause)),
+            reason: '${cause.runtimeType}');
+      }
     });
 
     test('notify interrupted by close rejects with closed', () async {
@@ -390,8 +412,7 @@ void main() {
       service.exception = AtClientException('AT0001', 'stopped');
       service.hold = Completer<void>();
 
-      final future =
-          session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v');
+      final future = session.notify('@alice:k.wavi@alice', 'v');
       await pumpEventQueue();
       await session.close();
       service.hold!.complete();
@@ -404,7 +425,7 @@ void main() {
       session.subscribe('.*', received.add, onError: (_) {});
 
       for (var i = 0; i < 1024; i++) {
-        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+        await session.notify('@alice:k.wavi@alice', 'v');
       }
       // Failed pre-send calls (not sent to secondary) must not enter _sent.
       service
@@ -412,18 +433,16 @@ void main() {
         ..status = NotificationStatusEnum.undelivered
         ..exception = AtClientException('AT0001', 'failed');
       for (var i = 0; i < 10; i++) {
-        await expectLater(
-            session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
-            throwsA(isA<AtClientException>()));
+        await expectLater(session.notify('@alice:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()));
       }
 
       // Calls that reach the secondary but poll undelivered have no echo
       // coming, so their ids must not evict the live ones either.
       service.reportsSent = true;
       for (var i = 0; i < 10; i++) {
-        await expectLater(
-            session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
-            throwsA(isA<AtClientException>()));
+        await expectLater(session.notify('@alice:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()));
       }
 
       service.events.add(_echo('n0'));
@@ -437,7 +456,7 @@ void main() {
       session.subscribe('.*', received.add, onError: (_) {});
 
       for (var i = 0; i < 1024; i++) {
-        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+        await session.notify('@alice:k.wavi@alice', 'v');
       }
       // NotificationStatusEnum has no third value, so an exception-carrying
       // undelivered result stands in for an outcome the session cannot call
@@ -446,9 +465,8 @@ void main() {
       service
         ..status = NotificationStatusEnum.undelivered
         ..exception = AtClientException('AT0001', 'unknown outcome');
-      await expectLater(
-          session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v'),
-          throwsA(isA<AtClientException>()));
+      await expectLater(session.notify('@alice:k.wavi@alice', 'v'),
+          throwsA(isA<NotifyFailedException>()));
 
       service.events
         ..add(_echo('n1024'))
@@ -538,7 +556,7 @@ void main() {
       final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
-      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+      await session.notify('@alice:k.wavi@alice', 'v');
       service.events
         ..add(_echo('n0'))
         ..add(_event('other'));
@@ -552,7 +570,7 @@ void main() {
       final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
 
-      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+      await session.notify('@alice:k.wavi@alice', 'v');
       service.events
         ..add(_event('n0', key: '@alice:attalk.wavi@bob', from: '@bob'))
         ..add(_echo('n0'));
@@ -565,8 +583,7 @@ void main() {
       final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
       service.hold = Completer<void>();
-      final pending =
-          session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+      final pending = session.notify('@alice:k.wavi@alice', 'v');
       await pumpEventQueue();
       service.events.add(_echo('n0'));
       await pumpEventQueue();
@@ -581,7 +598,7 @@ void main() {
       session.subscribe('.*', received.add, onError: (_) {});
 
       for (var i = 0; i < 1025; i++) {
-        await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+        await session.notify('@alice:k.wavi@alice', 'v');
       }
       service.events
         ..add(_echo('n0'))
@@ -677,7 +694,7 @@ void main() {
     test('an echo of this session is dropped without a warning', () async {
       session.subscribe('.*', (_) {}, onError: (_) {});
 
-      await session.notify(const NotifyKey('k', sharedWith: '@alice'), 'v');
+      await session.notify('@alice:k.wavi@alice', 'v');
       service.events.add(_echo('n0'));
       await pumpEventQueue();
 
@@ -1048,8 +1065,7 @@ void main() {
       await session.close();
 
       final calls = <String, Future<Object?> Function()>{
-        'notify': () =>
-            session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
+        'notify': () => session.notify('@alice:k.wavi@alice', 'v'),
         'subscribe': () async =>
             session.subscribe('.*', (_) {}, onError: (_) {}),
         'onStatus': () async => session.onStatus((_) {}),
@@ -1129,7 +1145,7 @@ void main() {
       await session.close();
 
       for (final call in <Future<Object?> Function()>[
-        () => session.notify(const NotifyKey('k', sharedWith: '@bob'), 'v'),
+        () => session.notify('@alice:k.wavi@alice', 'v'),
         () async => session.subscribe('.*', (_) {}, onError: (_) {}),
       ]) {
         await expectLater(call(), throwsA(isA<SessionClosedException>()));

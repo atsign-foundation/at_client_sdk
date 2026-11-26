@@ -270,28 +270,30 @@ COLLECTION_INVALID_ARGUMENT` (`js_collections_adapter.feature:323`) holds that p
 **Would reopen if.** A caller outside the bridge needs the same wording, which would make it a shared function
 rather than a field.
 
-### D-44 — the bridge sends a `NotifyKey`, the session builds the `AtKey`
+### D-44 — the bridge sends atKey text, the session parses it
 
-**Problem.** `notify` arrives from JS as plain fields, and the key it describes has a grammar that at_commons
-and at_client already own ([D-44](../../architecture/decisions.md)). A bridge that built the `AtKey` would
-restate those rules and could not validate the result without them.
+**Problem.** `notify` arrives from JS as a key, and that key has a grammar that at_commons and at_client
+already own ([D-44](../../architecture/decisions.md)). A bridge that built the `AtKey` would restate those
+rules and could not validate the result without them.
 
 **Options considered.**
-- The bridge builds an `AtKey` from the JS object, or the session trusts a raw object: rejected because the key
-  grammar and `AtKeyValidators` live in at_commons and at_client; restating them in the bridge would put a
-  second parser beside the one those packages have.
-- The bridge sends a `NotifyKey` and the session builds and validates the key (adopted in this PR): the `NotifyKey` carries
-  the name, an optional namespace, `sharedWith`, an optional `sharedBy`, and the `public`, `cached` and
-  `noNamespace` flags.
+- The bridge builds an `AtKey`, or the session trusts a raw object: rejected because the key grammar and
+  `AtKeyValidators` live in at_commons and at_client; restating them in the bridge would put a second parser
+  beside the one those packages have.
+- The bridge sends the key as seven fields and the session builds it: rejected once the signature could still
+  change, because `public` and `cached` can only be refused and the field set would have to be refused field
+  by field.
+- The bridge sends the atKey as text and the session parses it once (chosen): `notify(key, value)` takes a
+  string such as `@bob:note.wavi@alice`, carrying its recipient, namespace and owner.
 
-**Decision and why.** [`bridge.dart`](../../../packages/at_client_web/lib/src/js/bridge.dart) reads the JS
-object into a `NotifyKey`; the session builds the `AtKey` with `AtKey.shared`, which is not namespace-aware,
-the namespace having been folded by `foldNamespace`, checks it with `AtKeyValidators` on its serialised form,
-and rejects `public:` and `cached:` keys with `InvalidKeyException`, which reaches JS as `bad_key`. For an
-incoming notification the session checks the shape (at most three `:` parts, one `@`, no empty or doubled dot
-segment) and then parses with `AtKey.fromString`, accepting a sender only when the key's owner is `from` and
-its recipient is this atSign. The `noNamespace` flag is documented in [`js-api.md`](js-api.md) section 5a; the
-scenario `notify with public or cached flag rejects with bad_key and sends nothing` in
+**Decision and why.** [`bridge.dart`](../../../packages/at_client_web/lib/src/js/bridge.dart) takes the key as
+a string; the session parses it once with `AtKey.fromString`, not namespace-aware, checks it with
+`AtKeyValidators` on its serialised form, and rejects `public:`, `cached:public:` and `cached:` text with
+`InvalidKeyException`, which reaches JS as `bad_key`. For an incoming notification the session checks the
+shape (at most three `:` parts, one `@`, no empty or doubled dot segment) and then parses with
+`AtKey.fromString`, accepting a sender only when the key's owner is `from` and its recipient is this atSign.
+The text's namespace is what is sent, never the session's; [`js-api.md`](js-api.md) section 5a documents it,
+and the scenario `notify with public or cached flag rejects with bad_key and sends nothing` in
 [`notify_and_subscribe.feature`](../../../features/at_client_web/notify_and_subscribe.feature) holds the
 refusal.
 
