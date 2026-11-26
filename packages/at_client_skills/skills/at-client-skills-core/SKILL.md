@@ -350,7 +350,8 @@ approvers.
 
 **The keyfile changes after first use.** Start-up writes each namespace key's
 private into the atsign's keys, so never put an earlier copy of a keyfile back,
-and back one up only after the app has started once.
+and back one up only after the app has started once. A lost namespace key
+can't be recovered.
 
 **Connection state — the client comes back whatever the network did:**
 

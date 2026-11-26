@@ -16,8 +16,8 @@
   what each posture writes, reads and needs.
 - A client never runs below its posture floor, set by its keyfile's keys.
 - Document that a keyfile changes after first use — start-up files each
-  namespace key's private in it, so an earlier copy put back loses that key;
-  back up after first use, and know the `.bak` and `.pre-v1` files beside it.
+  namespace key's private in it, so an earlier copy put back loses that key,
+  for good; back up after first use, and know the `.bak` and `.pre-v1` files.
 - Document that sharing works like Bcc — a recipient's `sharedWith` lists only
   itself — and the member-list pattern for groups whose members share with
   each other.

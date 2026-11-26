@@ -52,6 +52,13 @@ keys are state the client keeps, not a fixed credential.
   holds the private and conveys it. That includes a keyfile restored from
   source control, a test fixture copied over the file before each run, and a
   backup saved when the atsign was activated.
+- **A lost private can't be recovered.** Only the atsign's own devices ever
+  hold it, so when none does, nothing brings it back: re-enrolling or
+  restarting doesn't help. Reading the atsign's own earlier data in that
+  namespace throws `NskeyPrivateUnavailableException`, writes keep failing,
+  and the SDK has no supported way yet to replace the key. Copies already
+  shared stay readable by their recipients, and the collection API can't list
+  or un-share items it can't read. Prevention is the only protection.
 - **Back up after first use.** A copy taken after the app has started once in
   each namespace it writes holds those privates. A test copies its fixture to
   a fresh path for each run, against a fresh atServer, and never back.
