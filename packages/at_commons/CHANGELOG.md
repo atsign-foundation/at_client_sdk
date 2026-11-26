@@ -1,3 +1,9 @@
+## 5.27.0
+
+- feat: `isUnprintableRune`, the set `clipForMessage` shows as escapes as a
+  public predicate, so a package that flattens or escapes untrusted text for a
+  one-line message or log can share it instead of mirroring the ranges.
+
 ## 5.26.0
 
 - feat: `clipForMessage` escapes text from outside the process so it stays

@@ -21,7 +21,7 @@ String clipForMessage(String text,
   if (quote != null &&
       (quote.runes.length != 1 ||
           quote.runes.single == 0x5c ||
-          _unprintable(quote.runes.single))) {
+          isUnprintableRune(quote.runes.single))) {
     throw ArgumentError.value(
         quote,
         'quote',
@@ -35,7 +35,7 @@ String clipForMessage(String text,
         ? '\\$quote'
         : rune == 0x5c
             ? r'\\'
-            : _unprintable(rune)
+            : isUnprintableRune(rune)
                 ? rune > 0xffff
                     ? '\\u{${rune.toRadixString(16)}}'
                     : '\\u${rune.toRadixString(16).padLeft(4, '0')}'
@@ -50,8 +50,14 @@ String clipForMessage(String text,
 }
 
 /// Whether [rune] is a control (Cc), format (Cf), line or paragraph separator
-/// (Zl, Zp) character, or a surrogate.
-bool _unprintable(int rune) =>
+/// (Zl, Zp) character, or a lone surrogate.
+///
+/// These are the characters [clipForMessage] shows as escapes, and the set
+/// other packages must share rather than mirror when they flatten or escape
+/// text for a one-line message or log. It takes a Unicode code point, not a
+/// UTF-16 code unit: pass the values of [String.runes], which never splits a
+/// surrogate pair, so a valid pair never reaches this as a lone surrogate.
+bool isUnprintableRune(int rune) =>
     rune < 0x20 ||
     (rune >= 0x7f && rune <= 0x9f) ||
     rune == 0xad ||
