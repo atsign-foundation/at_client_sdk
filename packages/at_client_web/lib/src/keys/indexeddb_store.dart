@@ -267,4 +267,5 @@ String? _errorName(Object? Function() read) {
 
 /// [what] went wrong, with the browser's error [name] when it gave one.
 IndexedDbException _failure(String what, String? name) =>
-    IndexedDbException(name == null ? what : '$what: $name');
+    IndexedDbException(name == null ? what : '$what: $name',
+        browserError: name);

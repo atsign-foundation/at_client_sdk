@@ -13,6 +13,7 @@
     "COLLECTION_TYPE_MISMATCH"
   ],
   "errorCodes": [
+    "already_open",
     "bad_key",
     "closed",
     "enrollment_conveyance_failed",
@@ -23,6 +24,9 @@
     "offline",
     "onboarding_incomplete",
     "pkam_refused",
+    "refused",
+    "storage_failed",
+    "timeout",
     "unsupported"
   ],
   "schemaVersion": 1,
