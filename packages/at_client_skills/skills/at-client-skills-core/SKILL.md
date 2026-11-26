@@ -5,8 +5,8 @@ description: >
   writes, shares or syncs data, or is upgraded to at_client 4.0. Covers
   AtCollection<T> — CItem, Query, sub-collections, events, read receipts — and
   when notifications+SQLite fits better; the post-quantum posture; opening,
-  stopping and switching an AtClient and its connection state; a keyfile
-  that stopped working after a restore; sending,
+  stopping and switching an AtClient and its connection state; a restored
+  keyfile that fails; group members sharing with each other; sending,
   receiving and confirming delivery of notifications; waiting for sync to
   settle; RPC between atsigns; remote-versus-local atServer operations;
   publishing public data; which exceptions to catch; NoPorts tunnels;
@@ -186,7 +186,10 @@ todos.getItemsAsStream()                     // decode errors arrive as stream e
 > `ArgumentError` on an item whose `owner` isn't you. Collaboration is
 > **additive**: sharing grants the recipient a *readable* copy, not write
 > access. For a peer to contribute, they create their own item and share it
-> back — you never edit theirs in place.
+> back — you never edit theirs in place. Recipients don't see each other: a
+> recipient's `sharedWith` lists only itself, so a group whose members share
+> with each other keeps its member list in the owner's item — see
+> [references/02-atcollection-api.md](references/02-atcollection-api.md).
 
 At `pqActive`, a share needs each recipient to have published a namespace key;
 otherwise the write throws `CollectionOpException` naming them. See

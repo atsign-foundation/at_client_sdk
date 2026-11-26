@@ -175,6 +175,17 @@ atsign. Collaboration is additive: each atsign owns what it creates, and
 contribute, they create their own item and share it back — you never mutate
 theirs in place. (`self` / `atSign` is the ownership test.)
 
+**Recipients don't see each other.** Sharing works like Bcc: a recipient's
+copy lists only that recipient in `sharedWith`, and only the owner's copy
+lists everyone. So a recipient who contributes knows only the owner, and the
+owner can't share an item it doesn't own: the contribution reaches the owner
+alone. When members should see who else is in, or each other's
+contributions, the owner keeps the member list in the item's own data and
+updates it on every share and un-share. Each member shares what it creates
+with everyone on that list, and follows the list as it changes. That shows
+every member to every other member, so leave it out where recipients
+shouldn't know of each other.
+
 **Sharing does not cascade, though deleting does.** `delete` takes
 `cascade: true` and removes self-owned descendants at any depth;
 `updateSharedWith` has no equivalent and changes that one item only. So adding

@@ -381,6 +381,18 @@
         "For repeatable runs, copies the fixture to a fresh path each run against a fresh atServer",
         "Mentions the .bak file kept beside the keyfile"
       ]
+    },
+    {
+      "id": 48,
+      "prompt": "I'm building a shared shopping list with AtCollection. The owner shares the list with three friends and they all see it. But when a friend adds an item, only the owner sees it — the other friends never do. And each friend's screen shows only themselves under 'shared with'. What am I doing wrong?",
+      "expected_output": "Explains that sharing works like Bcc: a recipient's copy lists only that recipient in sharedWith, and only the owner's copy lists everyone, so a friend who adds an item knows only the owner, and the owner can't re-share an item it doesn't own. Recommends the owner keep the member list in the list item's own data, updated on every share and un-share, and that each member share what it creates with everyone on that list, following changes to it. Notes this reveals members to each other. Does not suggest the owner edit or re-share the friend's item.",
+      "expectations": [
+        "Says a recipient's sharedWith lists only that recipient, while the owner's copy lists everyone",
+        "Says the owner cannot re-share or edit an item it doesn't own",
+        "Recommends the owner keep the member list in the shared item's data and update it on share and un-share",
+        "Says each member shares its own items with everyone on that member list",
+        "Does not suggest the owner edit or re-share the friend's item"
+      ]
     }
   ]
 }
