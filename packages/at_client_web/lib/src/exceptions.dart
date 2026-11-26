@@ -111,12 +111,6 @@ enum KeyRefusal {
   /// A notify key whose `sharedBy` is not the session's atSign.
   sharedByMismatch,
 
-  /// A notify key whose name is not a key name.
-  keyName,
-
-  /// A notify key whose namespace is not valid.
-  namespace,
-
   /// A notify key that does not make a valid atKey.
   atKey,
 
@@ -130,8 +124,8 @@ enum KeyRefusal {
   field,
 }
 
-/// Thrown when a `NotifyKey` or a `.atKeys` document cannot do what was
-/// asked of it, such as a notify with no `sharedWith`.
+/// Thrown when atKey text or a `.atKeys` document cannot do what was
+/// asked of it, such as notify text with no recipient.
 ///
 /// It carries a [refusal], never finished text: the bridge words what JS sees.
 class InvalidKeyException extends AtException {
@@ -162,6 +156,37 @@ class ManageAccessRequiredException extends AtException {
   @override
   String toString() =>
       'ManageAccessRequiredException: $manageAccessRequiredMessage';
+}
+
+/// Why a `notify` could not be sent, for a [NotifyFailedException]. The
+/// bridge words each one; none carries an at_client message.
+enum NotifyFailure {
+  /// The atServer could not deliver the notification to its recipient.
+  recipientUnreachable,
+
+  /// The atServer refused the notification's key.
+  keyRefused,
+
+  /// The atServer rejected the notification for another reason.
+  serverError,
+}
+
+/// Thrown when a notification was not sent: the atServer reported it
+/// undelivered, refused its key, or rejected it. A transport failure on the
+/// way to the atServer is not this; it is rethrown as the connectivity
+/// exception the bridge maps to `offline` or `timeout`.
+///
+/// It carries a [kind], never finished text: the bridge words what JS sees
+/// (lib/src/js/error_codes.dart).
+class NotifyFailedException extends AtException {
+  /// Creates the exception for [kind].
+  NotifyFailedException(this.kind) : super(kind.name);
+
+  /// What the failure was.
+  final NotifyFailure kind;
+
+  @override
+  String toString() => 'NotifyFailedException: ${kind.name}';
 }
 
 /// Thrown by an approve or deny of an enrollment whose first decision has

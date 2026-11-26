@@ -24,11 +24,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   own atSign and failed sends do not evict live ids ("remembers only the last
   #   1024 sent ids", "failed notify does not evict sent echo ids").
   # DoS: invalid keys, invalid regexes, and non-function callbacks are refused
-  #   before sending or subscribing, and noNamespace skips only the namespace
-  #   check, never the key-name check ("notify with noNamespace true still
-  #   rejects a key name that carries more key text and sends nothing", "bridge
-  #   notify passes noNamespace as given and refuses a non-boolean", "notify with empty or invalid key or
-  #   invalid sharedWith rejects with bad_key and sends nothing", "subscribe
+  #   before sending or subscribing ("notify with empty or invalid key or
+  #   invalid sharedWith rejects with bad_key and sends nothing", "bridge
+  #   notify takes key text and refuses a non-string key", "subscribe
   #   with invalid regex rejects naming regex", "subscribe with non-function
   #   callback returns {code: invalid_argument} without throwing"), and the
   #   envelope's peer-chosen id and key take the message bound so neither can
@@ -39,15 +37,16 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   sender/key owner are dropped ("delivers only a notification sent by the
   #   key owner", "subscribe drops notifications with malformed keys or wrong
   #   sharedWith").
-  #   noNamespace cannot widen a key: it drops the namespace entirely, even a
-  #   given one, and never changes sharedWith or sharedBy ("notify with
-  #   noNamespace true ignores a given namespace").
-  # Impersonation: outbound notify refuses mismatched sharedBy, public, or
-  #   cached keys upfront before any lookup, and inbound notifications compare
-  #   canonical sender and owner ("notify with mismatched sharedBy rejects with
-  #   bad_key and sends nothing", "notify with public or cached flag rejects
-  #   with bad_key and sends nothing", "matches the sender and the key owner by
-  #   canonical atSign").
+  #   Outbound key text cannot widen a key: it carries its own recipient,
+  #   owner and namespace, parsed once, and the text's namespace is what is
+  #   sent, never the session's ("notify sends the key text's namespace, not
+  #   the session's").
+  # Impersonation: outbound notify refuses a mismatched owner, a public or
+  #   cached key, and text the parsers refuse, before any lookup, and inbound
+  #   notifications compare canonical sender and owner ("notify with mismatched
+  #   sharedBy rejects with bad_key and sends nothing", "notify with public or
+  #   cached flag rejects with bad_key and sends nothing", "matches the sender
+  #   and the key owner by canonical atSign").
 
   Scenario: notify resolves true when delivered and false when not
     Given an open session and a recipient
@@ -57,55 +56,39 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
 
   Scenario: without sharedWith it is a bad key and sends nothing
     Given an open session
-    When notify is called on a key with no sharedWith
+    When notify is called on key text with no recipient
     Then it fails with a bad key
     And nothing is sent to the atServer
 
   Scenario: notify with mismatched sharedBy rejects with bad_key and sends nothing
     Given an open session as @alice
-    When notify is called with sharedBy @carol
+    When notify is called on key text whose owner is @carol
     Then it rejects with bad_key
     And nothing is sent to the atServer
 
   Scenario: notify with public or cached flag rejects with bad_key and sends nothing
     Given an open session
-    When notify is called with public true or cached true
+    When notify is called on public: or cached: key text
     Then each rejects with bad_key
     And nothing is sent to the atServer
 
   Scenario: notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing
     Given an open session
-    When notify is called with an empty or malformed key or an invalid sharedWith
+    When notify is called on empty or malformed key text or text with an invalid recipient
     Then each rejects with bad_key
     And nothing is sent to the atServer
 
-  Scenario: notify with noNamespace true sends the key with no namespace
+  Scenario: notify sends the key text's namespace, not the session's
     Given an open session in namespace wavi, as @alice
-    When notify is called on key k shared with @bob with noNamespace true
-    Then the notified key is @bob:k@alice
+    When notify is called on @bob:k.other@alice and then on @bob:k@alice
+    Then the notified keys are @bob:k.other@alice and @bob:k@alice
     And the session namespace is not applied
 
-  Scenario: notify without noNamespace applies the session namespace
-    Given an open session in namespace wavi, as @alice
-    When notify is called on key k shared with @bob without noNamespace
-    Then the notified key is @bob:k.wavi@alice
-
-  Scenario: notify with noNamespace true ignores a given namespace
-    Given an open session in namespace wavi, as @alice
-    When notify is called on key k shared with @bob with namespace other and noNamespace true
-    Then the notified key is @bob:k@alice
-
-  Scenario: notify with noNamespace true still rejects a key name that carries more key text and sends nothing
-    Given an open session as @alice
-    When notify is called with noNamespace true on a key name holding an @, a colon or a doubled dot
-    Then each rejects with bad_key
-    And nothing is sent to the atServer
-
-  Scenario: bridge notify passes noNamespace as given and refuses a non-boolean
+  Scenario: bridge notify takes key text and refuses a non-string key
     Given an open bridge session
-    When notify is called with noNamespace true, then with noNamespace as a string
-    Then the session receives the first key with noNamespace true
-    And the second rejects with bad_key and the session receives nothing for it
+    When notify is called with an object, a number or an array as the key
+    Then each rejects with bad_key naming key
+    And the session receives nothing
 
   Scenario: notify interrupted by close rejects with closed
     Given an open session with an in-flight undelivered notify
@@ -218,3 +201,18 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     When a notification arrives whose id and key carry a newline, a direction character and 600 characters
     Then both come back on one line, at most the rejection bound long
     And its from, value, epochMillis and operation are unchanged
+
+  Scenario: an undelivered notification is a recipient failure
+    Given a session whose notification service reports the send as undelivered
+    When notify sends a valid key
+    Then it rejects with notify_failed carrying the recipient-unreachable kind
+
+  Scenario: a notify failure is worded from its kind, never from at_client text
+    Given a notify failure of each kind
+    When the bridge writes the message JS sees
+    Then the wording names the kind and never repeats text at_client wrote
+
+  Scenario: resolves false when the notification is not delivered
+    Given a session whose notification service reports the notification was not delivered
+    When notify sends a valid key
+    Then it resolves false and does not throw

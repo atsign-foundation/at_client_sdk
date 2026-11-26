@@ -383,18 +383,12 @@ void _reportStreamError(JSFunction? report, Object error, String source) {
   }
 }
 
-/// The [NotifyKey] [value] names. A malformed key is a [InvalidKeyException] naming
-/// the offending field, never the value received.
-NotifyKey _jsKey(JSAny? value) {
+/// The atKey text [value] names (for example `@bob:note.wavi@alice`). A
+/// value that is not a string is an [InvalidKeyException] naming `key`; the
+/// text itself is parsed once, in the session, never here.
+String _jsKey(JSAny? value) {
   try {
-    final object = _object(value, 'key');
-    return NotifyKey(_string(_own(object, 'key'), 'key'),
-        namespace: _field(object, 'namespace'),
-        sharedWith: _field(object, 'sharedWith'),
-        sharedBy: _field(object, 'sharedBy'),
-        isPublic: _flag(object, 'public'),
-        isCached: _flag(object, 'cached'),
-        noNamespace: _flag(object, 'noNamespace'));
+    return _string(value, 'key');
   } on InvalidArgumentException catch (e) {
     throw InvalidKeyException.field(e);
   }
@@ -408,6 +402,10 @@ class BridgeSession {
 
   final Session _session;
 
+  /// Sends [value] on the atKey [key] gives as text; true only once the
+  /// atServer reports it delivered. Bad key text rejects with `bad_key`, and
+  /// a send that could not be made with `notify_failed`, `offline` or
+  /// `timeout`.
   @JSExport()
   JSPromise<JSBoolean> notify(JSAny? key, JSAny? value) => _promise(() async =>
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);

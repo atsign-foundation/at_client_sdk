@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
@@ -63,6 +65,24 @@ void main() {
     ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
+    'NotifyFailedException recipient': (
+      NotifyFailedException(NotifyFailure.recipientUnreachable),
+      'notify_failed'
+    ),
+    'NotifyFailedException key': (
+      NotifyFailedException(NotifyFailure.keyRefused),
+      'notify_failed'
+    ),
+    'NotifyFailedException server': (
+      NotifyFailedException(NotifyFailure.serverError),
+      'notify_failed'
+    ),
+    'AtConnectException': (AtConnectException('x'), 'offline'),
+    'SecondaryConnectException': (SecondaryConnectException('x'), 'offline'),
+    'AtIOException': (AtIOException('x'), 'offline'),
+    'UnAuthorizedException': (UnAuthorizedException('no'), 'refused'),
+    'AtTimeoutException': (AtTimeoutException('slow'), 'timeout'),
+    'TimeoutException': (TimeoutException('slow'), 'timeout'),
     'JsCollectionsError carries its own code': (
       JsCollectionsError(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
@@ -120,6 +140,8 @@ void main() {
     const mapped = {
       'pkam_refused',
       'offline',
+      'timeout',
+      'refused',
       'onboarding_incomplete',
       'enrollment_conveyance_failed',
       'enrollment_denied',
@@ -128,6 +150,7 @@ void main() {
       'closed',
       'unsupported',
       'bad_key',
+      'notify_failed',
       'internal',
     };
     final produced = cases.values.map((c) => c.$2).toSet();
@@ -284,6 +307,21 @@ void main() {
           text(InvalidKeyException.field(
               InvalidArgumentException('key', expected: 'a string'))),
           'key must be a string');
+    });
+
+    test('a notify failure is worded from its kind, never from at_client text',
+        () {
+      expect(
+          atErrorMessage(
+              NotifyFailedException(NotifyFailure.recipientUnreachable)),
+          'the atServer could not reach the notification recipient');
+      expect(atErrorMessage(NotifyFailedException(NotifyFailure.keyRefused)),
+          'the atServer refused the notification key');
+      expect(atErrorMessage(NotifyFailedException(NotifyFailure.serverError)),
+          'the atServer rejected the notification');
+      for (final kind in NotifyFailure.values) {
+        expect(errorCodeOf(NotifyFailedException(kind)), 'notify_failed');
+      }
     });
 
     test('an unsupported operation is worded by the bridge, not by its error',

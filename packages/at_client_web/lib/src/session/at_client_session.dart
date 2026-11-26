@@ -8,29 +8,6 @@ import '../exceptions.dart';
 import '../log_text.dart';
 import 'session_namespace.dart';
 
-/// A key as the JS bridge names it: [key] under [namespace] (the session's
-/// own when null), shared with [sharedWith] when that is set, by [sharedBy]
-/// (the session's own atSign when null). [isPublic] and [isCached] make it
-/// the `public:` and `cached:` form of that key; [noNamespace] keeps the
-/// session's namespace off a key that has none.
-class NotifyKey {
-  const NotifyKey(this.key,
-      {this.namespace,
-      this.sharedWith,
-      this.sharedBy,
-      this.isPublic = false,
-      this.isCached = false,
-      this.noNamespace = false});
-
-  final String key;
-  final String? namespace;
-  final String? sharedWith;
-  final String? sharedBy;
-  final bool isPublic;
-  final bool isCached;
-  final bool noNamespace;
-}
-
 /// A decrypted notification as a subscriber receives it; [operation] is
 /// `update` or `delete`.
 typedef ReceivedNotification = ({
@@ -60,9 +37,11 @@ abstract interface class Session {
   /// Whether [close] has started or completed on this session.
   bool get isClosed;
 
-  /// Notifies [key]'s `sharedWith` of [value]; true only once the atServer
-  /// reports it delivered. Throws a [InvalidKeyException] without `sharedWith`.
-  Future<bool> notify(NotifyKey key, String value);
+  /// Notifies the recipient of the atKey [key] (for example
+  /// `@bob:note.wavi@alice`) of [value]; true only once the atServer reports
+  /// it delivered. Throws an [InvalidKeyException] for key text that cannot
+  /// be sent, `public:` and `cached:` included.
+  Future<bool> notify(String key, String value);
 
   /// Calls [onEvent] with each decrypted notification whose key matches
   /// [regex], except the echoes of those this session sent (a sent id coming
@@ -159,8 +138,6 @@ class AtClientSession implements Session {
   static final _keySegmentInvalidChars = RegExp(r'[:@\s\x00-\x1f\x7f-\x9f]');
   static final _collectionNameAllowed =
       RegExp('^(?:${Regexes.charsInEntity}|${Regexes.allowedEmoji})+\$');
-  static final _notifyNamespacePattern = RegExp(
-      '^(?:(?:${Regexes.charsInEntity}|${Regexes.allowedEmoji})+\\.)?${Regexes.charsInNamespace}\$');
   static final _notifInvalidChars = RegExp(r'[\s\x00-\x1f\x7f-\x9f]');
 
   final AtClient _client;
@@ -277,66 +254,72 @@ class AtClientSession implements Session {
     if (_closed) throw SessionClosedException();
   }
 
-  /// [raw] as an [Atsign], or an [InvalidKeyException] carrying [refusal].
-  Atsign _parseAtsign(String raw, KeyRefusal refusal) {
-    try {
-      return raw.toAtsign();
-    } on InvalidAtSignException {
-      throw InvalidKeyException(refusal);
-    }
-  }
-
-  AtKey _atKey(NotifyKey key) {
-    if (key.isPublic) {
-      throw InvalidKeyException(KeyRefusal.publicKey);
-    }
-    if (key.isCached) {
-      throw InvalidKeyException(KeyRefusal.cachedKey);
-    }
-    final rawSharedWith = key.sharedWith;
-    if (rawSharedWith == null) {
-      throw InvalidKeyException(KeyRefusal.sharedWithMissing);
-    }
-    final sharedWith =
-        _parseAtsign(rawSharedWith, KeyRefusal.sharedWithInvalid);
-    final own = _canonical(_client.getCurrentAtSign()!)!;
-    final Atsign sharedBy;
-    if (key.sharedBy != null) {
-      sharedBy = _parseAtsign(key.sharedBy!, KeyRefusal.sharedByInvalid);
-      if (sharedBy != own) {
-        throw InvalidKeyException(KeyRefusal.sharedByMismatch);
-      }
-    } else {
-      sharedBy = own.toAtsign();
-    }
-    if (!_isKeySegment(key.key)) {
-      throw InvalidKeyException(KeyRefusal.keyName);
-    }
-    String? namespace;
-    if (!key.noNamespace) {
-      final rawNs = key.namespace ?? _namespace;
-      if (!_isKeySegment(rawNs) || !_notifyNamespacePattern.hasMatch(rawNs)) {
-        throw InvalidKeyException(KeyRefusal.namespace);
-      }
-      namespace = foldNamespace(rawNs);
-    }
-    final AtKey atKey;
-    final String serialized;
-    try {
-      // Not namespace-aware: at_client would otherwise fold the session's
-      // namespace into [namespace] (`rpc.tally` -> `rpc.tally.<app>`).
-      final builder =
-          AtKey.shared(key.key, namespace: namespace, sharedBy: sharedBy)
-            ..sharedWith(sharedWith);
-      atKey = builder.build()..metadata.namespaceAware = false;
-      serialized = atKey.toString();
-    } on AtException {
+  /// [keyText] as the [AtKey] `notify` sends on: atKey text parsed once with
+  /// [AtKey.fromString] and checked with [AtKeyValidators], as an incoming
+  /// notification's key is (D-44). `public:` and `cached:` text is refused
+  /// before the parse.
+  AtKey _atKey(String keyText) {
+    final parts = keyText.split(':');
+    if (parts.length > 3) {
       throw InvalidKeyException(KeyRefusal.atKey);
     }
+    if (parts.length == 3) {
+      if (parts[0] != 'cached') {
+        throw InvalidKeyException(KeyRefusal.atKey);
+      }
+      if (parts[1] == 'public') {
+        throw InvalidKeyException(KeyRefusal.publicKey);
+      }
+      throw InvalidKeyException(KeyRefusal.cachedKey);
+    }
+    if (parts.length == 2) {
+      switch (parts[0]) {
+        case 'public':
+          throw InvalidKeyException(KeyRefusal.publicKey);
+        case 'cached':
+          throw InvalidKeyException(KeyRefusal.cachedKey);
+      }
+    }
+    final AtKey atKey;
+    try {
+      atKey = AtKey.fromString(keyText);
+    } on Exception {
+      throw InvalidKeyException(KeyRefusal.atKey);
+    }
+    if (atKey.sharedWith == null) {
+      throw InvalidKeyException(KeyRefusal.sharedWithMissing);
+    }
+    final sharedWith = _canonical(atKey.sharedWith!);
+    if (sharedWith == null) {
+      throw InvalidKeyException(KeyRefusal.sharedWithInvalid);
+    }
+    final own = _canonical(_client.getCurrentAtSign()!)!;
+    final rawSharedBy = atKey.sharedBy;
+    if (rawSharedBy == null || _canonical(rawSharedBy) == null) {
+      throw InvalidKeyException(KeyRefusal.sharedByInvalid);
+    }
+    if (_canonical(rawSharedBy) != own) {
+      throw InvalidKeyException(KeyRefusal.sharedByMismatch);
+    }
+    // The text's key name and namespace must be single segments, as an
+    // incoming notification's are; the parser alone takes `k..x`.
+    final namespace = atKey.namespace;
+    if (!_isKeySegment(atKey.key) ||
+        (namespace != null && !_isKeySegment(namespace))) {
+      throw InvalidKeyException(KeyRefusal.atKey);
+    }
+    // Canonical forms, so the validators see what notify will send.
+    atKey
+      ..sharedWith = sharedWith
+      ..sharedBy = own.toAtsign();
+    // Not namespace-aware: at_client would otherwise fold the session's
+    // namespace into the key text's namespace (`note.wavi` ->
+    // `note.wavi.<app>`).
+    atKey.metadata.namespaceAware = false;
     final validation = AtKeyValidators.get().validate(
-      serialized,
+      atKey.toString(),
       ValidationContext()
-        ..atSign = sharedBy
+        ..atSign = own.toAtsign()
         ..validateOwnership = true
         ..enforceNamespace = false,
     );
@@ -347,7 +330,7 @@ class AtClientSession implements Session {
   }
 
   @override
-  Future<bool> notify(NotifyKey key, String value) async {
+  Future<bool> notify(String key, String value) async {
     _open();
     final atKey = _atKey(key);
     String? rememberedId;
@@ -375,8 +358,35 @@ class AtClientSession implements Session {
     }
     _pruneSent();
     _open();
-    if (result.atClientException case final cause?) throw cause;
+    if (result.atClientException case final cause?) {
+      throw _notifyFailure(cause,
+          undelivered: result.notificationStatusEnum ==
+              NotificationStatusEnum.undelivered);
+    }
     return false;
+  }
+
+  /// The typed failure [cause] is for JS. A transport failure is rethrown as
+  /// it is, so the bridge's own arms map it to `offline` or `timeout`; a key
+  /// the atServer refused, an undelivered send and every other atServer
+  /// failure become a [NotifyFailedException] whose kind is the bridge's
+  /// structured field.
+  Object _notifyFailure(AtClientException cause, {required bool undelivered}) {
+    if (cause is AtConnectException ||
+        cause is AtIOException ||
+        cause is SecondaryConnectException ||
+        cause is AtTimeoutException) {
+      return cause;
+    }
+    if (cause is AtKeyException ||
+        cause is InvalidAtKeyException ||
+        cause is KeyNotFoundException ||
+        cause is AtKeyNotFoundException) {
+      return NotifyFailedException(NotifyFailure.keyRefused);
+    }
+    return NotifyFailedException(undelivered
+        ? NotifyFailure.recipientUnreachable
+        : NotifyFailure.serverError);
   }
 
   /// Remembers [id] until the send's outcome is known: an echo can arrive

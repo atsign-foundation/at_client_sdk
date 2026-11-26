@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:at_client/at_client.dart';
 
 import '../collections/js_collections_adapter.dart' show maxItemDataDepth;
@@ -18,8 +20,17 @@ import '../log_text.dart';
 String errorCodeOf(Object error) => switch (error) {
       InvalidArgumentException() => 'invalid_argument',
       JsCollectionsError(:final kind) => collectionErrorCode(kind),
+      NotifyFailedException() => 'notify_failed',
       AtOpenRefusedException() => 'pkam_refused',
       PortalSessionOfflineException() => 'offline',
+      // `UnAuthorizedException` is an `AtConnectException`, but the atServer
+      // answered: it refused the request, so it is not a connectivity failure.
+      UnAuthorizedException() => 'refused',
+      AtConnectException() ||
+      AtIOException() ||
+      SecondaryConnectException() =>
+        'offline',
+      AtTimeoutException() || TimeoutException() => 'timeout',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
       EnrollmentInFlightException() => 'enrollment_in_flight',
@@ -66,9 +77,12 @@ const atErrorCodes = <String>[
   'enrollment_in_flight',
   'internal',
   'invalid_argument',
+  'notify_failed',
   'offline',
   'onboarding_incomplete',
   'pkam_refused',
+  'refused',
+  'timeout',
   'unsupported',
 ];
 
@@ -96,10 +110,25 @@ const collectionErrorCodes = <String>[
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
       JsCollectionsError() => _collectionMessage(error),
+      NotifyFailedException(:final kind) => switch (kind) {
+          NotifyFailure.recipientUnreachable =>
+            'the atServer could not reach the notification recipient',
+          NotifyFailure.keyRefused =>
+            'the atServer refused the notification key',
+          NotifyFailure.serverError => 'the atServer rejected the notification',
+        },
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
       PortalSessionOfflineException(:final state) =>
         'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
+      UnAuthorizedException() => 'the atServer refused the request',
+      AtConnectException() ||
+      AtIOException() ||
+      SecondaryConnectException() =>
+        'the atServer could not be reached',
+      AtTimeoutException() ||
+      TimeoutException() =>
+        'the atServer did not answer in time',
       AtEnrollmentPendingException() =>
         'onboarding is incomplete: no usable credential',
       EnrollmentConveyanceException(:final keyPackageStatus) =>
@@ -148,8 +177,6 @@ String _keyMessage(InvalidKeyException error) =>
           KeyRefusal.sharedByInvalid => 'sharedBy must be a valid atSign',
           KeyRefusal.sharedByMismatch =>
             'sharedBy must match the session atSign',
-          KeyRefusal.keyName => 'key is not a valid key name',
-          KeyRefusal.namespace => 'namespace is not valid',
           KeyRefusal.atKey => 'key is not a valid atKey',
           KeyRefusal.keysJson => 'keys is not valid JSON',
           KeyRefusal.keysDocument => 'keys is not a usable .atKeys document',

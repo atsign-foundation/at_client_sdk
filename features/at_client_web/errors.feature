@@ -46,8 +46,8 @@ Feature: Every failure carries a code the caller branches on
 
   Scenario: session calls name the parameter without its value
     Given an open session
-    When notify is called with a malformed key field or a non-string value, approve or deny with a non-string id, or collection with a non-string name, non-object opts or a fractional expiration
-    Then the error message names the parameter, with code bad_key for a key field and invalid_argument for every other parameter
+    When notify is called with a non-string key or a non-string value, approve or deny with a non-string id, or collection with a non-string name, non-object opts or a fractional expiration
+    Then the error message names the parameter, with code bad_key for the key and invalid_argument for every other parameter
     And it does not contain the received value
 
   @dos
@@ -113,5 +113,5 @@ Feature: Every failure carries a code the caller branches on
 
   Scenario: every code the bridge can reject with is produced by one mapping
     Given the bridge's list of error codes
-    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, internal and the eleven COLLECTION_ codes, and no other
+    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, refused, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, notify_failed, internal and the eleven COLLECTION_ codes, and no other
     And each code is produced by at least one exception the mapping test names
