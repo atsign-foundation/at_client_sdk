@@ -1925,7 +1925,7 @@ interface class AtCollection<T> {
     final prefix = StringBuffer();
     for (var i = 0; i < ancestry.length; i++) {
       final ancestor = ancestry[i];
-      prefix.write(ancestor.id.toLowerCase());
+      prefix.write(_foldItemId(ancestor.id));
       prefix.write('@');
       prefix.write(ancestor.owner!);
       prefix.write('/');
@@ -3241,11 +3241,20 @@ interface class AtCollection<T> {
     return ids;
   }
 
+  /// The item id [id] folds to: AtCollection compares and stores ids in
+  /// lower case, so an id from outside must take this one fold before it is
+  /// compared with one this code handed out.
+  ///
+  /// An implementation detail of collections handling, not public API: a
+  /// caller with ids of its own keeps its fold only where it must compare
+  /// them with ids this code returns.
+  static String _foldItemId(String id) => id.toLowerCase();
+
   /// [id] folded to lower case. Throws [ArgumentError] when it is empty or
   /// contains `.`, `:`, `@`, whitespace or a control character, and, for a
   /// write ([forWrite]), when it starts with `_`.
   static String _foldedId(String id, {bool forWrite = false}) {
-    final folded = id.toLowerCase();
+    final folded = _foldItemId(id);
     if (_refusesStructure(folded)) {
       throw _IdArgumentError(id, 'id', _structureRule);
     }
