@@ -38,7 +38,7 @@ flowchart TD
 | Collections adapter | `lib/src/collections/` | The collections adapter over one `AtCollection`: the per-(id, owner) write queue, the id lowercased once, the type check on update, unreadable records listed instead of failing the call, a typed exception. Its names stay as they are on trunk until the collections interface is typed (see D-45, withdrawn, in the Reasoning). | Codes and message text. |
 | Exceptions | `lib/src/exceptions.dart` | Every exception the package declares, each to extend `AtException`: `PortalSessionOfflineException`, `UnsupportedKeyMaterialException`, `JsCollectionsError`, `SetupLockTimeoutException` and `IndexedDbException`, all on trunk today, move into this one file. | Code mapping, which stays in the bridge. |
 | Contract manifest | release asset `bridge-manifest.json` | A `schemaVersion`, every exported method and every error code, generated from the Dart constants and identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against `bridge.ref`, and fails when its TypeScript types or code list disagree. | Anything written by hand. |
-| Build target | `tool/build.sh` | Today `tool/build.sh` takes no target flag and builds `at_client.js` and `at_client.wasm` from `web/at_client_web_entry.dart`, as on trunk. The bridge bundle, D-38's `--target` (`dart2js` by default; `dart2wasm` strict, with no silent fallback; an unknown target exits 1) and the release target are implemented by the release PR; a release target is not part of D-38 (see its Reasoning). | A target chosen by an entry name passed to `tool/build.sh`. |
+| Build target | `tool/build.sh` | `tool/build.sh` takes `--target` (`dart2js` by default; `dart2wasm` strict, with no silent fallback; an unknown target exits 1) and builds both entries, or the named bridge entry, for that target. A release target is not part of D-38 (see its Reasoning). | A target chosen by an entry name passed to `tool/build.sh`. |
 
 ## Opening a session (D-40)
 
@@ -101,7 +101,7 @@ be released.
   changes to existing proven machinery"); `PasskeySession` already holds the client and its stop and closes the
   vault cleanly; and `docs/sdk-shape.md` and `test/export_surface_test.dart` name `onboardNewAtSign` and
   `passkeyLogin`, so a rename changes proven entry points for the bridge's sake.
-- (c) One private function in the bridge that opens either kind of session and records its stop (chosen).
+- (c) One private function in the bridge that opens either kind of session and records its stop (adopted in this PR).
 
 **Decision and why.** One private function opens either kind of session and `close()` awaits its stop. The deciding
 argument is the same as for the rejected family, teardown in one place, without touching proven machinery:
@@ -133,7 +133,7 @@ or a session's teardown can't be expressed as one awaitable stop.
   then scoped the decision to the five trunk exceptions: the closed-session type exists only in #2537, so that choice
   and the amendment are left to that PR. If at_commons later gains an `AtException`-based closed-session type, that
   substitution becomes cheap.
-- Move the five trunk exceptions into one file and extend `AtException` (chosen). The closed-session type is left to
+- Move the five trunk exceptions into one file and extend `AtException` (adopted in this PR). The closed-session type is left to
   the implementing PR, where the #2537-only names live.
 
 **Decision and why.** Domain errors, not JS-specific; follow the existing Dart convention; the layers stop importing
@@ -166,7 +166,7 @@ set in at_js's `error.ts`. Nothing compares either with the bundle, so a code or
 - Keep the hand-kept lists: this is the drift the decision exists to remove.
 - Hand-write a manifest: rejected because it would be a third hand-kept list beside [`js-api.md`](js-api.md) and
   at_js's `error.ts`, and would drift the same way.
-- Generate the manifest from the Dart constants and ship it with the bundle (chosen).
+- Generate the manifest from the Dart constants and ship it with the bundle (adopted in this PR).
 
 **Decision and why.** Each release publishes `bridge-manifest.json` with a `schemaVersion`, every exported method and
 every error code, identical for both compile targets. at_js downloads it with the bundle, checks its sha256 against
@@ -199,18 +199,22 @@ therefore implicit in whatever the script last ran, and a failed wasm build can 
   which target is primary.
 - A release workflow that takes the target as a `workflow_dispatch` input and tags a wasm release distinctly:
   considered and deferred, in the code owner's review of 2026-11-24, until OQ-16 (which target is primary) has
-  product sign-off. Until then a bridge release, if any, is dart2js only and dispatchable from trunk only
-  (`if: github.ref == 'refs/heads/trunk'`).
-- A `--target` flag with `dart2js` as the default (chosen).
+  product sign-off. The code owner then directed this PR, on 2026-11-25, to ship `dart2wasm` as an advisory,
+  dispatch-only prerelease, so the workflow ships while the primary-target question (OQ-16) stays open. It
+  defaults to `dart2js` and publishes `dart2wasm` as a separate advisory prerelease; either target is
+  dispatchable from trunk only (`if: github.ref == 'refs/heads/trunk'`).
+- A `--target` flag with `dart2js` as the default (adopted in this PR).
 
 **Decision and why.** `tool/build.sh` takes `--target dart2js|dart2wasm`; `dart2js` is the default, `dart2wasm` is
 strict with no silent fallback, and an unknown target exits 1. The deciding argument is that the entry already
 compiles under both compilers (`test/web/compile_test.dart`), so the cost is in the build script, not in the bridge.
 
-**Cost.** Two targets to keep building. No release workflow is part of this decision.
+**Cost.** Two targets to keep building. The release workflow is in the release PR, not part of this decision: it
+takes the compile target as a `workflow_dispatch` input, defaults to `dart2js`, and publishes `dart2wasm` as a
+separate advisory prerelease until OQ-16 has product sign-off.
 
-**Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped. A wasm release is a
-separate decision, taken once OQ-16 has product sign-off.
+**Would reopen if.** The bridge stops being target-agnostic, or the wasm line is dropped. Whether the wasm release
+stops being advisory is a separate decision, taken once OQ-16 has product sign-off.
 
 ### D-42 — one owning layer per check
 
@@ -224,7 +228,7 @@ repeats the check it meets carries a second copy of it.
   subscribe regex compiled in the bridge and in the session, the namespace folded in the bridge, the session
   constructor, `qualifiedCollectionName` and `_atKey`, and the id lowercased in the adapter and in the bridge.
   Rejected because a copy can drift from its twin.
-- One owning layer per check (chosen): the closed state is `AtClientSession._open`, which
+- One owning layer per check (adopted in this PR): the closed state is `AtClientSession._open`, which
   `SessionBoundCollection` calls and the bridge does not repeat; the subscribe regex is compiled once, in
   `AtClientSession.subscribe`; the namespace is folded by `foldNamespace`
   (`lib/src/session/session_namespace.dart`) and nowhere else; the item id is folded by `foldItemId`
@@ -252,7 +256,7 @@ code and finished text, the codes have more than one owner.
   the adapter: rejected because it gives the adapter a JS-facing vocabulary, so the codes have two owners and
   the D-39 manifest no single source, and an exception's text choosing a code or reaching JS would let a
   message from inside `at_client` change what a caller sees.
-- Typed exceptions carrying a kind and structured fields, with one mapping (chosen): `errorCodeOf` and
+- Typed exceptions carrying a kind and structured fields, with one mapping (adopted in this PR): `errorCodeOf` and
   `atErrorMessage` in [`error_codes.dart`](../../../packages/at_client_web/lib/src/js/error_codes.dart) are pure
   functions of the thrown type and its fields, and the session and adapter throw no finished text.
 
@@ -276,7 +280,7 @@ restate those rules and could not validate the result without them.
 - The bridge builds an `AtKey` from the JS object, or the session trusts a raw object: rejected because the key
   grammar and `AtKeyValidators` live in at_commons and at_client; restating them in the bridge would put a
   second parser beside the one those packages have.
-- The bridge sends a `NotifyKey` and the session builds and validates the key (chosen): the `NotifyKey` carries
+- The bridge sends a `NotifyKey` and the session builds and validates the key (adopted in this PR): the `NotifyKey` carries
   the name, an optional namespace, `sharedWith`, an optional `sharedBy`, and the `public`, `cached` and
   `noNamespace` flags.
 
