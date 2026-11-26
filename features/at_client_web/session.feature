@@ -23,7 +23,9 @@ Feature: create opens a session and close ends it
   #   credential-less keys before opening a connection ("create rejects with
   #   unsupported outside a secure context", "invalid or empty atSign rejects
   #   naming atSign", "invalid or empty namespace rejects naming namespace",
-  #   "credential-less keys reject with bad_key").
+  #   "credential-less keys reject with bad_key"), and a saturated open queue
+  #   refuses the next open ("a saturated open queue rejects the next open,
+  #   which maps to invalid_argument").
   # Forgery: options are read only as own plain properties and keys are parsed
   #   into AtKeys rather than trusted as strings ("keys may be an object as
   #   well as the document text").
@@ -43,6 +45,13 @@ Feature: create opens a session and close ends it
     Then create's promise is still pending
     When the opener then returns a session
     Then create resolves with that session
+
+  Scenario: a saturated open queue rejects the next open, which maps to invalid_argument
+    Given an open still running for one atSign and enrollment
+    When 16 further opens for that atSign and enrollment are queued
+    And one more open for that atSign and enrollment is made
+    Then the last open is refused with QueueLimitException
+    And the bridge maps that refusal to code invalid_argument
 
   Scenario: keys may be an object as well as the document text
     Given create options whose keys are the parsed .atKeys object instead of its JSON text
@@ -90,6 +99,12 @@ Feature: create opens a session and close ends it
     When create is called
     Then it rejects with code invalid_argument and a message naming namespace without its value
     And no session is opened
+
+  Scenario: a pre-normalised namespace must already be folded
+    Given a session namespace that is already folded, passed with namespaceIsNormalized true
+    When the session opens a collection
+    Then the collection opens under that namespace unchanged
+    And a namespace that is not folded, passed with namespaceIsNormalized true, is refused with ArgumentError naming namespace and "is not a valid namespace segment"
 
   Scenario: credential-less keys reject with bad_key
     Given create options whose .atKeys document holds no usable credential
@@ -148,10 +163,20 @@ Feature: create opens a session and close ends it
     When create is called
     Then the error is rethrown after the opened client or passkey session is stopped
 
-  Scenario: close removes the network listeners even when a stop step fails
-    Given a session listening for the browser going online and offline, whose status subscription fails to cancel
+  Scenario: close runs every step when a status cancel throws an Exception
+    Given a session listening for the browser going online and offline, whose status subscription fails to cancel with an Exception
     When close is called
-    Then the online and offline listeners are still removed and the failure is logged
+    Then the online and offline listeners are still removed, the failure is logged, and the client is still stopped
+
+  Scenario: close rethrows an Error once every teardown step has run
+    Given a session listening for the browser going online and offline, whose status subscription fails to cancel with an Error
+    When close is called
+    Then it rejects with that Error after removing the online and offline listeners and stopping the client
+
+  Scenario: close rethrows a watch cancel Error once the stop step has run
+    Given a session with two collection watches whose cancel throws an Error
+    When close is called
+    Then it rejects with that Error after cancelling both watches and stopping the client
 
   Scenario: a close whose stop failed returns the same failure when called again
     Given a session whose stop fails on the first close

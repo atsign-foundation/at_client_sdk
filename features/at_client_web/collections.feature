@@ -22,12 +22,12 @@ Feature: Collections store, read and share items through the session
   #   delivers events, including unknown, and unsubscribes (T6.5, T6.8)").
   # DoS: data nesting is capped at 64 levels both inbound and outbound,
   #   unreadable items never fail list/query, non-plain objects are rejected,
-  #   and a watch event's peer-chosen labels take the message bound so none can
-  #   carry control characters or unbounded text into JS ("collection data that
+  #   and a watch event's identifiers pass whole while its human-readable
+  #   subName takes the message bound ("collection data that
   #   is an array or too deep rejects naming data", "A list reports an item
   #   nested 100000 levels deep without overflowing the stack", "non-plain JS
-  #   objects in collection arguments reject naming the parameter", "a
-  #   peer-chosen watch event field is bounded").
+  #   objects in collection arguments reject naming the parameter", "a watch
+  #   event's identifiers pass whole and its subName is bounded").
   # Forgery: item data crosses to JS as null-prototype objects and bridge reads
   #   inspect only own properties so Object.prototype pollution cannot alter
   #   arguments ("collection item data is a null-prototype object (T6.3)",
@@ -102,8 +102,21 @@ Feature: Collections store, read and share items through the session
   Scenario: concurrent update, share and remove on one item run sequentially without losing writes
     Given an item in an open adapter
     When update and share (or remove) are started concurrently for that item
-    Then they execute one after the other for that (id, owner)
+    Then they execute one after the other for that (id, owner) while the queue holds fewer than 64 waiters
+    And a writer that finds the queue at its cap is refused rather than running in order
     And the second operation sees the state written by the first without losing writes
+
+  Scenario: a write queue saturated behind one item rejects with COLLECTION_FAILED
+    Given an item whose first write is stalled in an open adapter
+    When 64 further writes for that item are queued behind it
+    And one more write for that item is made
+    Then the last write rejects with COLLECTION_FAILED naming QueueLimitException
+    And the queued writes still run once the first finishes
+
+  Scenario: the queue cap rejects a non-positive size
+    Given a write queue cap of 0 or -1
+    When the queue is constructed with that cap
+    Then each construction throws ArgumentError naming maxQueuedPerKey and carrying that cap as the invalid value
 
   Scenario: collection operations and watch reject with closed after session close
     Given an open collection handle from a session
@@ -229,10 +242,11 @@ Feature: Collections store, read and share items through the session
     And no error escapes
 
   @dos @forgery
-  Scenario: a peer-chosen watch event field is bounded
+  Scenario: a watch event's identifiers pass whole and its subName is bounded
     Given a collection watch with an event callback
-    When a watch event arrives whose id, owner, from and ancestry subName carry a newline, a direction character and 600 characters
-    Then all four come back on one line, at most the rejection bound long
+    When a watch event arrives whose id, owner and ancestry id are 248 characters, its from is an atSign carrying a zero-width joiner, and its ancestry subName carries a newline, a direction character and 600 characters
+    Then the identifiers come back byte-identical
+    And the subName comes back on one line, at most the rejection bound long
     And its data is unchanged
 
   Scenario: a collection rejection keeps code, message, id, owner, kind and failures
@@ -250,10 +264,10 @@ Feature: Collections store, read and share items through the session
     Then unreadable holds {id, owner, code} with COLLECTION_ITEM_UNREADABLE for the first and COLLECTION_ITEM_TOO_DEEP for the second
 
   @dos @forgery
-  Scenario: an unreadable record's id and owner are bounded in a listing
+  Scenario: an unreadable record's id and owner pass whole in a listing
     Given an unreadable record carrying a very long id and an owner holding a direction character
     When list is called
-    Then the unreadable record's id and owner are each at most 128 characters and one line
+    Then the unreadable record's id and owner come back byte-identical
 
   Scenario: a repeated collection call builds a fresh adapter each time
     Given an open session
@@ -264,6 +278,12 @@ Feature: Collections store, read and share items through the session
     Given two handles on one collection opened with different eventSource and expiration
     When each removes the same item, the id differing only in case
     Then the second starts after the first finishes, and an operation on another id does not wait
+
+  Scenario: two sessions do not queue behind each other
+    Given two open sessions over the same store
+    When each session starts an explicit-id write to the same item
+    Then both writes begin before either ends
+    And the write that lands last wins
 
   Scenario: warns, never swallows silently, when a watch fails to cancel
     Given a session with two active collection watches whose cancel throws

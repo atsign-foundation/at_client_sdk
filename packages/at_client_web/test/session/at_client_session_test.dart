@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/item_locks.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
-import 'package:test/fake.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import '../collections/adapter_test_utils.dart';
 
 class _FakeNotifications extends Fake implements NotificationService {
   final events = StreamController<AtNotification>.broadcast();
@@ -128,15 +131,21 @@ class _CancelFailingSubscription extends Fake
   Future<void> cancel() => _cancel();
 }
 
-/// A connection whose status subscription fails to cancel.
+/// A connection whose status subscription fails to cancel with [failure],
+/// a `StateError` when none is given.
 class _CancelFailingConnection extends Fake implements AtConnection {
+  _CancelFailingConnection([this.failure]);
+
+  final Object? failure;
+
   @override
   AtConnectionState get current => AtConnectionState.online();
 
   @override
-  Stream<AtConnectionState> get changes =>
-      (StreamController<AtConnectionState>()
-            ..onCancel = () => Future<void>.error(StateError('boom')))
+  Stream<AtConnectionState>
+      get changes => (StreamController<AtConnectionState>()
+            ..onCancel =
+                () => Future<void>.error(failure ?? StateError('boom')))
           .stream;
 }
 
@@ -683,6 +692,20 @@ void main() {
 
       expect(warnings, isEmpty);
     });
+
+    test('a stats notification on .* is skipped without a warning', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      // A server stats notification carries id -1 and a key that names no
+      // item owner, so the ownership check would warn about every one.
+      service.events
+          .add(_event('-1', key: 'statsNotification.@alice', from: '@carol'));
+      await pumpEventQueue();
+
+      expect(received, isEmpty);
+      expect(warnings, isEmpty);
+    });
   });
 
   group('status', () {
@@ -876,7 +899,7 @@ void main() {
         ('list', () => todos.list()),
         ('query', () => todos.query(const [])),
         ('update', () => todos.update(address, {'a': 2})),
-        ('share', () => todos.share(address, ['@bob'])),
+        ('share', () => todos.share(address, ['@bob'.toAtsign()])),
         ('remove', () => todos.remove(address)),
       ]) {
         await expectLater(call(), throwsA(isA<SessionClosedException>()),
@@ -1040,6 +1063,115 @@ void main() {
       expect(() => AtClientSession(client, namespace: 'a.b'),
           throwsA(isA<InvalidArgumentException>()));
     });
+
+    test('a pre-normalised namespace must already be folded', () async {
+      // The flag means "already folded", not "unchecked": a folded value is
+      // used unchanged, and an un-folded one is refused like any invalid
+      // namespace.
+      final pre = AtClientSession(client,
+          namespace: 'myapp', namespaceIsNormalized: true, warn: warnings.add);
+      await pre.collection('Todos', type: 'Todo', eventSource: 'data');
+
+      expect(client.openedCollections.last.$1, 'todos.myapp');
+      expect(
+          () => AtClientSession(client,
+              namespace: 'MyApp', namespaceIsNormalized: true),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.name, 'name', 'namespace')
+              .having((e) => e.message, 'message',
+                  'is not a valid namespace segment')));
+    });
+  });
+
+  group('two sessions on one store', () {
+    const ns = 'todos.demo';
+    final address = (id: 'i1', owner: '@alice'.toAtsign());
+    late FakeAtServer server;
+    late FakeAtClient alice;
+
+    setUp(() {
+      registerAdapterFallbacks();
+      server = FakeAtServer();
+      alice = server.client('@alice');
+      when(() => alice.mock.connection).thenReturn(AtConnection(
+          atSign: '@alice', attempt: (_) async => AtConnectionState.online()));
+    });
+
+    tearDown(() => alice.dispose());
+
+    test('two sessions do not queue behind each other', () async {
+      final first =
+          AtClientSession(alice.mock, namespace: 'demo', stop: () async {});
+      final second =
+          AtClientSession(alice.mock, namespace: 'demo', stop: () async {});
+      addTearDown(() async {
+        await first.close();
+        await second.close();
+      });
+      final a =
+          await first.collection('todos', type: 'Todo', eventSource: 'data');
+      final b =
+          await second.collection('todos', type: 'Todo', eventSource: 'data');
+      await rawCollection(alice, ns, writeTypeTag: 'Todo')
+          .create(obj: {'title': 'v1'}, id: 'i1');
+
+      final firstPutStarted = Completer<void>();
+      final releaseFirstPut = Completer<void>();
+      final secondPutStarted = Completer<void>();
+      final written = <String>[];
+      var puts = 0;
+      when(() => alice.mock.put(any(), any())).thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        final value = inv.positionalArguments[1] as String;
+        if (key.toString() == 'i1.$ns@alice') {
+          if (puts++ == 0) {
+            written.add('the first session began writing');
+            firstPutStarted.complete();
+            await releaseFirstPut.future;
+            written.add('the first session wrote');
+          } else {
+            written.add('the second session began writing');
+            secondPutStarted.complete();
+            written.add('the second session wrote');
+          }
+        }
+        server.putRaw(key.toString(), value);
+        return true;
+      });
+
+      // Start the first session's write and hold it at its key write.
+      final firstWrite = a.update(address, {'title': 'first'});
+      await firstPutStarted.future;
+
+      // The second session's write runs to completion while the first is
+      // still in flight: neither waits on the other's item lock.
+      final secondWrite = b.update(address, {'title': 'second'});
+      await secondPutStarted.future;
+      final secondResult = await secondWrite;
+
+      expect(written, [
+        'the first session began writing',
+        'the second session began writing',
+        'the second session wrote',
+      ]);
+      expect(secondResult.obj, {'title': 'second'});
+      expect(jsonDecode(server.storedValue('i1.$ns@alice')!)['obj'],
+          {'title': 'second'});
+
+      // Last writer wins: the first session's write lands last and stands.
+      releaseFirstPut.complete();
+      final firstResult = await firstWrite;
+
+      expect(written, [
+        'the first session began writing',
+        'the second session began writing',
+        'the second session wrote',
+        'the first session wrote',
+      ]);
+      expect(firstResult.obj, {'title': 'first'});
+      expect(jsonDecode(server.storedValue('i1.$ns@alice')!)['obj'],
+          {'title': 'first'});
+    });
   });
 
   group('session errors', () {
@@ -1136,9 +1268,9 @@ void main() {
       }
     });
 
-    test('close removes the network listeners even when a stop step fails',
+    test('close runs every step when a status cancel throws an Exception',
         () async {
-      client.connection = _CancelFailingConnection();
+      client.connection = _CancelFailingConnection(Exception('boom'));
       var networkCancelled = false;
       final network = StreamController<void>.broadcast(
           onCancel: () => networkCancelled = true);
@@ -1151,6 +1283,25 @@ void main() {
 
       expect(networkCancelled, isTrue);
       expect(warnings, ['Failed to cancel status subscription on close']);
+      expect(client.stops, 1, reason: 'the stop step still ran');
+      await network.close();
+    });
+
+    test('close rethrows an Error once every teardown step has run', () async {
+      client.connection = _CancelFailingConnection();
+      var networkCancelled = false;
+      final network = StreamController<void>.broadcast(
+          onCancel: () => networkCancelled = true);
+      final watching = AtClientSession(client,
+          namespace: 'wavi',
+          warn: warnings.add,
+          networkChanges: network.stream);
+
+      await expectLater(watching.close(), throwsA(isA<StateError>()));
+
+      expect(networkCancelled, isTrue);
+      expect(warnings, isEmpty, reason: 'an Error is held, not logged');
+      expect(client.stops, 1, reason: 'the stop step still ran');
       await network.close();
     });
 
@@ -1199,7 +1350,7 @@ void main() {
     test('warns, never swallows silently, when a watch fails to cancel',
         () async {
       final adapter = await session.collection('todos', type: 'Todo');
-      client.collections.single.cancelFailure = StateError('boom');
+      client.collections.single.cancelFailure = Exception('boom');
       adapter.watch((_) {}, onError: (_) {});
       adapter.watch((_) {}, onError: (_) {});
 
@@ -1211,6 +1362,72 @@ void main() {
         'Failed to cancel collection watch on close',
       ]);
       expect(client.stops, 1);
+    });
+
+    test('close rethrows a watch cancel Error once the stop step has run',
+        () async {
+      final adapter = await session.collection('todos', type: 'Todo');
+      client.collections.single.cancelFailure = StateError('boom');
+      adapter.watch((_) {}, onError: (_) {});
+      adapter.watch((_) {}, onError: (_) {});
+
+      await expectLater(session.close(), throwsA(isA<StateError>()));
+
+      expect(client.collections.single.cancels, 2);
+      expect(client.stops, 1, reason: 'the stop step still ran');
+      expect(warnings, ['Failed to cancel collection watch on close'],
+          reason: 'the first Error is held and the second logged');
+    });
+
+    test('close rethrows a failed stop after every other teardown step has run',
+        () async {
+      // A passkey session's stop closes the vault and zeroes keys, so its
+      // failure must not be swallowed even when it is an Exception rather
+      // than an Error.
+      client.stopFailure = Exception('the vault did not close');
+      final adapter = await session.collection('todos', type: 'Todo');
+      adapter.watch((_) {}, onError: (_) {});
+
+      await expectLater(
+          session.close(),
+          throwsA(isA<Exception>()
+              .having((e) => e.toString(), 'text', contains('vault'))));
+
+      expect(client.collections.single.cancels, 1,
+          reason: 'the watch cancel ran before the stop failed');
+      expect(client.stops, 1);
+      expect(warnings, isEmpty, reason: 'a stop failure is held, not logged');
+    });
+
+    test('a stop that failed with an Exception is the same failed future later',
+        () async {
+      client.stopFailure = Exception('the vault did not close');
+
+      final first = session.close();
+      await expectLater(first, throwsA(isA<Exception>()));
+
+      final second = session.close();
+      final third = session.close();
+      expect(second, same(first));
+      expect(third, same(first));
+      await expectLater(second, throwsA(isA<Exception>()));
+      expect(client.stops, 1);
+    });
+
+    test('a second Error is logged while the first is rethrown', () async {
+      client.connection = _CancelFailingConnection();
+      final watching =
+          AtClientSession(client, namespace: 'wavi', warn: warnings.add);
+      final adapter = await watching.collection('todos', type: 'Todo');
+      client.collections.single.cancelFailure = StateError('watch gone');
+      adapter.watch((_) {}, onError: (_) {});
+
+      // The status cancel's Error is first, so it is the one rethrown; the
+      // watch cancel's Error is surfaced in the log instead of dropped.
+      await expectLater(watching.close(), throwsA(isA<StateError>()));
+
+      expect(warnings, ['Failed to cancel collection watch on close']);
+      expect(client.stops, 1, reason: 'the stop step still ran');
     });
 
     test('stops delivering to subscribers', () async {
