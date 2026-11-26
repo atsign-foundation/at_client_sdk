@@ -278,11 +278,15 @@ published bundle stays traceable.
 flowchart LR
   A["dispatch from trunk: target dart2js or dart2wasm"] --> B{"tag or release already published?"}
   B -- yes --> N["notice: nothing published"]
-  B -- no --> C["build: contents read"] --> D["artifact"]
+  B -- no --> C["build: contents read"]
+  C --> C1["tool/build.sh --target, then its manifest bytes compared with the committed bridge-manifest.json"]
+  C1 --> D["one artifact"]
   D --> E["release: contents, id-token, attestations write"]
-  E --> F{"tag and asset list derived; bundle and SHA256SUMS exact?"}
+  E --> E1["tag and asset list derived from target and commit"]
+  E1 --> F{"bundle and SHA256SUMS exactly the expected set, manifest included?"}
   F -- no --> X["fail: nothing published"]
-  F -- yes --> G["sha256sum --strict, attest"] --> H["publish prerelease"]
+  F -- yes --> G["sha256sum --strict, attest"]
+  G --> H["publish prerelease: bundle, bridge-manifest.json, SHA256SUMS"]
 ```
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
