@@ -276,13 +276,13 @@ published bundle stays traceable.
 
 ```mermaid
 flowchart LR
-  A[dispatch from trunk<br/>target=dart2js|dart2wasm] --> B{tag or release<br/>already published?}
-  B -- yes --> N[notice: nothing published]
-  B -- no --> C[build: contents read] --> D[artifact]
-  D --> E[release: contents, id-token,<br/>attestations write]
-  E --> F{tag and asset list derived<br/>bundle + SHA256SUMS exact?}
-  F -- no --> X[fail: nothing published]
-  F -- yes --> G[sha256sum --strict, attest] --> H[publish prerelease]
+  A["dispatch from trunk: target dart2js or dart2wasm"] --> B{"tag or release already published?"}
+  B -- yes --> N["notice: nothing published"]
+  B -- no --> C["build: contents read"] --> D["artifact"]
+  D --> E["release: contents, id-token, attestations write"]
+  E --> F{"tag and asset list derived; bundle and SHA256SUMS exact?"}
+  F -- no --> X["fail: nothing published"]
+  F -- yes --> G["sha256sum --strict, attest"] --> H["publish prerelease"]
 ```
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while
