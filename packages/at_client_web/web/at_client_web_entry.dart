@@ -14,13 +14,12 @@ Future<void> _adapter(AtClient client) async {
   final todos = await JsCollectionsAdapter.open(client,
       namespace: 'todos.wavi', type: 'Todo', expirationMs: 1);
   final item = await todos.create({'title': 'a'});
-  final address =
-      (id: item['id'] as String, owner: (item['owner'] as String).toAtsign());
+  final address = (id: item.id, owner: item.owner);
   await todos.get(address);
   await todos.list();
-  await todos.query([(path: 'title', op: '<', value: 'b')]);
+  await todos.query([(path: 'title', op: PredicateOp.lt, value: 'b')]);
   await todos.update(address, {'title': 'b'});
-  await todos.share(address, ['@bob']);
+  await todos.share(address, ['@bob'.toAtsign()]);
   await todos.remove(address, cascade: true);
   await todos.watch(print, onError: print)();
 }
