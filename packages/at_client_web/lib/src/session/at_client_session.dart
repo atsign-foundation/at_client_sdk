@@ -40,7 +40,8 @@ abstract interface class Session {
   /// Notifies the recipient of the atKey [key] (for example
   /// `@bob:note.wavi@alice`) of [value]; true only once the atServer reports
   /// it delivered. Throws an [InvalidKeyException] for key text that cannot
-  /// be sent, `public:` and `cached:` included.
+  /// be sent, `public:` and `cached:` included, and a
+  /// [NotifyFailedException] when sending it or waiting for its status fails.
   Future<bool> notify(String key, String value);
 
   /// Calls [onEvent] with each decrypted notification whose key matches
@@ -285,9 +286,17 @@ class AtClientSession implements Session {
       atKey = AtKey.fromString(keyText);
     } on Exception {
       throw InvalidKeyException(KeyRefusal.atKey);
+    } on Error {
+      throw InvalidKeyException(KeyRefusal.atKey);
     }
     if (atKey.sharedWith == null) {
       throw InvalidKeyException(KeyRefusal.sharedWithMissing);
+    }
+    // NOTE: checked as written: the parser adds a missing `@` to the
+    // recipient and drops an empty namespace.
+    if (!parts.first.startsWith('@') ||
+        !_isKeySegment(parts.last.split('@').first)) {
+      throw InvalidKeyException(KeyRefusal.atKey);
     }
     final sharedWith = _canonical(atKey.sharedWith!);
     if (sharedWith == null) {
@@ -300,13 +309,6 @@ class AtClientSession implements Session {
     }
     if (_canonical(rawSharedBy) != own) {
       throw InvalidKeyException(KeyRefusal.sharedByMismatch);
-    }
-    // The text's key name and namespace must be single segments, as an
-    // incoming notification's are; the parser alone takes `k..x`.
-    final namespace = atKey.namespace;
-    if (!_isKeySegment(atKey.key) ||
-        (namespace != null && !_isKeySegment(namespace))) {
-      throw InvalidKeyException(KeyRefusal.atKey);
     }
     // Canonical forms, so the validators see what notify will send.
     atKey
@@ -334,12 +336,19 @@ class AtClientSession implements Session {
     _open();
     final atKey = _atKey(key);
     String? rememberedId;
-    final result = await _client.notificationService
-        .notify(NotificationParams.forUpdate(atKey, value: value),
-            onSentToSecondary: (sent) {
-      rememberedId = sent.notificationID;
-      _remember(sent.notificationID);
-    });
+    final NotificationResult result;
+    try {
+      result = await _client.notificationService
+          .notify(NotificationParams.forUpdate(atKey, value: value),
+              onSentToSecondary: (sent) {
+        rememberedId = sent.notificationID;
+        _remember(sent.notificationID);
+      });
+    } on AtException catch (e) {
+      final kind = _unreached(e);
+      if (kind == null) rethrow;
+      throw NotifyFailedException(kind);
+    }
     if (rememberedId == null && result.atClientException == null) {
       rememberedId = result.notificationID;
       _remember(result.notificationID);
@@ -358,36 +367,19 @@ class AtClientSession implements Session {
     }
     _pruneSent();
     _open();
-    if (result.atClientException case final cause?) {
-      throw _notifyFailure(cause,
-          undelivered: result.notificationStatusEnum ==
-              NotificationStatusEnum.undelivered);
+    if (result.atClientException != null) {
+      throw NotifyFailedException(NotifyFailure.sendFailed);
     }
     return false;
   }
 
-  /// The typed failure [cause] is for JS. A transport failure is rethrown as
-  /// it is, so the bridge's own arms map it to `offline` or `timeout`; a key
-  /// the atServer refused, an undelivered send and every other atServer
-  /// failure become a [NotifyFailedException] whose kind is the bridge's
-  /// structured field.
-  Object _notifyFailure(AtClientException cause, {required bool undelivered}) {
-    if (cause is AtConnectException ||
-        cause is AtIOException ||
-        cause is SecondaryConnectException ||
-        cause is AtTimeoutException) {
-      return cause;
-    }
-    if (cause is AtKeyException ||
-        cause is InvalidAtKeyException ||
-        cause is KeyNotFoundException ||
-        cause is AtKeyNotFoundException) {
-      return NotifyFailedException(NotifyFailure.keyRefused);
-    }
-    return NotifyFailedException(undelivered
-        ? NotifyFailure.recipientUnreachable
-        : NotifyFailure.serverError);
-  }
+  /// The kind of a notify that failed with [error] because the atServer was
+  /// not reached or did not answer in time; null for any other failure.
+  static NotifyFailure? _unreached(AtException error) => switch (error) {
+        SecondaryConnectException() => NotifyFailure.offline,
+        AtTimeoutException() => NotifyFailure.timeout,
+        _ => null,
+      };
 
   /// Remembers [id] until the send's outcome is known: an echo can arrive
   /// before [notify] resolves, and only a delivered send is bounded.

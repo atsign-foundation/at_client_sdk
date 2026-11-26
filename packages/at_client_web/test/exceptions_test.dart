@@ -34,7 +34,6 @@ final _bridgeCodes = {
   // `timeout` is a code but also an ordinary field name in the package
   // (`passkey_creation_options.dart`), so the literal scan cannot own it;
   // error_codes_test pins the code.
-  'refused',
   'onboarding_incomplete',
   'enrollment_conveyance_failed',
   'enrollment_denied',
@@ -74,7 +73,7 @@ void main() {
       InvalidArgumentException('x'),
       InvalidKeyException(KeyRefusal.sharedWithMissing),
       ManageAccessRequiredException(),
-      NotifyFailedException(NotifyFailure.serverError),
+      NotifyFailedException(NotifyFailure.sendFailed),
       EnrollmentInFlightException(),
       SessionClosedException(),
       PortalSessionOfflineException(

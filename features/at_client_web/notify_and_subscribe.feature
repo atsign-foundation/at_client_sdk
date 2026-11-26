@@ -42,11 +42,13 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   sent, never the session's ("notify sends the key text's namespace, not
   #   the session's").
   # Impersonation: outbound notify refuses a mismatched owner, a public or
-  #   cached key, and text the parsers refuse, before any lookup, and inbound
-  #   notifications compare canonical sender and owner ("notify with mismatched
-  #   sharedBy rejects with bad_key and sends nothing", "notify with public or
-  #   cached flag rejects with bad_key and sends nothing", "matches the sender
-  #   and the key owner by canonical atSign").
+  #   cached key, a recipient not written with @, and text the parsers refuse,
+  #   before any lookup, and inbound notifications compare canonical sender and
+  #   owner ("notify with mismatched sharedBy rejects with bad_key and sends
+  #   nothing", "notify with public or cached flag rejects with bad_key and
+  #   sends nothing", "notify with empty or invalid key or invalid sharedWith
+  #   rejects with bad_key and sends nothing", "matches the sender and the key
+  #   owner by canonical atSign").
 
   Scenario: notify resolves true when delivered and false when not
     Given an open session and a recipient
@@ -74,7 +76,7 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
 
   Scenario: notify with empty or invalid key or invalid sharedWith rejects with bad_key and sends nothing
     Given an open session
-    When notify is called on empty or malformed key text or text with an invalid recipient
+    When notify is called on empty or malformed key text, text with an invalid recipient or one not written with @, or a key name with an empty segment
     Then each rejects with bad_key
     And nothing is sent to the atServer
 
@@ -202,10 +204,20 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then both come back on one line, at most the rejection bound long
     And its from, value, epochMillis and operation are unchanged
 
-  Scenario: an undelivered notification is a recipient failure
-    Given a session whose notification service reports the send as undelivered
+  Scenario: a send at_client reports failed is a send failure
+    Given a session whose notification service reports a failed send, wrapped as at_client wraps it
     When notify sends a valid key
-    Then it rejects with notify_failed carrying the recipient-unreachable kind
+    Then it rejects with notify_failed carrying the send-failed kind
+
+  Scenario: a notify that cannot reach the atServer is an offline failure, or a timeout when it does not answer
+    Given a session whose notification service throws a connection failure, or a timeout, while it reads the final status
+    When notify sends a valid key
+    Then it rejects with offline for the connection failure and timeout for the timeout
+
+  Scenario: a failure where an atServer answered is not an offline failure
+    Given a session whose notification service throws an unauthorized, unauthenticated, handshake or no-atServer failure
+    When notify sends a valid key
+    Then the failure reaches the caller as at_client raised it
 
   Scenario: a notify failure is worded from its kind, never from at_client text
     Given a notify failure of each kind

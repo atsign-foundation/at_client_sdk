@@ -113,5 +113,10 @@ Feature: Every failure carries a code the caller branches on
 
   Scenario: every code the bridge can reject with is produced by one mapping
     Given the bridge's list of error codes
-    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, refused, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, notify_failed, internal and the eleven COLLECTION_ codes, and no other
+    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, notify_failed, internal and the eleven COLLECTION_ codes, and no other
     And each code is produced by at least one exception the mapping test names
+
+  Scenario: a transport failure outside notify keeps the code and message it had
+    Given an at_client connection, timeout or unauthorized exception from a call other than notify
+    When the bridge maps it
+    Then it rejects with internal and the message internal error

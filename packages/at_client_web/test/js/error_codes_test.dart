@@ -65,24 +65,18 @@ void main() {
     ),
     'AtNoCredentialException': (AtNoCredentialException('@alice'), 'bad_key'),
     'InvalidAtSignException': (InvalidAtSignException('bad'), 'bad_key'),
-    'NotifyFailedException recipient': (
-      NotifyFailedException(NotifyFailure.recipientUnreachable),
+    'NotifyFailedException send failed': (
+      NotifyFailedException(NotifyFailure.sendFailed),
       'notify_failed'
     ),
-    'NotifyFailedException key': (
-      NotifyFailedException(NotifyFailure.keyRefused),
-      'notify_failed'
+    'NotifyFailedException offline': (
+      NotifyFailedException(NotifyFailure.offline),
+      'offline'
     ),
-    'NotifyFailedException server': (
-      NotifyFailedException(NotifyFailure.serverError),
-      'notify_failed'
+    'NotifyFailedException timeout': (
+      NotifyFailedException(NotifyFailure.timeout),
+      'timeout'
     ),
-    'AtConnectException': (AtConnectException('x'), 'offline'),
-    'SecondaryConnectException': (SecondaryConnectException('x'), 'offline'),
-    'AtIOException': (AtIOException('x'), 'offline'),
-    'UnAuthorizedException': (UnAuthorizedException('no'), 'refused'),
-    'AtTimeoutException': (AtTimeoutException('slow'), 'timeout'),
-    'TimeoutException': (TimeoutException('slow'), 'timeout'),
     'JsCollectionsError carries its own code': (
       JsCollectionsError(CollectionFailure.notFound),
       'COLLECTION_ITEM_NOT_FOUND'
@@ -141,7 +135,6 @@ void main() {
       'pkam_refused',
       'offline',
       'timeout',
-      'refused',
       'onboarding_incomplete',
       'enrollment_conveyance_failed',
       'enrollment_denied',
@@ -311,16 +304,39 @@ void main() {
 
     test('a notify failure is worded from its kind, never from at_client text',
         () {
-      expect(
-          atErrorMessage(
-              NotifyFailedException(NotifyFailure.recipientUnreachable)),
-          'the atServer could not reach the notification recipient');
-      expect(atErrorMessage(NotifyFailedException(NotifyFailure.keyRefused)),
-          'the atServer refused the notification key');
-      expect(atErrorMessage(NotifyFailedException(NotifyFailure.serverError)),
-          'the atServer rejected the notification');
-      for (final kind in NotifyFailure.values) {
-        expect(errorCodeOf(NotifyFailedException(kind)), 'notify_failed');
+      const expected = {
+        NotifyFailure.sendFailed: (
+          'notify_failed',
+          'sending the notification failed'
+        ),
+        NotifyFailure.offline: ('offline', 'the atServer could not be reached'),
+        NotifyFailure.timeout: (
+          'timeout',
+          'the atServer did not answer in time'
+        ),
+      };
+      expect(expected.keys.toSet(), NotifyFailure.values.toSet());
+      for (final MapEntry(key: kind, value: (code, message))
+          in expected.entries) {
+        final error = NotifyFailedException(kind);
+        expect(errorCodeOf(error), code, reason: kind.name);
+        expect(atErrorMessage(error), message, reason: kind.name);
+      }
+    });
+
+    test('a transport failure outside notify keeps the code and message it had',
+        () {
+      for (final error in [
+        AtConnectException('x'),
+        SecondaryConnectException('x'),
+        AtIOException('x'),
+        UnAuthorizedException('x'),
+        AtTimeoutException('x'),
+        TimeoutException('x'),
+      ]) {
+        expect(errorCodeOf(error), 'internal', reason: '${error.runtimeType}');
+        expect(atErrorMessage(error), 'internal error',
+            reason: '${error.runtimeType}');
       }
     });
 
