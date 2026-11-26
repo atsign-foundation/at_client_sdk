@@ -253,10 +253,12 @@ prerelease of this repository: `at_client_web.js` and `at_client_web.js.sha256` 
 `at_client_web-bridge-<first 12 characters of the commit SHA>` for `dart2js` (the tag is
 unchanged), or `at_client_web.wasm` and `at_client_web.mjs` under
 `at_client_web-bridge-wasm-<sha12>` for `dart2wasm` (advisory, OQ-16). Both targets also attach
-`bridge-manifest.json`. One `SHA256SUMS` covers the target's files plus the manifest, and each
-published file plus `SHA256SUMS` carries a build provenance attestation. The bundle is built in a read-only job and a separate job
-attests it and creates the prerelease. The npm package pins one tag and verifies its files
-against `SHA256SUMS`.
+`bridge-manifest.json`. One `SHA256SUMS` covers the target's compiled files plus the manifest —
+the dart2js `.sha256` sidecar is a copy of the js digest and is not hashed itself — and each
+published file plus `SHA256SUMS` carries a build provenance attestation. The bundle is built
+in a read-only job; a separate job verifies it, attests it and creates the prerelease; and a
+final job adds an SLSA provenance file (`multiple.intoto.jsonl`) for the release's files. The
+npm package pins one tag and verifies its files against `SHA256SUMS`.
 
 **The bridge manifest.** `packages/at_client_web/bridge-manifest.json` lists every exported
 bridge method (`surface`), the closed `errorCodes` and `collectionErrorCodes`, and a
@@ -268,11 +270,12 @@ target. The release build compares the manifest it builds with the committed one
 changes keep `schemaVersion` 1; a rename or removal is a bridge-contract major.
 
 The build resolves dependencies at dispatch time: `dart pub get` runs in
-`packages/at_client_web`, and no dependency lock is committed. The release pins Dart 3.14.1
-(`dart-channel: 3.14.1`) through the shared setup action, which installs Flutter first and
-the Dart SDK last; setup-dart prepends its directory to PATH, so Flutter's bundled dart
-cannot shadow the pin. The release notes record the resolved `pubspec.lock`'s sha256, so a
-published bundle stays traceable.
+`packages/at_client_web`, and no dependency lock is committed. The release uses the Dart
+stable channel (`dart-channel: stable`), as the package's CI does, through the shared setup
+action, which installs Flutter first and the Dart SDK last; setup-dart prepends its
+directory to PATH, so Flutter's bundled dart cannot shadow it. The release notes record the
+Dart SDK version and the resolved `pubspec.lock`'s sha256, so a published bundle stays
+traceable.
 
 ```mermaid
 flowchart LR
@@ -287,6 +290,7 @@ flowchart LR
   F -- no --> X["fail: nothing published"]
   F -- yes --> G["sha256sum --strict, attest"]
   G --> H["publish prerelease: bundle, bridge-manifest.json, SHA256SUMS"]
+  H --> I["provenance job: SLSA provenance for the release's files"]
 ```
 
 **Recorded wrinkle:** `at_client_web` then does two jobs, and its name says "web" while

@@ -1,18 +1,20 @@
 name: at_client_web_bridge_release
 
 # Builds one declared bridge compile target from the workspace and attaches it,
-# with the contract manifest (bridge-manifest.json), a SHA256SUMS file and a
-# build provenance attestation, to a prerelease.
+# with the contract manifest (bridge-manifest.json), a SHA256SUMS file, a build
+# provenance attestation and an SLSA provenance file, to a prerelease.
 # The target is chosen when the release is dispatched (workflow_dispatch) and
 # names the tag: at_client_web-bridge-<sha12> for dart2js (unchanged) and
 # at_client_web-bridge-wasm-<sha12> for dart2wasm. dart2js builds
 # at_client_web.js (and keeps at_client_web.js.sha256); dart2wasm builds
 # at_client_web.wasm and at_client_web.mjs. The manifest is the same for both.
 # It is started by hand from trunk; nothing triggers it automatically.
-# Two jobs: `build` runs the toolchain with read-only permissions and uploads the
-# bundle; `release` has the write scopes, takes no checkout or toolchain, derives
-# the target's tag and file list itself, verifies the bundle holds exactly those
-# files and their checksums, attests the bundle and creates the prerelease.
+# Three jobs: `build` runs the toolchain on the Dart stable channel with read-only
+# permissions and uploads the bundle; `release` has the write scopes, takes no
+# checkout or toolchain, derives the target's tag and file list itself, verifies
+# the bundle holds exactly those files and their checksums, attests the bundle and
+# creates the prerelease; `provenance` publishes the SLSA provenance for the
+# release's files.
 on:
   workflow_dispatch:
     inputs:
@@ -25,7 +27,7 @@ on:
         default: dart2js
         required: true
 
-permissions: {}
+permissions: {} # nothing by default; each job states what it needs
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,15 +36,16 @@ concurrency:
 jobs:
   build:
     if: github.ref == 'refs/heads/trunk'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: read
+      contents: read # checkout and the tag/release lookup
     env:
       TARGET: ${{ inputs.target }}
     outputs:
       exists: ${{ steps.tag.outputs.exists }}
       lock: ${{ steps.build.outputs.lock_sha }}
+      dart: ${{ steps.build.outputs.dart_version }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -112,9 +115,10 @@ jobs:
       - uses: ./actions/setup-flutter-and-dart
         if: steps.tag.outputs.exists != 'true'
         with:
-          # The shared action installs Flutter first and the Dart SDK last, so
-          # Flutter's bundled dart cannot shadow the pinned one.
-          dart-channel: "3.14.1"
+          # The stable channel, as the package's CI uses. The shared action
+          # installs Flutter first and the Dart SDK last, so Flutter's bundled
+          # dart cannot shadow the SDK.
+          dart-channel: "stable"
 
       - name: Build the bridge bundle
         id: build
@@ -126,6 +130,14 @@ jobs:
           dart pub get --no-example
           lock=$(sha256sum ../../pubspec.lock | awk '{print $1}')
           echo "lock_sha=$lock" >> "$GITHUB_OUTPUT"
+          # The release notes name the SDK, so a published bundle says what built it.
+          dart_version=$(dart --version 2>&1 |
+            sed -n 's/^Dart SDK version: \([^ ]*\).*/\1/p')
+          test -n "$dart_version" || {
+            echo "could not read the Dart version" >&2
+            exit 1
+          }
+          echo "dart_version=$dart_version" >> "$GITHUB_OUTPUT"
           tool/build.sh at_client_bridge_entry --target "$TARGET"
           cmp build/bridge-manifest.json bridge-manifest.json
 
@@ -169,15 +181,19 @@ jobs:
   release:
     needs: build
     if: github.ref == 'refs/heads/trunk' && needs.build.outputs.exists != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write # create the prerelease and upload its assets
+      id-token: write # sign the build provenance attestation
+      attestations: write # store the attestation with the repository
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+      tag: ${{ steps.tag.outputs.name }}
     env:
       TARGET: ${{ inputs.target }}
       LOCK_SHA: ${{ needs.build.outputs.lock }}
+      DART_VERSION: ${{ needs.build.outputs.dart }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -267,7 +283,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.name }}
         run: |
-          notes="Bridge bundle for the ${TARGET} target built from commit ${GITHUB_SHA}. Dependencies were resolved at dispatch time; pubspec.lock sha256 ${LOCK_SHA}. Verify with SHA256SUMS and the build provenance attestation."
+          notes="Bridge bundle for the ${TARGET} target, built from commit ${GITHUB_SHA} with Dart SDK ${DART_VERSION}. Dependencies were resolved at dispatch time; pubspec.lock sha256 ${LOCK_SHA}. Verify with SHA256SUMS and the build provenance attestations."
           if [ "$TARGET" = "dart2wasm" ]; then
             notes="$notes This dart2wasm bundle is a preview: dart2js remains the primary JS/TS target."
           fi
@@ -278,3 +294,24 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "at_client_web bridge ${TARGET} ${GITHUB_SHA::12}" \
             --notes "$notes"
+
+      - name: Pass the published files' hashes to the provenance job
+        id: hashes
+        working-directory: bridge
+        run: echo "hashes=$(base64 -w0 SHA256SUMS)" >> "$GITHUB_OUTPUT"
+
+  provenance:
+    needs: release
+    if: needs.release.outputs.hashes != ''
+    permissions:
+      actions: read # the generator inspects this run
+      id-token: write # sign the provenance
+      contents: write # attach multiple.intoto.jsonl to the release
+    # The generator rejects a commit SHA in `uses:` and names its own ref in the
+    # provenance, so this is the one action here referenced by version tag; the
+    # comment names the commit that tag resolves to.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # 5a775b367a56d5bd118a224a811bba288150a563
+    with:
+      base64-subjects: ${{ needs.release.outputs.hashes }}
+      upload-assets: true
+      upload-tag-name: ${{ needs.release.outputs.tag }}
