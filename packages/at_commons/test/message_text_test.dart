@@ -3,6 +3,33 @@ import 'dart:convert';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+/// The escaped ranges `clipForMessage` and the shared predicate both cover.
+const _escapedRanges = [
+  (0x00, 0x1f),
+  (0x7f, 0x9f),
+  (0xad, 0xad),
+  (0x0600, 0x0605),
+  (0x061c, 0x061c),
+  (0x06dd, 0x06dd),
+  (0x070f, 0x070f),
+  (0x0890, 0x0891),
+  (0x08e2, 0x08e2),
+  (0x180e, 0x180e),
+  (0x200b, 0x200f),
+  (0x2028, 0x202e),
+  (0x2060, 0x206f),
+  (0xd800, 0xdfff),
+  (0xfeff, 0xfeff),
+  (0xfff9, 0xfffb),
+  (0x110bd, 0x110bd),
+  (0x110cd, 0x110cd),
+  (0x13430, 0x1343f),
+  (0x1bca0, 0x1bca3),
+  (0x1d173, 0x1d17a),
+  (0xe0000, 0xe007f),
+];
+String _hex(int rune) => 'U+${rune.toRadixString(16)}';
+
 void main() {
   group(
       'Given text from outside the process that holds a line break or another '
@@ -57,43 +84,17 @@ void main() {
 
   group('Given the characters at and beside each end of each escaped range',
       () {
-    const ranges = [
-      (0x00, 0x1f),
-      (0x7f, 0x9f),
-      (0xad, 0xad),
-      (0x0600, 0x0605),
-      (0x061c, 0x061c),
-      (0x06dd, 0x06dd),
-      (0x070f, 0x070f),
-      (0x0890, 0x0891),
-      (0x08e2, 0x08e2),
-      (0x180e, 0x180e),
-      (0x200b, 0x200f),
-      (0x2028, 0x202e),
-      (0x2060, 0x206f),
-      (0xd800, 0xdfff),
-      (0xfeff, 0xfeff),
-      (0xfff9, 0xfffb),
-      (0x110bd, 0x110bd),
-      (0x110cd, 0x110cd),
-      (0x13430, 0x1343f),
-      (0x1bca0, 0x1bca3),
-      (0x1d173, 0x1d17a),
-      (0xe0000, 0xe007f),
-    ];
-    String hex(int rune) => 'U+${rune.toRadixString(16)}';
-
     test(
         'when the first or last character of a range is clipped, then it is '
         'shown as an escape', () {
-      for (final (first, last) in ranges) {
+      for (final (first, last) in _escapedRanges) {
         for (final rune in {first, last}) {
           final escape = rune > 0xffff
               ? '\\u{${rune.toRadixString(16)}}'
               : '\\u${rune.toRadixString(16).padLeft(4, '0')}';
           expect(
               clipForMessage('a${String.fromCharCode(rune)}b'), 'a${escape}b',
-              reason: hex(rune));
+              reason: _hex(rune));
         }
       }
     });
@@ -101,11 +102,45 @@ void main() {
     test(
         'when the character just before or after a range is clipped, then it '
         'is shown as itself', () {
-      for (final (first, last) in ranges) {
+      for (final (first, last) in _escapedRanges) {
         for (final rune in [if (first > 0) first - 1, last + 1]) {
           final text = 'a${String.fromCharCode(rune)}b';
-          expect(clipForMessage(text), text, reason: hex(rune));
+          expect(clipForMessage(text), text, reason: _hex(rune));
         }
+      }
+    });
+  });
+
+  group('Given the shared unprintable-rune predicate', () {
+    bool covered(int rune) =>
+        _escapedRanges.any((range) => rune >= range.$1 && rune <= range.$2);
+
+    test(
+        'when it is asked about each end of each range, then it answers '
+        'unprintable', () {
+      for (final (first, last) in _escapedRanges) {
+        for (final rune in {first, last}) {
+          expect(isUnprintableRune(rune), isTrue, reason: _hex(rune));
+        }
+      }
+    });
+
+    test(
+        'when it is asked about a character just outside a range, then it '
+        'answers printable', () {
+      for (final (first, last) in _escapedRanges) {
+        for (final rune in {if (first > 0) first - 1, last + 1}) {
+          if (covered(rune)) continue; // another range covers this neighbour
+          expect(isUnprintableRune(rune), isFalse, reason: _hex(rune));
+        }
+      }
+    });
+
+    test(
+        'when a printable character is asked about, then it is not '
+        'unprintable', () {
+      for (final rune in [0x20, 0x41, 0x7e, 0xa0, 0x05d0, 0x1f600]) {
+        expect(isUnprintableRune(rune), isFalse, reason: _hex(rune));
       }
     });
   });
