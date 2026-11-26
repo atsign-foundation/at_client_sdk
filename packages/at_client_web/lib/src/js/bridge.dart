@@ -4,7 +4,23 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
 import 'package:at_client/at_client.dart'
-    show AtClient, AtSignLogger, Atsign, InvalidAtSignException;
+    show
+        AtClient,
+        AtClientImpl,
+        AtSignLogger,
+        Atsign,
+        CAncestor,
+        CEvent,
+        CItem,
+        CItemAvailable,
+        CItemDeleted,
+        CItemExpiringSoon,
+        CItemUpdated,
+        CReadReceipt,
+        CSubItemDeleted,
+        CSubItemUpdated,
+        InvalidAtSignException,
+        PredicateOp;
 import 'package:at_client/passkey.dart' show PasskeySession;
 import 'package:web/web.dart' as web;
 
@@ -56,6 +72,7 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
   try {
     return AtClientSession(client,
         namespace: options.namespace,
+        namespaceIsNormalized: true,
         isNavigatorOnline: () => web.window.navigator.onLine,
         networkChanges: networkChanges(),
         warn: _logger.warning,
@@ -265,6 +282,20 @@ List<String> _strings(JSAny? value, String name) {
   ];
 }
 
+/// The atSigns [value] names. A string that is not an atSign is refused as
+/// the collection refusal it was before the adapter took typed atSigns,
+/// carrying [id] and [owner] when the caller knows the item.
+List<Atsign> _recipients(JSAny? value, String name,
+    {String? id, String? owner}) {
+  final raw = _strings(value, name);
+  try {
+    return [for (final atSign in raw) Atsign(atSign)];
+  } on InvalidAtSignException {
+    throw JsCollectionsError(CollectionFailure.invalidArgument,
+        refusal: CollectionRefusal.atSign, id: id, owner: owner);
+  }
+}
+
 /// The deepest nesting [_toDart] accepts and [_toJs] returns. A cyclic
 /// page object reaches it instead of recursing until the stack overflows.
 const _maxJsDepth = maxItemDataDepth;
@@ -348,30 +379,68 @@ JSObject _envelope(Map<String, Object?> map) {
   return object;
 }
 
-/// [event] with its peer-chosen label fields bounded like the subscribe
-/// envelope's: `id`, `owner` and `from`, and each ancestry entry's
-/// `subName`, are one line and at most [maxErrorMessageLength] long. Every
-/// other field, the payload included, is delivered as received.
-JsEvent _boundedEvent(JsEvent event) => {
-      for (final MapEntry(:key, :value) in event.entries)
-        key: switch (key) {
-          'id' || 'owner' || 'from' => _boundedText(value),
-          'ancestry' when value is List => [
-              for (final ancestor in value)
-                ancestor is Map<String, Object?>
-                    ? {
-                        for (final MapEntry(:key, :value) in ancestor.entries)
-                          key: key == 'subName' ? _boundedText(value) : value,
-                      }
-                    : ancestor,
-            ],
-          _ => value,
+/// [event] as the JS object the caller sees. Its `id`, `owner` and `from`
+/// are identifiers and pass as they are; each ancestry entry's `subName` is
+/// a human-readable label and so is bounded to one line, at most
+/// [maxErrorMessageLength] long. Every other field, the payload included,
+/// is delivered as received. A [CEvent] subclass this bridge does not know
+/// arrives as `unknown`.
+JSObject _eventObject(CEvent event) => _envelope(switch (event) {
+      CItemUpdated() => {
+          'type': 'updated',
+          'id': event.id,
+          'owner': event.owner.toString(),
         },
-    };
+      CItemDeleted(:final wasExpired) => {
+          'type': 'deleted',
+          'id': event.id,
+          'owner': event.owner.toString(),
+          'wasExpired': wasExpired,
+        },
+      CItemAvailable(:final availableAt) => {
+          'type': 'available',
+          'id': event.id,
+          'owner': event.owner.toString(),
+          'availableAt': availableAt.millisecondsSinceEpoch,
+        },
+      CItemExpiringSoon(:final expiresAt, :final leadTime) => {
+          'type': 'expiringSoon',
+          'id': event.id,
+          'owner': event.owner.toString(),
+          'expiresAt': expiresAt.millisecondsSinceEpoch,
+          'leadTimeMs': leadTime.inMilliseconds,
+        },
+      CReadReceipt(:final from, :final readAt) => {
+          'type': 'readReceipt',
+          'id': event.id,
+          'owner': event.owner.toString(),
+          'from': from.toString(),
+          'readAt': readAt.millisecondsSinceEpoch,
+        },
+      CSubItemUpdated(:final ancestry) || CSubItemDeleted(:final ancestry) => {
+          'type':
+              event is CSubItemUpdated ? 'subItemUpdated' : 'subItemDeleted',
+          'id': event.id,
+          'owner': event.owner.toString(),
+          'ancestry': _ancestry(ancestry),
+        },
+      _ => {
+          'type': 'unknown',
+          'id': event.id,
+          'owner': event.owner.toString(),
+        },
+    });
 
-/// [value] as the text [boundedRejectionText] bounds, so a peer-chosen field
-/// that reaches the event as an `Atsign` is bounded too.
-String _boundedText(Object? value) => boundedRejectionText('$value');
+/// [ancestry] as JS objects: each `id` and `owner` is an identifier and
+/// passes whole, and each `subName` is a human-readable label and is bounded.
+List<Map<String, Object?>> _ancestry(List<CAncestor> ancestry) => [
+      for (final ancestor in ancestry)
+        {
+          'id': ancestor.id,
+          'subName': boundedRejectionText(ancestor.subName),
+          'owner': ancestor.owner?.toString(),
+        }
+    ];
 
 void _reportStreamError(JSFunction? report, Object error, String source) {
   if (report != null) {
@@ -418,10 +487,9 @@ class BridgeSession {
   /// it the error is logged); returns the function that unsubscribes, or,
   /// when it cannot subscribe, the `{code, message}` object the promises
   /// reject with. It does not throw: a Dart `throw` reaches JS wrapped, with
-  /// no `code` for the caller to read. `id` and `key` are peer-chosen, so
-  /// both take the rejection bound: one line, at most
-  /// [maxErrorMessageLength] long. `from` is the verified key owner, and
-  /// `value` is the notification's payload, delivered as received.
+  /// no `code` for the caller to read. `id`, `key` and `from` are
+  /// identifiers and pass as they are, however long; `value` is the
+  /// notification's payload, delivered as received.
   @JSExport()
   JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
@@ -434,9 +502,9 @@ class BridgeSession {
           deliver.callAsFunction(
               null,
               _envelope({
-                'id': boundedRejectionText(n.id),
+                'id': n.id,
                 'from': n.from,
-                'key': boundedRejectionText(n.key),
+                'key': n.key,
                 'value': n.value,
                 'epochMillis': n.epochMillis,
                 'operation': n.operation,
@@ -539,6 +607,18 @@ int _wholeNumber(JSAny? value, String name) {
   return n;
 }
 
+/// The at_client [PredicateOp] each `where` operator JS writes names.
+const _whereOps = <String, PredicateOp>{
+  '==': PredicateOp.eq,
+  '!=': PredicateOp.neq,
+  '<': PredicateOp.lt,
+  '<=': PredicateOp.lte,
+  '>': PredicateOp.gt,
+  '>=': PredicateOp.gte,
+  'isNull': PredicateOp.isNull,
+  'isNotNull': PredicateOp.isNotNull,
+};
+
 /// The JS surface of one collection: the adapter's eight operations on JS
 /// values. Items are addressed `{id, owner}`, `owner` being this session's
 /// atSign when left out. Only the members carrying a member-level `@JSExport`
@@ -549,7 +629,7 @@ class BridgeCollection {
   final ItemCollection _adapter;
   final String _self;
 
-  JsItemAddress _address(JSAny? value) {
+  ItemAddress _address(JSAny? value) {
     final object = _object(value, 'address');
     final id = _string(_own(object, 'id'), 'id');
     final rawOwner = _field(object, 'owner');
@@ -567,32 +647,42 @@ class BridgeCollection {
   }
 
   /// The item as an object whose `data` is converted from depth 0, so the
-  /// cap counts the data's own levels and not the envelope around it.
-  JSObject _item(JsItem item) {
+  /// cap counts the data's own levels and not the envelope around it. Every
+  /// identifier field — `id`, `owner`, `type` and each `sharedWith` entry —
+  /// passes as the adapter gives it.
+  JSObject _item(CItem<Map<String, dynamic>> item) {
     try {
-      return _envelope(item);
+      return _envelope({
+        'id': item.id,
+        'owner': item.owner.toString(),
+        'type': item.type,
+        'data': item.obj,
+        'sharedWith': [for (final owner in item.sharedWith) owner.toString()],
+        'createdAt': item.createdAt.millisecondsSinceEpoch,
+        'expiresAt': item.expiresAt.millisecondsSinceEpoch,
+        'availableAt': item.availableAt?.millisecondsSinceEpoch,
+      });
     } on JsCollectionsError catch (e) {
       if (e.kind == CollectionFailure.tooDeep &&
           (e.id == null || e.owner == null)) {
         throw itemTooDeep(
-          id: e.id ?? item['id'] as String?,
-          owner: e.owner ?? item['owner']?.toString(),
+          id: e.id ?? item.id,
+          owner: e.owner ?? item.owner.toString(),
         );
       }
       rethrow;
     }
   }
 
-  /// `{items, unreadable}`: the unreadable records carry a peer-chosen id and
-  /// owner, so both take the rejection bound: one line, at most
-  /// [maxErrorMessageLength] long.
-  JSObject _listing(JsListing listing) => JSObject()
+  /// `{items, unreadable}`: each unreadable record's `id` and `owner` are
+  /// identifiers and pass whole; `code` says why it could not be read.
+  JSObject _listing(ItemListing listing) => JSObject()
     ..['items'] = [for (final item in listing.items) _item(item)].toJS
     ..['unreadable'] = _toJs([
       for (final u in listing.unreadable)
         {
-          'id': boundedRejectionText(u.id),
-          'owner': boundedRejectionText(u.owner.toString()),
+          'id': u.id,
+          'owner': u.owner.toString(),
           'code': collectionErrorCode(u.kind)
         }
     ]);
@@ -602,11 +692,13 @@ class BridgeCollection {
   @JSExport()
   JSPromise<JSObject> create(JSAny? data, [JSAny? opts]) => _promise(() async {
         final options = _optionalObject(opts, 'opts');
+        final id = options == null ? null : _field(options, 'id');
         return _item(await _adapter.create(_data(data),
-            id: options == null ? null : _field(options, 'id'),
+            id: id,
             sharedWith: options == null
                 ? const []
-                : _strings(_own(options, 'sharedWith'), 'sharedWith')));
+                : _recipients(_own(options, 'sharedWith'), 'sharedWith',
+                    id: id, owner: _self)));
       });
 
   /// The item at `address`, or null.
@@ -633,9 +725,15 @@ class BridgeCollection {
           for (final raw in (where as JSArray<JSAny?>).toDart)
             () {
               final clause = _object(raw, 'where');
+              final rawOp = _string(_own(clause, 'op'), 'op');
+              final op = _whereOps[rawOp];
+              if (op == null) {
+                throw JsCollectionsError(CollectionFailure.invalidArgument,
+                    refusal: CollectionRefusal.whereOperator, subject: rawOp);
+              }
               return (
                 path: _string(_own(clause, 'path'), 'path'),
-                op: _string(_own(clause, 'op'), 'op'),
+                op: op,
                 value: _toDart(_own(clause, 'value'), 'value'),
               );
             }()
@@ -653,8 +751,11 @@ class BridgeCollection {
   @JSExport()
   JSPromise<JSObject> share(JSAny? address, JSAny? atSigns) =>
       _promise(() async {
+        final item = _address(address);
         return _item(await _adapter.share(
-            _address(address), _strings(atSigns, 'atSigns')));
+            item,
+            _recipients(atSigns, 'atSigns',
+                id: item.id, owner: item.owner.toString())));
       });
 
   /// Deletes the item at `address`; `opts.cascade` removes its sub-items too.
@@ -669,10 +770,11 @@ class BridgeCollection {
   /// Calls `onEvent` with each event of the collection and `onError`, when
   /// given, with the `{code, message}` of each error on the stream; returns
   /// the function that stops watching, or the rejection object when it
-  /// cannot start. `id`, `owner` and `from` are peer-chosen, and so is each
-  /// ancestry entry's `subName`, so all take the rejection bound: one line,
-  /// at most [maxErrorMessageLength] long. Every other field, the payload
-  /// included, is delivered as received.
+  /// cannot start. `id`, `owner` and `from` are identifiers and pass whole,
+  /// and so does each ancestry entry's `id`; an ancestry entry's `subName`
+  /// is a human-readable label and takes the bound: one line, at most
+  /// [maxErrorMessageLength] long. Every other field, the payload included,
+  /// is delivered as received.
   @JSExport()
   JSAny watch(JSAny? onEvent, [JSAny? onError]) {
     try {
@@ -680,7 +782,7 @@ class BridgeCollection {
       final report = _optionalFunction(onError, 'onError');
       final cancel = _adapter.watch(
         (event) {
-          deliver.callAsFunction(null, _envelope(_boundedEvent(event)));
+          deliver.callAsFunction(null, _eventObject(event));
         },
         onError: (error) {
           _reportStreamError(report, error, 'watch');
@@ -699,16 +801,21 @@ class BridgeCollection {
 
 /// The JS surface of the package: what `AtClient.create` calls.
 ///
-/// The opener and the secure-context check are injectable; they default to
-/// this browser's. Only the members carrying a member-level `@JSExport` reach
-/// JS.
+/// The opener, the secure-context check and the live-client query are
+/// injectable; they default to this browser's and to at_client's own registry.
+/// Only the members carrying a member-level `@JSExport` reach JS.
 class BridgeEntry {
-  BridgeEntry({OpenJsSession? open, bool Function()? isSecureContext})
+  BridgeEntry(
+      {OpenJsSession? open,
+      bool Function()? isSecureContext,
+      bool Function(String atSign)? hasLiveClient})
       : _open = open ?? _openSession,
-        _isSecureContext = isSecureContext ?? _pageIsSecure;
+        _isSecureContext = isSecureContext ?? _pageIsSecure,
+        _hasLiveClient = hasLiveClient ?? AtClientImpl.holdsLiveClient;
 
   final OpenJsSession _open;
   final bool Function() _isSecureContext;
+  final bool Function(String atSign) _hasLiveClient;
 
   static bool _pageIsSecure() => web.window.isSecureContext;
 
@@ -725,7 +832,25 @@ class BridgeEntry {
           throw UnsupportedOperationException(
               UnsupportedOperation.secureContext);
         }
-        final session = await _open(_options(opts));
+        final options = _options(opts);
+        final Session session;
+        try {
+          session = await _open(options);
+        } on StateError catch (error, stack) {
+          // at_client refuses a second client for an atSign that already has
+          // a live one with a StateError, before building anything; that is
+          // the only StateError that means the atSign is already open. Ask
+          // at_client's own registry, which still holds the client that
+          // refused this open, rather than reading the error's text. Every
+          // other StateError is a Dart Error and stays `internal`; a store
+          // held open by another process is its own type
+          // (`AtStorageInUseException`), mapped as `already_open` by
+          // `error_codes.dart`.
+          if (!_hasLiveClient(options.atSign)) {
+            Error.throwWithStackTrace(error, stack);
+          }
+          throw AlreadyOpenException();
+        }
         return createJSInteropWrapper(BridgeSession(session));
       });
 

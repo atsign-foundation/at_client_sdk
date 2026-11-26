@@ -31,9 +31,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   invalid sharedWith rejects with bad_key and sends nothing", "subscribe
   #   with invalid regex rejects naming regex", "subscribe with non-function
   #   callback returns {code: invalid_argument} without throwing"), and the
-  #   envelope's peer-chosen id and key take the message bound so neither can
-  #   carry control characters or unbounded text into JS ("a peer-chosen
-  #   notification id and key are bounded in the envelope").
+  #   envelope's peer-chosen id and key pass whole, so a 248-character key or
+  #   a 300-character id reaches JS unchanged ("a peer-chosen notification id
+  #   and key reach JS whole").
   # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
   #   without recipient, wrong sharedWith, injected text keys) and mismatched
   #   sender/key owner are dropped ("delivers only a notification sent by the
@@ -213,8 +213,8 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then neither the JS event callback nor the JS error callback is invoked
 
   @dos @forgery
-  Scenario: a peer-chosen notification id and key are bounded in the envelope
+  Scenario: a peer-chosen notification id and key reach JS whole
     Given a subscription on every key
-    When a notification arrives whose id and key carry a newline, a direction character and 600 characters
-    Then both come back on one line, at most the rejection bound long
+    When a notification arrives whose key is 248 characters and whose id is 300
+    Then both come back byte-identical
     And its from, value, epochMillis and operation are unchanged
