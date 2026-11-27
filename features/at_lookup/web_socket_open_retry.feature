@@ -79,6 +79,101 @@ Feature: A browser WebSocket open retries a transient failure on a fresh socket
     When its second socket opens
     Then the connect succeeds on the second socket
 
+  # The pre-flight seam. A caller may give the ladder a prepare function to
+  # run once, before its first socket: the ladder waits for it for at most
+  # the pre-flight wait (never more than half of what a caller timeout still
+  # leaves), or until it answers, or until the work is abandoned. The
+  # pre-flight is never cancelled, its later failure is swallowed, and it is
+  # not awaited again before the second and third attempts.
+
+  Scenario: a connect prepares once, before its first socket
+    Given a browser transport factory with a pre-flight that answers at once
+    When its connect runs to three failed attempts
+    Then the pre-flight ran once
+    And it ran before the first socket was opened
+
+  Scenario: a prepare that fails does not stop the open
+    Given a browser transport factory whose pre-flight throws when called
+    When its first socket opens
+    Then the connect succeeds on that socket
+
+  Scenario: a prepare that rejects does not stop the open
+    Given a browser transport factory whose pre-flight returns a rejected future
+    When its first socket opens
+    Then the connect succeeds on that socket
+
+  Scenario: a prepare that never answers is waited on for at most the pre-flight wait
+    Given a browser transport factory whose pre-flight never answers
+    And a pre-flight wait of 150 ms
+    When its connect runs
+    Then the first socket is opened no sooner than 150 ms
+    And it is opened well within a second
+    And the pre-flight was left pending, not cancelled
+
+  Scenario: a prepare that fails after the ladder stopped waiting raises no uncaught error
+    Given a browser transport factory whose pre-flight rejects after 300 ms
+    And a pre-flight wait of 100 ms
+    When its first socket opens before that rejection
+    Then no uncaught zone error is raised
+    And the connect succeeds as it would with no pre-flight
+
+  Scenario: a prepare that settles during the backoff is not awaited again
+    Given a browser transport factory whose pre-flight settles inside the pause between attempts
+    When its first socket errors before it opens
+    Then the second socket is opened when the pause ends, not later
+    And the pre-flight ran exactly once
+
+  @race
+  Scenario: an abandonment during prepare opens no socket
+    Given a browser transport factory whose pre-flight never answers
+    And the lookup it opens for is closed while the pre-flight waits
+    When its connect runs
+    Then it fails at once as abandoned
+    And no socket is opened
+
+  @dos
+  Scenario: prepare time counts against the ladder budget
+    Given a browser transport factory whose pre-flight never answers
+    And a caller timeout of 400 ms with a pre-flight wait of 10 s
+    When its connect runs
+    Then the first socket is opened at about half the caller timeout
+    And at least one socket was opened
+    And the pre-flight was left pending
+
+  @dos
+  Scenario: a budget too small to wait on the pre-flight opens without waiting
+    Given a browser transport factory whose pre-flight never answers
+    And a caller timeout of 4 ms with a pre-flight wait of 10 s
+    When its connect runs
+    Then it fails within a second, naming no answer within
+    And the pre-flight ran exactly once
+    And the pre-flight was left pending
+
+  Scenario: a wss URL pre-flights the https origin
+    Given a URL of scheme wss, host h and port 1
+    When its pre-flight URI is taken
+    Then it is https://h:1/
+
+  Scenario: a ws URL has no pre-flight
+    Given a URL of scheme ws, host h and port 1
+    When its pre-flight URI is taken
+    Then it is null
+
+  Scenario: a wss connect composes its pre-flight from the origin and one fetch
+    Given a URL of scheme wss, host h and port 1
+    When its pre-flight step is built and run
+    Then exactly one fetch of https://h:1/ is made, and none before the step runs
+
+  Scenario: a ws connect has no pre-flight step
+    Given a URL of scheme ws, host h and port 1
+    When its pre-flight step is built
+    Then it is null
+
+  Scenario: an IPv6 literal host is bracketed
+    Given a URL of scheme wss, host ::1 and port 443
+    When its pre-flight URI is taken
+    Then it is https://[::1]:443/
+
   Scenario: flush on a closed transport throws even with an empty buffer
     Given a WebSocket transport that has been destroyed
     And nothing is buffered on it

@@ -887,8 +887,15 @@ class AtClientImpl implements AtClient {
   /// classified into the three outcomes; what [AtConnection.attempt] runs.
   ///
   /// A connection that is already authenticated answers at once. An attempt
-  /// that outlives [budget] is reported offline and left to finish on its own,
-  /// so a slow network that eventually answers still moves the state.
+  /// that outlives [budget] before the atServer's challenge arrives is
+  /// reported offline and left to finish on its own, so a slow network that
+  /// eventually answers still moves the state; one that outlives it after the
+  /// challenge waits for its own outcome instead, since an atServer that
+  /// answered is reachable and a slow signature or a late reply is not a
+  /// failure to reach it.
+  ///
+  /// The residual is a timeout the lookup raises from its own read: whatever
+  /// the challenge, it is reported offline as it always was.
   ///
   /// An error that says nothing about the connection — a local fault, such as
   /// an unreadable signing key — is thrown, not reported: it is not a
@@ -899,8 +906,7 @@ class AtClientImpl implements AtClient {
       return AtConnectionState.offline(AtConnectionCause.unattempted);
     }
     try {
-      final authenticated =
-          await remote.atLookUp.pkamAuthenticate().timeout(budget);
+      final authenticated = await _authenticateWithin(budget, remote);
       if (authenticated) return AtConnectionState.online();
       return AtConnectionState.offline(AtConnectionCause.unreachable,
           error: 'the atServer gave no challenge to sign');
@@ -910,6 +916,27 @@ class AtClientImpl implements AtClient {
       final state = classifyConnectionFailure(e);
       if (state == null) rethrow;
       return state;
+    }
+  }
+
+  /// Whether the PKAM attempt on [remote] authenticates within [budget].
+  ///
+  /// A budget that runs out is only a statement about the atServer while its
+  /// challenge has not arrived; once it has, the attempt is the same future
+  /// kept and waited on, and the lookup's own timeouts bound it.
+  Future<bool> _authenticateWithin(
+      Duration budget, RemoteSecondary remote) async {
+    final watch = remote.beginAttempt();
+    try {
+      final attempt = remote.atLookUp.pkamAuthenticate();
+      try {
+        return await attempt.timeout(budget);
+      } on TimeoutException {
+        if (!watch.answered) rethrow;
+        return await attempt;
+      }
+    } finally {
+      watch.end();
     }
   }
 

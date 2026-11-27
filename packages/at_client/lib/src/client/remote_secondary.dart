@@ -16,6 +16,7 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
+import 'package:meta/meta.dart';
 
 /// Contains methods used to execute verbs on remote secondary server of the atSign.
 class RemoteSecondary implements Secondary {
@@ -54,8 +55,31 @@ class RemoteSecondary implements Secondary {
     if (state != null) _connection?.report(state);
   }
 
+  final Set<AuthAttempt> _attempts = {};
+
+  /// Starts watching the authenticator runs that start from now until the
+  /// caller calls [AuthAttempt.end]. The caller's own run does not exist when
+  /// the call that causes it returns - the lookup connects and takes its mutex
+  /// first - and a verb, or the lookup's own retry, may start a run before it,
+  /// so an attempt hears every run that starts while it is open rather than
+  /// one picked for it.
+  AuthAttempt beginAttempt() {
+    final attempt = AuthAttempt._(_attempts);
+    _attempts.add(attempt);
+    return attempt;
+  }
+
+  /// How many attempts are open: none once every [beginAttempt] has been
+  /// ended.
+  @visibleForTesting
+  int get attemptsOpen => _attempts.length;
+
   /// Hands the lookup the authenticator [clientAuthenticator] builds from
   /// this client's credentials, leaving it as it was when they hold none.
+  ///
+  /// The authenticator is wrapped so that each run answers for the attempts
+  /// that were open when it started, and only those: a run that outlives its
+  /// budget and answers late cannot answer for a later attempt.
   void _installAuthenticator() {
     final authenticator = clientAuthenticator(_atSign,
         atKeysIo: _atKeysIo,
@@ -63,7 +87,16 @@ class RemoteSecondary implements Secondary {
         cramSecret: _cramSecret,
         enrollmentId: _enrollmentId,
         clientConfig: _getClientConfig());
-    if (authenticator != null) atLookUp.authenticator = authenticator;
+    if (authenticator != null) {
+      atLookUp.authenticator = (executor) {
+        final watching = _attempts.toList();
+        return authenticator(_ReplyWatchingExecutor(executor, () {
+          for (final attempt in watching) {
+            attempt._answered = true;
+          }
+        }));
+      };
+    }
   }
 
   /// [connection] is the client's connection state, which every verb here
@@ -281,4 +314,42 @@ AtAuthenticator? clientAuthenticator(
         clientConfig: clientConfig);
   }
   return null;
+}
+
+/// A watch on the authenticator runs that start while it is open, from
+/// [RemoteSecondary.beginAttempt].
+class AuthAttempt {
+  AuthAttempt._(this._open);
+
+  final Set<AuthAttempt> _open;
+  bool _answered = false;
+
+  /// Whether the atServer has answered the first command of a run that
+  /// started while this attempt was open. Once true it stays true.
+  bool get answered => _answered;
+
+  /// Stops watching: runs that start from now on do not answer for it.
+  void end() => _open.remove(this);
+}
+
+/// The executor an authenticator run is handed by [RemoteSecondary]: every
+/// member delegates to the connection's own, and a reply that comes back
+/// says the atServer answered.
+class _ReplyWatchingExecutor implements AtCommandExecutor {
+  _ReplyWatchingExecutor(this._inner, this._onReply);
+
+  final AtCommandExecutor _inner;
+
+  /// Called once per reply, before it is handed to the authenticator.
+  final void Function() _onReply;
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    final reply = await _inner.sendSync(command,
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
+    _onReply();
+    return reply;
+  }
 }

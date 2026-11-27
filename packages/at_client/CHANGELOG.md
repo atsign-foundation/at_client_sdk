@@ -1,5 +1,6 @@
 ## Unreleased
 
+- A connection attempt whose budget runs out after the atServer has answered its `from:` challenge waits for the authentication's own outcome (online, refused, or a local fault thrown as itself) instead of being reported offline; a budget that runs out before the challenge arrives is still reported offline.
 - `Atsign.open` throws a failure that is not about the connection (an unreadable signing key, for one) instead of returning a client reported unreachable.
 - `AtClient.collection` refuses a reopen of the cached collection with another `defaultExpiration`, throwing `ArgumentError` naming `defaultExpiration`, instead of handing the cached collection out and expiring the caller's items at the first TTL; a reopen naming the expiration the collection already holds still returns that instance, and an open of another eventSource is a separate collection with its own expiration.
 - `AtCollection.create` with an explicit id checks the store on every call instead of trusting the seen-id cache, so an item deleted or expired elsewhere can be created again. A check that itself fails rejects with the lookup's own error and writes nothing, rather than overwriting the item; a `StateError` from the lookup is wrapped in `AtClientException`. `upsert` is unchanged.

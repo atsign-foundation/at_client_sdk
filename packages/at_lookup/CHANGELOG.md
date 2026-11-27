@@ -1,4 +1,9 @@
 ## 4.1.0-rc.1
+- fix: a browser `wss` connect first sends an HTTPS pre-flight request to the
+  atServer's origin, waiting at most 2 seconds (or half of a caller timeout)
+  for it, because Chromium cancels a cold WebSocket handshake to a TLS listener
+  that asks for a client certificate but opens it once any HTTPS request to
+  that origin has been answered with "no certificate".
 - fix: a browser WebSocket connect that fails to open is retried on a fresh
   socket, three attempts in all, after one second and then two; an `error`, a
   `close` before open and an attempt not opening within five seconds are

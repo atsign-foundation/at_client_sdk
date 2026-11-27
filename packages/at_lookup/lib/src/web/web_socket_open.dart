@@ -15,6 +15,10 @@ const webSocketAttemptTimeout = Duration(seconds: 5);
 /// The pause before each retry: one second, then two.
 const webSocketRetryBackoff = [Duration(seconds: 1), Duration(seconds: 2)];
 
+/// How long a connect waits for its pre-flight before opening the first
+/// socket anyway.
+const webSocketPreflightWait = Duration(seconds: 2);
+
 /// The parts of a WebSocket that is still opening that [awaitOpen] watches.
 @internal
 abstract interface class OpeningWebSocket {
@@ -100,6 +104,31 @@ Future<void> awaitOpen(OpeningWebSocket socket, String host, String port,
       '$host:$port - ${_openFailureCause(outcome, bound)}');
 }
 
+/// The URL a connect must have reached before it opens a socket to [host] on
+/// [port] with [scheme], or null when no pre-flight is wanted.
+///
+/// Only `wss` needs one: its https origin, which is what answers the client
+/// certificate an atServer's TLS listener asks for. A host that is an IPv6
+/// literal is bracketed.
+@internal
+String? preflightUri(String scheme, String host, String port) {
+  if (scheme != 'wss') return null;
+  final authority = host.contains(':') ? '[$host]' : host;
+  return 'https://$authority:$port/';
+}
+
+/// The `prepare` step for a connect to [host] on [port] with [scheme]: null
+/// when it needs no pre-flight, otherwise a step that runs [fetch] on its
+/// [preflightUri].
+///
+/// It exists so the factory's wiring has no browser dependency to test.
+@internal
+Future<void> Function()? preflightStep(String scheme, String host, String port,
+    Future<void> Function(String origin) fetch) {
+  final origin = preflightUri(scheme, host, port);
+  return origin == null ? null : () => fetch(origin);
+}
+
 /// Opens a socket to [host] on [port] with [open], giving a transient
 /// failure three attempts with a fresh socket each: [attemptTimeout] bounds
 /// each attempt, and [webSocketRetryBackoff] pauses between them.
@@ -109,16 +138,23 @@ Future<void> awaitOpen(OpeningWebSocket socket, String host, String port,
 /// and an abandonment ends the ladder at once, during a pause as during an
 /// attempt, so no further socket is opened after it.
 ///
+/// [prepare], when given, is called once before the first socket. The ladder
+/// waits for it, for at most [preflightWait] or half of what [timeout] leaves,
+/// then opens whether it answered, failed or was given up on: its result and
+/// its errors are ignored, and it is never cancelled nor awaited again.
+///
 /// [timeout] caps the whole ladder; with none it lasts at most
-/// `3 * attemptTimeout + 1 s + 2 s`. On the last failure throws
-/// [SecondaryConnectException] naming the host, port, last cause and how
-/// many attempts it made.
+/// `preflightWait + 3 * attemptTimeout + 1 s + 2 s`. On the last failure
+/// throws [SecondaryConnectException] naming the host, port, last cause and
+/// how many attempts it made.
 @internal
 Future<S> openWithRetry<S extends OpeningWebSocket>(
     S Function() open, String host, String port,
     {Duration? timeout,
+    Future<void> Function()? prepare,
     @visibleForTesting Duration attemptTimeout = webSocketAttemptTimeout,
-    @visibleForTesting List<Duration> backoff = webSocketRetryBackoff}) async {
+    @visibleForTesting List<Duration> backoff = webSocketRetryBackoff,
+    @visibleForTesting Duration preflightWait = webSocketPreflightWait}) async {
   assert(webSocketOpenAttempts == backoff.length + 1,
       'one attempt, then one more after each pause');
   final abandonment = Abandonment.current;
@@ -127,6 +163,32 @@ Future<S> openWithRetry<S extends OpeningWebSocket>(
       SecondaryConnectException('unable to connect to atServer on '
           '$host:$port - '
           '${_openFailureCause(_OpenOutcome.abandoned, Duration.zero)}');
+
+  if (prepare != null) {
+    if (abandonment?.isAbandoned ?? false) throw abandoned();
+    Future<void>? preflight;
+    try {
+      preflight = prepare();
+    } catch (_) {
+      // A pre-flight that throws where it starts has already answered: the
+      // ladder opens without waiting for it.
+    }
+    if (preflight != null) {
+      // The pre-flight is never cancelled and never awaited twice, so a
+      // rejection that lands after the wait must find this handler instead of
+      // the zone.
+      unawaited(preflight.then((_) {}, onError: (_) {}));
+      var wait = preflightWait;
+      if (clock != null) {
+        final half = (timeout! - clock.elapsed) ~/ 2;
+        wait = half < wait ? half : wait;
+        if (wait < Duration.zero) wait = Duration.zero;
+      }
+      if (!await _awaitPreflight(preflight, wait, abandonment)) {
+        throw abandoned();
+      }
+    }
+  }
 
   String? cause;
   var attempts = 0;
@@ -176,6 +238,31 @@ Future<bool> _pause(Duration pause, Abandonment? abandonment) async {
     if (!paused.isCompleted) paused.complete(false);
   });
   final elapsed = await paused.future;
+  timer.cancel();
+  unregister?.call();
+  return elapsed;
+}
+
+/// Waits at most [wait] for [preflight] to answer, with a value or an error,
+/// completing false at once when [abandonment] ends first.
+Future<bool> _awaitPreflight(
+    Future<void> preflight, Duration wait, Abandonment? abandonment) async {
+  if (wait <= Duration.zero) {
+    return !(abandonment?.isAbandoned ?? false);
+  }
+  final answered = Completer<bool>();
+  final timer = Timer(wait, () {
+    if (!answered.isCompleted) answered.complete(true);
+  });
+  final unregister = abandonment?.onAbandon(() {
+    if (!answered.isCompleted) answered.complete(false);
+  });
+  unawaited(preflight.then((_) {
+    if (!answered.isCompleted) answered.complete(true);
+  }, onError: (_) {
+    if (!answered.isCompleted) answered.complete(true);
+  }));
+  final elapsed = await answered.future;
   timer.cancel();
   unregister?.call();
   return elapsed;
