@@ -13,7 +13,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   # Threats. Each answer names the scenario that holds it.
   #
   # Race: an echo arriving before notify returns is still suppressed ("drops an
-  #   echo that arrives before notify resolves"), a notify interrupted by close
+  #   echo that arrives before notify resolves"), and one arriving before the
+  #   send has reported the id is suppressed too ("an echo that arrives before
+  #   the send completes is not delivered"); a notify interrupted by close
   #   while polling rejects closed ("notify interrupted by close rejects with
   #   closed"), and subscribe stops delivering once close starts and cancels if
   #   closed during startListening ("close stops delivering subscription events
@@ -22,7 +24,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   subscribe drops notifications and errors after session is closed").
   # Replay: the last 1024 sent notification ids are remembered for the session's
   #   own atSign and failed sends do not evict live ids ("remembers only the last
-  #   1024 sent ids", "failed notify does not evict sent echo ids").
+  #   1024 sent ids", "failed notify does not evict sent echo ids"); an
+  #   unconfirmed send keeps its id, so a late echo of it is dropped ("a notify
+  #   still queued after thirty seconds resolves false and keeps its id").
   # DoS: invalid keys, invalid regexes, and non-function callbacks are refused
   #   before sending or subscribing ("notify with empty or invalid key or
   #   invalid sharedWith rejects with bad_key and sends nothing", "bridge
@@ -31,16 +35,20 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   callback returns {code: invalid_argument} without throwing"), a
   #   notification key longer than 255 UTF-16 units is dropped before it is
   #   parsed ("a notification key longer than 255 characters is dropped with a
-  #   warning"), and the envelope's peer-chosen id and key are bounded, so
+  #   warning"), the envelope's peer-chosen id and key are bounded, so
   #   neither can carry unbounded text into JS ("a peer-chosen notification id
-  #   and key are bounded in the envelope").
+  #   and key are bounded in the envelope"), and a send that throws after it
+  #   was remembered forgets its id, so repeated failures cannot grow the sent
+  #   set ("a notify that throws after its send forgets its id").
   # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
   #   without recipient, wrong sharedWith, injected text keys) and mismatched
   #   sender/key owner are dropped ("delivers only a notification sent by the
   #   key owner", "subscribe drops notifications with malformed keys or wrong
   #   sharedWith"), and a key holding a bidirectional control character is
   #   dropped before delivery ("a notification key holding bidi controls is
-  #   dropped with a warning").
+  #   dropped with a warning"). An echo carrying this session's own id cannot
+  #   be made deliverable by arriving before the send reports it ("an echo that
+  #   arrives before the send completes is not delivered").
   #   Outbound key text cannot widen a key: it carries its own recipient,
   #   owner and namespace, parsed once, and the text's namespace is what is
   #   sent, never the session's ("notify sends the key text's namespace, not
@@ -124,6 +132,38 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given a subscription and a notify still waiting for the atServer
     When the echo of that notification arrives before notify resolves
     Then the subscription does not deliver it
+
+  @race @forgery
+  Scenario: an echo that arrives before the send completes is not delivered
+    Given a subscription and a notify whose echo arrives before the send reports its id
+    When the echo of that notification arrives
+    Then the subscription does not deliver it
+
+  Scenario: a notify still queued after thirty seconds resolves false and keeps its id
+    Given a session whose final-status wait runs out with the notification still queued
+    When notify sends a valid key and the echo of that notification later arrives
+    Then notify resolves false and the subscription does not deliver the echo
+
+  Scenario: an undelivered notify forgets the id remembered before the send
+    Given a subscription and a notify whose id is remembered before the send
+    When the notification comes back undelivered
+    Then the id is dropped during the send and delivered after the result
+
+  @dos
+  Scenario: a notify that throws after its send forgets its id
+    Given a session whose notification service throws a timeout after every send
+    When notify sends 1100 notifications and a notification from another sender arrives
+    Then the thrown sends leave no ids behind, so the other sender's notification is delivered
+
+  Scenario: a connection lost during the final-status poll rejects offline
+    Given a session whose notification service throws a lost-connection failure while it reads the final status
+    When notify sends a valid key
+    Then it rejects with offline
+
+  Scenario: a notify refused as unauthorised is not reported offline
+    Given a session whose notification service throws an unauthorised failure while it reads the final status
+    When notify sends a valid key
+    Then the failure reaches the caller as at_client raised it, not as offline
 
   Scenario: remembers only the last 1024 sent ids
     Given a session that has sent 1025 notifications
@@ -276,7 +316,7 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then it rejects with offline for the connection failure and timeout for the timeout
 
   Scenario: a failure where an atServer answered is not an offline failure
-    Given a session whose notification service throws an unauthorized, unauthenticated, handshake or no-atServer failure
+    Given a session whose notification service throws an unauthorized, unauthenticated or no-atServer failure
     When notify sends a valid key
     Then the failure reaches the caller as at_client raised it
 

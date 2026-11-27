@@ -22,11 +22,21 @@ class _FakeNotifications extends Fake implements NotificationService {
   String? lastRegex;
   bool? lastShouldDecrypt;
   var starts = 0;
-  var nextId = 0;
 
   /// Whether `notify` reports the id through `onSentToSecondary`, as the real
   /// service does before it waits for a final status.
   var reportsSent = true;
+
+  /// When set, `notify` reports the result as unconfirmed: its final-status
+  /// wait ran out with the notification still queued.
+  var unconfirmed = false;
+
+  /// The final-status budget `notify` was called with.
+  Duration? lastFinalStatusBudget;
+
+  /// When set, `notify` emits the echo of the notification and lets the
+  /// subscription deliver it before it reports the send.
+  var echoBeforeSent = false;
 
   /// When set, `notify` waits for it after reporting the send.
   Completer<void>? hold;
@@ -47,12 +57,18 @@ class _FakeNotifications extends Fake implements NotificationService {
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
     params.add(notificationParams);
+    lastFinalStatusBudget = finalStatusBudget;
     final failure = exception;
     final result = NotificationResult()
-      ..notificationID = 'n${nextId++}'
+      ..notificationID = notificationParams.id
       ..notificationStatusEnum = status
+      ..unconfirmed = unconfirmed
       ..atClientException =
           failure == null ? null : AtExceptionManager.createException(failure);
+    if (echoBeforeSent) {
+      events.add(_echo(notificationParams.id));
+      await pumpEventQueue();
+    }
     if (reportsSent) onSentToSecondary?.call(result);
     await hold?.future;
     if (pollFailure case final thrown?) throw thrown;
@@ -413,7 +429,6 @@ void main() {
       for (final cause in [
         UnAuthorizedException('not authorized'),
         UnAuthenticatedException('not authenticated'),
-        HandShakeException('handshake failed'),
         SecondaryNotFoundException('no atServer'),
       ]) {
         service.pollFailure = cause;
@@ -422,6 +437,31 @@ void main() {
             session.notify('@bob:k.wavi@alice', 'v'), throwsA(same(cause)),
             reason: '${cause.runtimeType}');
       }
+    });
+
+    test('a connection lost during the final-status poll rejects offline',
+        () async {
+      for (final cause in [
+        AtIOException('socket closed'),
+        ConnectionInvalidException('connection invalid'),
+        HandShakeException('handshake failed'),
+      ]) {
+        service.pollFailure = cause;
+
+        await expectLater(
+            session.notify('@bob:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', NotifyFailure.offline)),
+            reason: '${cause.runtimeType}');
+      }
+    });
+
+    test('a notify refused as unauthorised is not reported offline', () async {
+      final cause = UnAuthorizedException('not authorized');
+      service.pollFailure = cause;
+
+      await expectLater(
+          session.notify('@bob:k.wavi@alice', 'v'), throwsA(same(cause)));
     });
 
     test('notify interrupted by close rejects with closed', () async {
@@ -435,6 +475,28 @@ void main() {
       service.hold!.complete();
 
       await expectLater(future, throwsA(isA<SessionClosedException>()));
+    });
+
+    test('a notify that throws after its send forgets its id', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service.pollFailure = AtTimeoutException('no answer');
+      final ids = <String>[];
+      for (var i = 0; i < 1100; i++) {
+        await expectLater(
+            session.notify('@alice:k.wavi@alice', 'v'),
+            throwsA(isA<NotifyFailedException>()
+                .having((e) => e.kind, 'kind', NotifyFailure.timeout)));
+        ids.add(service.params.last.id);
+      }
+
+      service.events
+        ..add(_echo(ids.first))
+        ..add(_echo(ids.last))
+        ..add(_event('fresh', key: '@alice:attalk.wavi@bob', from: '@bob'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), [ids.first, ids.last, 'fresh']);
     });
 
     test('failed notify does not evict sent echo ids', () async {
@@ -462,7 +524,7 @@ void main() {
             throwsA(isA<NotifyFailedException>()));
       }
 
-      service.events.add(_echo('n0'));
+      service.events.add(_echo(service.params.first.id));
       await pumpEventQueue();
       expect(received, isEmpty);
     });
@@ -486,11 +548,11 @@ void main() {
           throwsA(isA<NotifyFailedException>()));
 
       service.events
-        ..add(_echo('n1024'))
-        ..add(_echo('n0'));
+        ..add(_echo(service.params.last.id))
+        ..add(_echo(service.params.first.id));
       await pumpEventQueue();
 
-      expect(received.map((n) => n.id), ['n1024']);
+      expect(received.map((n) => n.id), [service.params.last.id]);
     });
   });
 
@@ -583,7 +645,7 @@ void main() {
 
       await session.notify('@alice:k.wavi@alice', 'v');
       service.events
-        ..add(_echo('n0'))
+        ..add(_echo(service.params.single.id))
         ..add(_event('other'));
       await pumpEventQueue();
 
@@ -596,12 +658,13 @@ void main() {
       session.subscribe('.*', received.add, onError: (_) {});
 
       await session.notify('@alice:k.wavi@alice', 'v');
+      final id = service.params.single.id;
       service.events
-        ..add(_event('n0', key: '@alice:attalk.wavi@bob', from: '@bob'))
-        ..add(_echo('n0'));
+        ..add(_event(id, key: '@alice:attalk.wavi@bob', from: '@bob'))
+        ..add(_echo(id));
       await pumpEventQueue();
 
-      expect(received.map((n) => (n.id, n.from)), [('n0', '@bob')]);
+      expect(received.map((n) => (n.id, n.from)), [(id, '@bob')]);
     });
 
     test('drops an echo that arrives before notify resolves', () async {
@@ -610,12 +673,66 @@ void main() {
       service.hold = Completer<void>();
       final pending = session.notify('@alice:k.wavi@alice', 'v');
       await pumpEventQueue();
-      service.events.add(_echo('n0'));
+      service.events.add(_echo(service.params.single.id));
       await pumpEventQueue();
       service.hold!.complete();
       await pending;
 
       expect(received, isEmpty);
+    });
+
+    test('an echo that arrives before the send completes is not delivered',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service.echoBeforeSent = true;
+
+      expect(await session.notify('@alice:k.wavi@alice', 'v'), isTrue);
+
+      expect(service.params, hasLength(1));
+      expect(received, isEmpty);
+    });
+
+    test(
+        'a notify still queued after thirty seconds resolves false and keeps its id',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service
+        ..unconfirmed = true
+        ..status = NotificationStatusEnum.undelivered;
+
+      expect(await session.notify('@alice:k.wavi@alice', 'v'), isFalse);
+      expect(service.lastFinalStatusBudget, AtNetworkTimeouts.effectiveDefault);
+
+      service.events.add(_echo(service.params.single.id));
+      await pumpEventQueue();
+
+      expect(received, isEmpty);
+    });
+
+    test('an undelivered notify forgets the id remembered before the send',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service
+        ..reportsSent = false
+        ..status = NotificationStatusEnum.undelivered
+        ..hold = Completer<void>();
+
+      final pending = session.notify('@alice:k.wavi@alice', 'v');
+      await pumpEventQueue();
+      final id = service.params.single.id;
+      service.events.add(_echo(id));
+      await pumpEventQueue();
+      expect(received, isEmpty);
+
+      service.hold!.complete();
+      expect(await pending, isFalse);
+
+      service.events.add(_echo(id));
+      await pumpEventQueue();
+      expect(received.map((n) => n.id), [id]);
     });
 
     test('remembers only the last 1024 sent ids', () async {
@@ -625,13 +742,14 @@ void main() {
       for (var i = 0; i < 1025; i++) {
         await session.notify('@alice:k.wavi@alice', 'v');
       }
+      final ids = [for (final params in service.params) params.id];
       service.events
-        ..add(_echo('n0'))
-        ..add(_echo('n1'))
-        ..add(_echo('n1024'));
+        ..add(_echo(ids[0]))
+        ..add(_echo(ids[1]))
+        ..add(_echo(ids[1024]));
       await pumpEventQueue();
 
-      expect(received.map((n) => n.id), ['n0']);
+      expect(received.map((n) => n.id), [ids[0]]);
     });
 
     test(
@@ -877,7 +995,7 @@ void main() {
       session.subscribe('.*', (_) {}, onError: (_) {});
 
       await session.notify('@alice:k.wavi@alice', 'v');
-      service.events.add(_echo('n0'));
+      service.events.add(_echo(service.params.single.id));
       await pumpEventQueue();
 
       expect(warnings, isEmpty);

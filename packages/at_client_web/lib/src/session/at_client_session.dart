@@ -348,23 +348,30 @@ class AtClientSession implements Session {
   Future<bool> notify(String key, String value) async {
     _open();
     final atKey = _atKey(key);
-    String? rememberedId;
+    final params = NotificationParams.forUpdate(atKey, value: value);
+    // Remembered before the send: an echo can arrive before the atServer
+    // reports the send, and only this client knows the id it minted.
+    final rememberedId = params.id;
+    _remember(rememberedId);
     final NotificationResult result;
     try {
-      result = await _client.notificationService
-          .notify(NotificationParams.forUpdate(atKey, value: value),
-              onSentToSecondary: (sent) {
-        rememberedId = sent.notificationID;
-        _remember(sent.notificationID);
-      });
+      result = await _client.notificationService.notify(params,
+          finalStatusBudget: AtNetworkTimeouts.effectiveDefault);
     } on AtException catch (e) {
+      // A send that threw has no echo coming, and repeated failures must not
+      // grow the set past its bound.
+      _forget(rememberedId);
+      _pruneSent();
       final kind = _unreached(e);
       if (kind == null) rethrow;
       throw NotifyFailedException(kind);
     }
-    if (rememberedId == null && result.atClientException == null) {
-      rememberedId = result.notificationID;
-      _remember(result.notificationID);
+    // A budget that ran out leaves the status queued but unknown: an echo may
+    // still arrive, so the id stays. This must come before the undelivered
+    // branch, which would forget it.
+    if (result.unconfirmed) {
+      _pruneSent();
+      return false;
     }
     if (result.notificationStatusEnum == NotificationStatusEnum.delivered) {
       _pruneSent();
@@ -374,9 +381,8 @@ class AtClientSession implements Session {
     // or suppress a later notification that reuses it. Any other status is
     // unknown, and an echo may still arrive, so the id stays. Either way the
     // prune keeps the set within its bound.
-    if (result.notificationStatusEnum == NotificationStatusEnum.undelivered &&
-        rememberedId != null) {
-      _forget(rememberedId!);
+    if (result.notificationStatusEnum == NotificationStatusEnum.undelivered) {
+      _forget(rememberedId);
     }
     _pruneSent();
     _open();
@@ -388,11 +394,17 @@ class AtClientSession implements Session {
 
   /// The kind of a notify that failed with [error] because the atServer was
   /// not reached or did not answer in time; null for any other failure.
-  static NotifyFailure? _unreached(AtException error) => switch (error) {
-        SecondaryConnectException() => NotifyFailure.offline,
-        AtTimeoutException() => NotifyFailure.timeout,
-        _ => null,
-      };
+  ///
+  /// Only a classification whose cause is [AtConnectionCause.unreachable] is
+  /// offline: an atServer that answered, even to refuse the credentials, did
+  /// reach the client.
+  static NotifyFailure? _unreached(AtException error) {
+    if (error is AtTimeoutException) return NotifyFailure.timeout;
+    final state = classifyConnectionFailure(error);
+    return state?.cause == AtConnectionCause.unreachable
+        ? NotifyFailure.offline
+        : null;
+  }
 
   /// Remembers [id] until the send's outcome is known: an echo can arrive
   /// before [notify] resolves, and only a delivered send is bounded.
