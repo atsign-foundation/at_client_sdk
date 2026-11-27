@@ -209,7 +209,7 @@ final class JsCollectionsAdapter implements ItemCollection {
   /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`. An `==` or `!=` value
   /// that is an object or an array rejects with
   /// [CollectionFailure.invalidArgument]: neither has structural equality, so
-  /// the clause would match nothing.
+  /// an `==` would match nothing and a `!=` every item.
   @override
   Future<JsListing> query(List<JsWhereClause> clauses) => _mapFailures(
       () => _read([for (final clause in clauses) _predicate(clause)]));
@@ -507,8 +507,8 @@ final class JsCollectionsAdapter implements ItemCollection {
   /// Refuses an `==` or `!=` value that is a map or a list.
   ///
   /// AtCollection compares with `==`, so an object or an array value is never
-  /// equal to the stored one and the clause would match nothing without
-  /// saying so. Scalars are compared as before.
+  /// equal to the stored one: an `==` clause would match nothing and a `!=`
+  /// clause every item, without saying so. Scalars are compared as before.
   static void _refuseStructuralValue(JsWhereClause clause) {
     final value = clause.value;
     if (value is Map || value is List) {
