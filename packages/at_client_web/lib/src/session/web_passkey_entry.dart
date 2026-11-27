@@ -127,19 +127,26 @@ Future<PasskeySession> onboardNewAtSign(
 /// [PrfUnavailableException] and [SetupLockTimeoutException] are thrown as
 /// they are, not wrapped in [PasskeyLostException].
 ///
+/// [appName] and [appVersion], when given, are the app's name and version the
+/// client it opens tells the atServer.
+///
 /// Stopping the session, or its client, closes the passkey vault it holds.
 Future<PasskeySession> passkeyLogin(
         {required String atSign,
         required String app,
         required String rpId,
         required String rpName,
-        SessionTransportOptions? transport}) =>
+        SessionTransportOptions? transport,
+        String? appName,
+        String? appVersion}) =>
     _withCustody(
         app: app,
         rpId: rpId,
         rpName: rpName,
         device: _defaultDevice,
         options: transport,
+        appName: appName,
+        appVersion: appVersion,
         run: (custody) => custody.open(atSign: atSign));
 
 const _defaultDevice = 'browser';
@@ -152,8 +159,15 @@ Future<PasskeySession> _withCustody(
     required String rpName,
     required String device,
     required SessionTransportOptions? options,
+    String? appName,
+    String? appVersion,
     required Future<PasskeySession> Function(PasskeyCustody) run}) async {
-  final server = passkeyServerSide(options: options, app: app, device: device);
+  final server = passkeyServerSide(
+      options: options,
+      app: app,
+      device: device,
+      appName: appName,
+      appVersion: appVersion);
   return runClosingStore(
       openEntryHintStore,
       (store) => run(PasskeyCustody(

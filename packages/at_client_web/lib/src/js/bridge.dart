@@ -78,7 +78,9 @@ Future<(AtClient, Future<void> Function())> _openKeys(
       atSign: options.atSign,
       app: options.namespace,
       keys: options.keys,
-      transport: transport ?? keysTransport(options));
+      transport: transport ?? keysTransport(options),
+      appName: options.appName,
+      appVersion: options.appVersion);
   return (client, client.stop);
 }
 
@@ -99,7 +101,9 @@ Future<PasskeySession> browserPasskeyOpener(
         app: options.namespace,
         rpId: options.rpId,
         rpName: options.rpName,
-        transport: transport);
+        transport: transport,
+        appName: options.appName,
+        appVersion: options.appVersion);
 
 /// An event each time the browser goes online or offline, so a session's
 /// `waiting:network` and `waiting:server` follow it. The session [sessionOver]
@@ -710,12 +714,13 @@ class BridgeEntry {
   static bool _pageIsSecure() => web.window.isSecureContext;
 
   /// Opens a session for `{atSign, namespace, passkey?, rpId?, rpName?,
-  /// keys?, rootDomain?}`: `passkey: true` asks for the passkey sign-in
-  /// [rpId] and [rpName] name, and `keys` is then not read; otherwise `keys`
-  /// is the `.atKeys` document, as its JSON text or as an object.
-  /// `rootDomain` is `host` or `host:port`. The returned session is the
-  /// caller's: `close()` is the caller's to call, and nothing closes it on
-  /// its own.
+  /// keys?, appName?, appVersion?, rootDomain?}`: `passkey: true` asks for
+  /// the passkey sign-in [rpId] and [rpName] name, and `keys` is then not
+  /// read; otherwise `keys` is the `.atKeys` document, as its JSON text or as
+  /// an object. `appName` and `appVersion` name the app to the atServer, on
+  /// both forms. `rootDomain` is `host` or `host:port`. The returned session
+  /// is the caller's: `close()` is the caller's to call, and nothing closes
+  /// it on its own.
   @JSExport()
   JSPromise<JSObject> create(JSAny? opts) => _promise(() async {
         if (!_isSecureContext()) {
@@ -733,6 +738,8 @@ class BridgeEntry {
     final atSign = _string(_own(object, 'atSign'), 'atSign');
     final namespace = _string(_own(object, 'namespace'), 'namespace');
     final rootDomain = _field(object, 'rootDomain');
+    final appName = _field(object, 'appName');
+    final appVersion = _field(object, 'appVersion');
     if (_flag(object, 'passkey')) {
       final rpId = _string(_own(object, 'rpId'), 'rpId');
       final rpName = _string(_own(object, 'rpName'), 'rpName');
@@ -742,6 +749,8 @@ class BridgeEntry {
             namespace: namespace,
             rpId: rpId,
             rpName: rpName,
+            appName: appName,
+            appVersion: appVersion,
             rootDomain: rootDomain);
       } on ArgumentError catch (e) {
         _rejectOption(e);
@@ -753,6 +762,8 @@ class BridgeEntry {
           atSign: atSign,
           namespace: namespace,
           keys: keys,
+          appName: appName,
+          appVersion: appVersion,
           rootDomain: rootDomain);
     } on ArgumentError catch (e) {
       _rejectOption(e);

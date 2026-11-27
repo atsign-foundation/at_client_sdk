@@ -1,8 +1,9 @@
 Feature: create opens a session and close ends it
 
-  create takes {atSign, namespace, keys, rootDomain?} for a keys-file session,
-  or {atSign, namespace, passkey: true, rpId, rpName, rootDomain?} and no keys
-  for a passkey session, and resolves a session. It needs a secure context.
+  create takes {atSign, namespace, keys, appName?, appVersion?, rootDomain?}
+  for a keys-file session, or {atSign, namespace, passkey: true, rpId, rpName,
+  appName?, appVersion?, rootDomain?} and no keys for a passkey session, and
+  resolves a session. It needs a secure context.
   close stops the session: a later call that returns a promise rejects with
   code closed, and subscribe and onStatus return {code: closed} instead of a
   function.
@@ -23,13 +24,20 @@ Feature: create opens a session and close ends it
   #   credential-less keys before opening a connection ("create rejects with
   #   unsupported outside a secure context", "invalid or empty atSign rejects
   #   naming atSign", "invalid or empty namespace rejects naming namespace",
-  #   "credential-less keys reject with bad_key").
+  #   "credential-less keys reject with bad_key"); appName and appVersion are
+  #   carried as strings, trimmed and blank-cleared, and at_auth cuts each to
+  #   64 UTF-16 units ("a non-string appName or appVersion rejects
+  #   invalid_argument naming the option").
   # Forgery: options are read only as own plain properties and keys are parsed
   #   into AtKeys rather than trusted as strings ("keys may be an object as
   #   well as the document text").
   # Impersonation: create validates the requested atSign and authenticates via
   #   PKAM in portalSession ("opens with the options and returns a session",
-  #   "invalid or empty atSign rejects naming atSign").
+  #   "invalid or empty atSign rejects naming atSign"). An app name is a label,
+  #   not an identity: the atSign still comes from the keys and a session
+  #   without one names no app ("an open with appName and appVersion names the
+  #   app on the client preference", "an open without appName leaves the
+  #   particulars unset").
 
   Scenario: opens with the options and returns a session
     Given create options with an atSign, a namespace and keys
@@ -125,6 +133,54 @@ Feature: create opens a session and close ends it
     Then the first two reject with code bad_key, naming no value
     And the third rejects with code invalid_argument naming namespace
     And no session is opened
+
+  Scenario: appName and appVersion are optional on both session forms and blank means unset
+    Given keys options and passkey options with and without appName and appVersion
+    When each form is built
+    Then both forms carry them trimmed
+    And absent or blank appName and appVersion are unset
+
+  Scenario: an open with appName and appVersion names the app on the client preference
+    Given a session opened with appName and appVersion
+    When the client is online
+    Then its preference's atClientParticulars carry that appName and appVersion
+
+  Scenario: an open without appName leaves the particulars unset
+    Given a session opened without appName and appVersion
+    When the client is online
+    Then its preference's atClientParticulars name no app
+
+  Scenario: appName with explicit prefs is refused naming appName
+    Given an open with an explicit preference and an appName
+    When the open is attempted
+    Then it throws an ArgumentError naming appName
+    And no connection is attempted
+
+  Scenario: a portal session passes appName and appVersion to the client
+    Given a portal session given appName and appVersion
+    When it opens
+    Then the client it returns names that app on its preference
+
+  Scenario: a passkey open names the app on the client it opens
+    Given a passkey open given appName and appVersion
+    When the session is opened
+    Then the client it returns names that app on its preference
+
+  Scenario: create passes appName and appVersion to the keys and passkey options
+    Given create options with appName and appVersion in both forms
+    When create is called with each
+    Then each session opens with exactly that appName and appVersion
+
+  Scenario: a non-string appName or appVersion rejects invalid_argument naming the option
+    Given create options whose appName or appVersion is not a string
+    When create is called with each
+    Then each rejects with code invalid_argument and a message naming that option
+    And no session is opened
+
+  Scenario: the passkey wiring forwards appName and appVersion to the client opener
+    Given a passkey server side built with appName and appVersion
+    When its gateway opens a client
+    Then the client it opens names that app on its preference
 
   @dos
   Scenario: a caller mistake at create opens no connection

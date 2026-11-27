@@ -15,10 +15,16 @@ import 'session_transport_options.dart';
 /// here, before anything is opened; no other layer parses or checks it.
 sealed class SessionOptions {
   SessionOptions._(
-      {required String atSign, required String namespace, String? rootDomain})
+      {required String atSign,
+      required String namespace,
+      String? rootDomain,
+      String? appName,
+      String? appVersion})
       : atSign = _atSign(atSign),
         namespace = _namespace(namespace),
-        rootDomain = _rootDomain(rootDomain);
+        rootDomain = _rootDomain(rootDomain),
+        appName = _label(appName),
+        appVersion = _label(appVersion);
 
   /// The atSign, in `@name` form.
   final String atSign;
@@ -29,6 +35,14 @@ sealed class SessionOptions {
 
   /// The atDirectory to look atSigns up at, or null for the production one.
   final AtRootDomain? rootDomain;
+
+  /// The app's name to tell the atServer, trimmed; null when absent or blank.
+  /// It is a label, not an identity: the atSign still comes from the keys.
+  final String? appName;
+
+  /// The app's version to tell the atServer, trimmed; null when absent or
+  /// blank.
+  final String? appVersion;
 
   /// Checks the shared fields in order, for a form that must check its own
   /// fields after them but before this constructor runs.
@@ -65,6 +79,11 @@ sealed class SessionOptions {
     }
     return root;
   }
+
+  static String? _label(String? raw) {
+    final trimmed = raw?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
 }
 
 /// A session on a decoded `.atKeys` document.
@@ -75,6 +94,8 @@ final class KeysSessionOptions extends SessionOptions {
       {required super.atSign,
       required super.namespace,
       required Map<String, dynamic> keys,
+      super.appName,
+      super.appVersion,
       super.rootDomain})
       : keys = _keys(atSign, namespace, rootDomain, keys),
         super._();
@@ -101,6 +122,8 @@ final class PasskeySessionOptions extends SessionOptions {
       required super.namespace,
       required this.rpId,
       required this.rpName,
+      super.appName,
+      super.appVersion,
       super.rootDomain})
       : super._() {
     if (rpId.trim().isEmpty) throw ArgumentError('must not be empty', 'rpId');

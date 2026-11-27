@@ -27,6 +27,8 @@ Future<AtClient> openSession({
   required WrittenAtKeysIo keysIo,
   required String app,
   required SessionTransport transport,
+  String? appName,
+  String? appVersion,
 }) {
   final normalized = atSign.toAtsign();
   return queuedOpen(
@@ -37,15 +39,19 @@ Future<AtClient> openSession({
           keys: keysIo,
           transport: transport,
           atLookUp: lookUp,
+          appName: appName,
+          appVersion: appVersion,
           logger: 'openSession'));
 }
 
 /// Builds the client for [atSign] on [keys] and [transport], with in-memory
 /// storage, and returns it once online; shared by [openSession] and
 /// `portalSession`. [prefs] defaults to a remote-only, monitor-off
-/// preference for [app] and [transport]'s root; [atLookUp], when given, is
-/// the connection the client takes over. [logger] names the caller in the
-/// teardown warning.
+/// preference for [app] and [transport]'s root, whose
+/// `atClientParticulars` name [appName] and [appVersion] when given; an
+/// explicit [prefs] is used as it is, so asking to name an app with one
+/// throws an [ArgumentError]. [atLookUp], when given, is the connection the
+/// client takes over. [logger] names the caller in the teardown warning.
 Future<AtClient> openOnline({
   required String atSign,
   required String app,
@@ -53,8 +59,18 @@ Future<AtClient> openOnline({
   required SessionTransport transport,
   AtClientPreference? prefs,
   AtLookupMuxable? atLookUp,
+  String? appName,
+  String? appVersion,
   required String logger,
 }) async {
+  if (prefs != null && appName != null) {
+    throw ArgumentError.value(
+        appName, 'appName', 'is given with prefs, which are used as they are');
+  }
+  if (prefs != null && appVersion != null) {
+    throw ArgumentError.value(appVersion, 'appVersion',
+        'is given with prefs, which are used as they are');
+  }
   final preference = prefs ??
       (AtClientPreference()
         ..namespace = app
@@ -62,6 +78,12 @@ Future<AtClient> openOnline({
         ..rootPort = transport.root.rootPort
         ..remoteLocalPref = RemoteLocalPref.remoteOnly
         ..monitorAutoStart = false);
+  if (prefs == null) {
+    final particulars = AtClientParticulars();
+    particulars.appName = appName;
+    particulars.appVersion = appVersion;
+    preference.atClientParticulars = particulars;
+  }
   final client = await Atsign(atSign).open(
     keys: keys,
     preference: preference,

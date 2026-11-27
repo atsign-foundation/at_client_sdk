@@ -100,5 +100,40 @@ void main() {
       expect((prefs.rootDomain, prefs.rootPort), ('proxy:proxy.example', 443));
       expect(prefs.namespace, 'wavi');
     });
+
+    test(
+        'the passkey wiring forwards appName and appVersion to the client '
+        'opener', () async {
+      final wire = Wire();
+      final s = passkeyServerSide(
+          options: null,
+          app: 'wavi',
+          device: 'browser',
+          appName: 'Tally',
+          appVersion: '1.2.3');
+      final lookUp = wire.lookUps(
+          atSign: '@alice',
+          rootDomain: s.transport.root,
+          authenticator: null,
+          secondaryAddressFinder: s.transport.finder);
+      addTearDown(() async {
+        for (final c
+            in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
+          await c.stop();
+        }
+        AtClientImpl.atClientInstanceMap.clear();
+        AtClientManager.getInstance().reset();
+      });
+
+      final client = await s.gateway.clientOpener(
+          lookUp: lookUp,
+          atSign: '@alice',
+          enrollmentId: 'eid1',
+          keysIo:
+              SessionKeysIo('@alice', classicalAtKeys(enrollmentId: 'eid1')));
+
+      final particulars = client.getPreferences()!.atClientParticulars;
+      expect((particulars.appName, particulars.appVersion), ('Tally', '1.2.3'));
+    });
   });
 }

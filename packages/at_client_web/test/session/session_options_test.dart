@@ -13,11 +13,15 @@ KeysSessionOptions _keysOptions(
         {String atSign = '@alice',
         String namespace = 'MyApp',
         String? rootDomain,
+        String? appName,
+        String? appVersion,
         Map<String, dynamic>? keys}) =>
     KeysSessionOptions(
         atSign: atSign,
         namespace: namespace,
         keys: keys ?? _keysJson(),
+        appName: appName,
+        appVersion: appVersion,
         rootDomain: rootDomain);
 
 void main() {
@@ -104,6 +108,35 @@ void main() {
       expect(() => make(namespace: ''), _namingField('namespace'));
       expect(() => make(rpId: ''), _namingField('rpId'));
       expect(() => make(rpName: ''), _namingField('rpName'));
+    });
+
+    test(
+        'appName and appVersion are optional on both session forms and blank '
+        'means unset', () {
+      final keys = _keysOptions(appName: '  Tally  ', appVersion: '  1.2.3  ');
+      expect((keys.appName, keys.appVersion), ('Tally', '1.2.3'));
+
+      final passkey = PasskeySessionOptions(
+          atSign: '@alice',
+          namespace: 'app',
+          rpId: 'example.com',
+          rpName: 'X',
+          appName: '  Tally  ',
+          appVersion: '  1.2.3  ');
+      expect((passkey.appName, passkey.appVersion), ('Tally', '1.2.3'));
+
+      final absent = _keysOptions();
+      expect((absent.appName, absent.appVersion), (null, null));
+      final blank = _keysOptions(appName: '   ', appVersion: '');
+      expect((blank.appName, blank.appVersion), (null, null));
+      final passkeyBlank = PasskeySessionOptions(
+          atSign: '@alice',
+          namespace: 'app',
+          rpId: 'example.com',
+          rpName: 'X',
+          appName: '   ',
+          appVersion: '');
+      expect((passkeyBlank.appName, passkeyBlank.appVersion), (null, null));
     });
 
     test('options are matched exhaustively by kind', () {

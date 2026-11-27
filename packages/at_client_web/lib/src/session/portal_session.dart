@@ -102,6 +102,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
+///
+/// [appName] and [appVersion], when given, are the app's name and version the
+/// default preference tells the atServer; asking for them with [prefs]
+/// throws an [ArgumentError], since an explicit [prefs] is used as it is.
 Future<AtClient> portalSession({
   required String atSign,
   required String app,
@@ -109,6 +113,8 @@ Future<AtClient> portalSession({
   required SessionTransport transport,
   AtClientPreference? prefs,
   SessionKeysIo? keysIo,
+  String? appName,
+  String? appVersion,
 }) async {
   final normalized = atSign.toAtsign();
   final enrollmentId = keys.enrollmentToAuthenticateAs();
@@ -126,6 +132,8 @@ Future<AtClient> portalSession({
         keys: keysIo ?? SessionKeysIo(normalized, keys),
         transport: transport,
         prefs: prefs,
+        appName: appName,
+        appVersion: appVersion,
         logger: 'portalSession');
   });
 }

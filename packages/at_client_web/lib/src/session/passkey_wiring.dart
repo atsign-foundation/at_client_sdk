@@ -17,10 +17,14 @@ typedef PasskeyServerSide = ({
 ///
 /// The reader, the gateway and the clients it opens share [options]' root,
 /// connections and address finder, so a proxy or a root reaches all of them.
+/// [appName] and [appVersion], when given, are the app's name and version the
+/// clients it opens tell the atServer.
 PasskeyServerSide passkeyServerSide(
     {required SessionTransportOptions? options,
     required String app,
-    required String device}) {
+    required String device,
+    String? appName,
+    String? appVersion}) {
   final SessionTransport transport =
       sessionTransport(options ?? SessionTransportOptions());
   return (
@@ -46,6 +50,8 @@ PasskeyServerSide passkeyServerSide(
                 enrollmentId: enrollmentId,
                 keysIo: keysIo,
                 app: app,
-                transport: transport)),
+                transport: transport,
+                appName: appName,
+                appVersion: appVersion)),
   );
 }

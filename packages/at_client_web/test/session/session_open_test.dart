@@ -41,14 +41,20 @@ void main() {
   _KeysIo keysIoFor(String enrollmentId) =>
       _KeysIo(_atSign, classicalAtKeys(enrollmentId: enrollmentId));
 
-  Future<AtClient> open({String enrollmentId = 'eid1', _KeysIo? keysIo}) =>
+  Future<AtClient> open(
+          {String enrollmentId = 'eid1',
+          _KeysIo? keysIo,
+          String? appName,
+          String? appVersion}) =>
       openSession(
           lookUp: lookUp(),
           atSign: _atSign,
           enrollmentId: enrollmentId,
           keysIo: keysIo ?? keysIoFor(enrollmentId),
           app: _app,
-          transport: transport());
+          transport: transport(),
+          appName: appName,
+          appVersion: appVersion);
 
   setUp(() {
     wire = Wire();
@@ -94,6 +100,44 @@ void main() {
 
     expect(client.getPreferences()!.monitorAutoStart, isFalse);
     expect(wire.lookUpsBuilt.map((l) => l.notificationStarts), everyElement(0));
+  });
+
+  group('naming the app', () {
+    test(
+        'an open with appName and appVersion names the app on the client '
+        'preference', () async {
+      final client = await open(appName: 'Tally', appVersion: '1.2.3');
+
+      final particulars = client.getPreferences()!.atClientParticulars;
+      expect((particulars.appName, particulars.appVersion), ('Tally', '1.2.3'));
+    });
+
+    test('an open without appName leaves the particulars unset', () async {
+      final client = await open();
+
+      final particulars = client.getPreferences()!.atClientParticulars;
+      expect((particulars.appName, particulars.appVersion), (null, null));
+    });
+
+    test('appName with explicit prefs is refused naming appName', () async {
+      final prefs = AtClientPreference()
+        ..namespace = _app
+        ..monitorAutoStart = false;
+
+      await expectLater(
+          openOnline(
+              atSign: _atSign,
+              app: _app,
+              keys: keysIoFor('eid1'),
+              transport: transport(),
+              prefs: prefs,
+              appName: 'Tally',
+              logger: 'session_open_test'),
+          throwsA(
+              isA<ArgumentError>().having((e) => e.name, 'name', 'appName')));
+
+      expect(wire.dials, 0, reason: 'the refusal comes before any connection');
+    });
   });
 
   test('the client reads its keys from the key store it was given', () async {

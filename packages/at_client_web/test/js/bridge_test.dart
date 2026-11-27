@@ -755,6 +755,36 @@ void main() {
         }
         expect(opened, isEmpty);
       });
+
+      test(
+          'create passes appName and appVersion to the keys and passkey '
+          'options', () async {
+        await create(opts({'appName': 'Tally', 'appVersion': '1.2.3'}));
+        final keys = opened.last;
+        expect((keys.appName, keys.appVersion), ('Tally', '1.2.3'));
+
+        await create(passkeyOpts({'appName': 'Tally', 'appVersion': '1.2.3'}));
+        final passkey = opened.last;
+        expect(passkey, isA<PasskeySessionOptions>());
+        expect((passkey.appName, passkey.appVersion), ('Tally', '1.2.3'));
+      });
+
+      test(
+          'a non-string appName or appVersion rejects invalid_argument '
+          'naming the option', () async {
+        for (final name in ['appName', 'appVersion']) {
+          for (final form in [opts, passkeyOpts]) {
+            for (final bad in <Object?>[5, true, <Object?>[]]) {
+              final r = await rejected(invoke(api, 'create', [
+                jsObject(form({name: bad}))
+              ]));
+              expect(r.code, 'invalid_argument', reason: name);
+              expect(r.message, contains(name));
+            }
+          }
+        }
+        expect(opened, isEmpty);
+      });
     });
   });
 

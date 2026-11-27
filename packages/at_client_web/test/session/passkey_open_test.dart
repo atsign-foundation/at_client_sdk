@@ -87,7 +87,9 @@ void main() {
       enrollmentId: _eid,
       apkamKeyPair: pair);
 
-  Future<AtClient> open(AtServerAtKeysIo keysIo) => openSession(
+  Future<AtClient> open(AtServerAtKeysIo keysIo,
+          {String? appName, String? appVersion}) =>
+      openSession(
           lookUp: wire.lookUps(
               atSign: _atSign,
               rootDomain: AtRootDomain.atsignDomain,
@@ -101,7 +103,9 @@ void main() {
             lookUps: wire.lookUps,
             finder: finder,
             root: AtRootDomain.atsignDomain
-          ));
+          ),
+          appName: appName,
+          appVersion: appVersion);
 
   /// Whether [store] and [vault] are both still open: the store still serves
   /// the document's keys and holds its APKAM private key, and the vault still
@@ -159,6 +163,14 @@ void main() {
     expect(wire.pkamCommands.length, commands + 1);
     expect(wire.pkamCommands.last, contains('enrollmentId:$_eid:'));
     expect(docs.gets, gets, reason: 'PKAM reads the keys from memory');
+  });
+
+  test('a passkey open names the app on the client it opens', () async {
+    final client =
+        await open(newStore(), appName: 'Tally', appVersion: '1.2.3');
+
+    final particulars = client.getPreferences()!.atClientParticulars;
+    expect((particulars.appName, particulars.appVersion), ('Tally', '1.2.3'));
   });
 
   group('the key store is lent to the client', () {

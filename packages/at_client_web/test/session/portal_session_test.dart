@@ -36,13 +36,17 @@ void main() {
           {String atSign = _atSign,
           AtKeys? keys,
           SessionTransport? over,
-          AtClientPreference? prefs}) =>
+          AtClientPreference? prefs,
+          String? appName,
+          String? appVersion}) =>
       portalSession(
           atSign: atSign,
           app: _app,
           keys: keys ?? classicalAtKeys(),
           transport: over ?? transport(),
-          prefs: prefs);
+          prefs: prefs,
+          appName: appName,
+          appVersion: appVersion);
 
   setUp(() => wire = Wire());
 
@@ -66,6 +70,14 @@ void main() {
         keysIo: store);
 
     expect(store.reads, greaterThan(0));
+  });
+
+  test('a portal session passes appName and appVersion to the client',
+      () async {
+    final client = await open(appName: 'Tally', appVersion: '1.2.3');
+
+    final particulars = client.getPreferences()!.atClientParticulars;
+    expect((particulars.appName, particulars.appVersion), ('Tally', '1.2.3'));
   });
 
   test(
