@@ -248,10 +248,10 @@ parent's `eventSource`.
 
 **Constraints:**
 
-- `subName` must NOT contain `.`
+- `subName` must be non-empty and must NOT contain `.`
 - `parent.id` must NOT contain `.`
-- `ArgumentError` thrown if composed namespace would exceed 255-char atServer
-  key limit (max ~11 levels)
+- `ArgumentError` thrown if the composed namespace would exceed 128 chars, the
+  cap that keeps keys inside the atServer key length (max ~11 levels)
 
 <!-- pyml disable-next-line md013-->
 ### `Future<CItem<U>?> getDescendant<U>({required List<CAncestor> ancestry, required String id, required Atsign owner, required Duration leafExpiration, Duration? intermediateExpiration, U Function(Map<String,dynamic>)? leafFromJson, String? leafTypeTag})`

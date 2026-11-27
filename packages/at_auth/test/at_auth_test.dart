@@ -49,7 +49,7 @@ class FakeSecondaryAddressFinder implements SecondaryAddressFinder {
   @override
   Future<SecondaryAddress> findSecondary(String atSign,
       {Duration? timeout}) async {
-    return SecondaryAddress('abcd', 123);
+    return SecondaryAddress('127.0.0.1', 123);
   }
 }
 
@@ -87,7 +87,8 @@ void main() {
       atAuth = AtAuthImpl(
           atLookUp: mockAtLookUp,
           pkamAuthenticator: mockPkamAuthenticator,
-          atEnrollment: mockAtEnrollment);
+          atEnrollment: mockAtEnrollment,
+          clientConfig: const {});
     });
     var testCramSecret = 'cram123';
 
@@ -150,10 +151,11 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any()))
+          .thenAnswer((_) => Future.value(true));
 
-      // NOTE: a key store, so the refusal asserted is the CRAM one and not the
-      // missing-atKeysIo guard that follows it.
+      // NOTE: an AtKeys store, so the missing-atKeysIo guard passes and the
+      // refusal asserted is the CRAM one.
       final atOnboardingRequest = AtOnboardingRequest('@aaron🛠',
           signingAlgoType: SigningAlgoType.rsa2048,
           atKeysIo: InMemoryAtKeysIo());
@@ -203,7 +205,8 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any()))
+          .thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))
@@ -238,7 +241,8 @@ void main() {
       when(() => mockAtLookUp.executeVerb(any()))
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -289,7 +293,8 @@ void main() {
           .thenAnswer((_) => Future.value('data:2'));
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async {});
       when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any()))
+          .thenAnswer((_) => Future.value(true));
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
           Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
@@ -317,7 +322,8 @@ void main() {
           Future.value('data:{"enrollmentId":"abc123", "status":"approved"}'));
 
       when(() => mockAtLookUp.dropConnection()).thenAnswer((_) async => {});
-      when(() => mockPkamAuthenticator.authenticate(any(), any())).thenAnswer((_) => Future.value(true));
+      when(() => mockPkamAuthenticator.authenticate(any(), any()))
+          .thenAnswer((_) => Future.value(true));
       final mockEnrollmentResponse =
           AtEnrollmentResponse("abc123", EnrollmentStatus.approved);
       when(() => mockAtEnrollment.submit(any(), mockAtLookUp))

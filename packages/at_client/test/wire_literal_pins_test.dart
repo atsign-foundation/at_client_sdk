@@ -729,6 +729,43 @@ void main() {
               'spells active');
     });
 
+    test('a key package entry whose status is not a string is skipped', () {
+      final deep = jsonDecode('${'[' * 200000}${']' * 200000}');
+      for (final status in <Object>[
+        7,
+        true,
+        [1],
+        {'a': 1},
+        deep
+      ]) {
+        final clock = Stopwatch()..start();
+
+        expect(
+            PackageKey.fromJson({
+              'kid': 'k1',
+              'use': 'enc',
+              'alg': 'x-wing',
+              'pub': 'AAEC',
+              'status': status
+            }),
+            isNull,
+            reason: 'a status of the wrong kind is skipped like a kid, use, '
+                'alg or pub of the wrong kind, and is never read as a token');
+        expect(clock.elapsed, lessThan(const Duration(seconds: 1)),
+            reason: 'the value is not walked');
+      }
+      expect(
+          PackageKey.fromJson({
+            'kid': 'k1',
+            'use': 'enc',
+            'alg': 'x-wing',
+            'pub': 'AAEC',
+            'status': 'retired'
+          })?.status,
+          'retired',
+          reason: 'the control: a string status is read');
+    });
+
     test('an unrecognised status is carried through, not flattened', () {
       // Flattening an unknown token to `retired` would have the writer emit
       // `retired` back — an older build rewriting a newer one's statement
@@ -736,10 +773,6 @@ void main() {
       expect(KeyEntryStatus.fromWire('verifyOnly'), 'verifyOnly',
           reason: 'a token this build has never heard of survives the read, '
               'so republishing the record does not weaken what it says');
-      expect(KeyEntryStatus.fromWire(7), '7',
-          reason: 'a status that is not a string is malformed rather than '
-              'unknown, and stringifying keeps what was written visible '
-              'without repairing it into a token that means something');
 
       // Both answers are no, which is the whole point of preserving it: an
       // unknown token is MORE restrictive than either value this build knows,
@@ -986,14 +1019,16 @@ void main() {
 
     test('the envelope members, their order, and unpadded base64url', () {
       final pair = RsaKeyPair.generate();
-      final envelope = signEnvelope({
-        'hello': 'world'
-      }, keys: [
-        ApkamSigningKeys(
-            algorithm: SigningAlgoType.rsa2048,
-            publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey)
-      ], enrollmentId: 'e1', type: EnvelopeType.app);
+      final envelope = signEnvelope({'hello': 'world'},
+          atSign: '@alice',
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.rsa2048,
+                publicKey: pair.atPublicKey.publicKey,
+                privateKey: pair.atPrivateKey.privateKey)
+          ],
+          enrollmentId: 'e1',
+          type: EnvelopeType.app);
 
       expect(envelope.toJson().keys.toList(), ['payload', 'signatures'],
           reason: 'exactly RFC 7515 general serialization — a member of our '
@@ -1034,53 +1069,58 @@ void main() {
 
       final rsaPair = RsaKeyPair.generate();
       expect(
-          headerOf(signEnvelope({
-            'p': 1
-          }, keys: [
-            ApkamSigningKeys(
-                algorithm: SigningAlgoType.rsa2048,
-                publicKey: rsaPair.atPublicKey.publicKey,
-                privateKey: rsaPair.atPrivateKey.privateKey)
-          ], enrollmentId: 'e1', type: EnvelopeType.app)),
+          headerOf(signEnvelope({'p': 1},
+              atSign: '@alice',
+              keys: [
+                ApkamSigningKeys(
+                    algorithm: SigningAlgoType.rsa2048,
+                    publicKey: rsaPair.atPublicKey.publicKey,
+                    privateKey: rsaPair.atPrivateKey.privateKey)
+              ],
+              enrollmentId: 'e1',
+              type: EnvelopeType.app)),
           '{"alg":"RS256","typ":"at-app+jws","kid":'
-          '"${kidOf(rsaPair.atPublicKey.publicKey)}","enid":"e1","v":1}',
+          '"${kidOf(rsaPair.atPublicKey.publicKey)}","iss":"@alice","enid":"e1",'
+          '"v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
               'by definition — which is why the envelope names no hash. `kid` '
-              'names the KEY and `enid` the enrollment: `kid` carried the '
-              'enrollment until 2026-08-31, when it took its JOSE meaning '
-              'back');
+              'names the KEY, `iss` the Atsign and `enid` the enrollment');
 
       final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
       expect(
-          headerOf(signEnvelope({
-            'p': 1
-          }, keys: [
-            ApkamSigningKeys(
-                algorithm: SigningAlgoType.mldsa65,
-                publicKey: base64Encode(mlDsaPair.publicKey),
-                privateKey: base64Encode(mlDsaPair.secretKey))
-          ], enrollmentId: 'e1', type: EnvelopeType.app)),
+          headerOf(signEnvelope({'p': 1},
+              atSign: '@alice',
+              keys: [
+                ApkamSigningKeys(
+                    algorithm: SigningAlgoType.mldsa65,
+                    publicKey: base64Encode(mlDsaPair.publicKey),
+                    privateKey: base64Encode(mlDsaPair.secretKey))
+              ],
+              enrollmentId: 'e1',
+              type: EnvelopeType.app)),
           '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":'
-          '"${kidOf(base64Encode(mlDsaPair.publicKey))}","enid":"e1","v":1}',
+          '"${kidOf(base64Encode(mlDsaPair.publicKey))}","iss":"@alice",'
+          '"enid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
     });
 
     test('the header omits enid entirely when no enrollment is supplied', () {
       final pair = RsaKeyPair.generate();
-      final envelope = signEnvelope({
-        'hello': 'world'
-      }, keys: [
-        ApkamSigningKeys(
-            algorithm: SigningAlgoType.rsa2048,
-            publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey)
-      ], type: EnvelopeType.app);
+      final envelope = signEnvelope({'hello': 'world'},
+          atSign: '@alice',
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.rsa2048,
+                publicKey: pair.atPublicKey.publicKey,
+                privateKey: pair.atPrivateKey.privateKey)
+          ],
+          type: EnvelopeType.app);
       expect(
           utf8.decode(
               base64Decode(base64.normalize(envelope.signature.protected))),
           '{"alg":"RS256","typ":"at-app+jws","kid":'
           '"${sha256.convert(base64Decode(pair.atPublicKey.publicKey)).toString().substring(0, 16)}"'
-          ',"v":1}',
+          ',"iss":"@alice","v":1}',
           reason: 'the key-package path signs before the atServer assigns an '
               'id, and a guessed or sentinel value would be frozen inside the '
               'signature where nobody could correct it. `kid` is still there: '

@@ -14,12 +14,17 @@ import 'package:at_utils/at_progress.dart';
 /// mints into [keys]: the atSign's first enrollment, which the atServer
 /// grants everything.
 ///
-/// The steps, in order: wait for the atServer to be reachable and in its
-/// unactivated state, authenticate with the secret, mint the key material,
-/// submit the first enrollment (auto-approved on a CRAM connection),
-/// authenticate again as that enrollment, write [keys], and unless
-/// [completeActivation] is false publish the encryption public key and
-/// delete the secret from the atServer. Returns the enrollment id.
+/// The steps, in order: read [keys], which must hold nothing for [atSign],
+/// wait for the atServer to be reachable and in its unactivated state,
+/// authenticate with the secret, mint the key material, submit the first
+/// enrollment (auto-approved on a CRAM connection), authenticate again as
+/// that enrollment, write [keys], and unless [completeActivation] is false
+/// publish the encryption public key and delete the secret from the
+/// atServer. Returns the enrollment id.
+///
+/// Nothing is sent before the read: keys already in [keys] are refused, and
+/// any failure to read them other than [AtKeysSourceAbsentException] throws
+/// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable].
 ///
 /// [signingAlgo] is the APKAM algorithm the atSign authenticates with from
 /// now on: `rsa2048` for a legacy activation, `mldsa65` for a post-quantum
@@ -29,6 +34,13 @@ import 'package:at_utils/at_progress.dart';
 /// at_client's `AtClient.put` of a public value throws
 /// `AtPrivateKeyNotFoundException`, since it signs the value with the RSA
 /// encryption private key.
+/// [apkamKeyPair] is an APKAM keypair to enrol in place of a minted one; a
+/// pair that does not sign under [signingAlgo] is refused with
+/// `AtSigningException`. If activation fails after the enrollment is accepted
+/// (the PKAM login or the keyfile write), retrying with the same pair is
+/// refused by the atServer while that enrollment's record exists: retry with a
+/// different pair, or with none so one is minted. The CRAM secret stays valid
+/// until an activation completes.
 /// [metadataBuilder] and [advertisedSigningKey] ride the first enrollment's
 /// request; a post-quantum activation supplies both, and they must name the
 /// same signing key.
@@ -39,7 +51,16 @@ import 'package:at_utils/at_progress.dart';
 /// caller to close. It is taken as already having reached the atServer, so the
 /// provisioning wait is skipped, unless [awaitProvisioning] is set: for a
 /// caller that has not yet reached the atServer on it, which is where a newly
-/// registered atSign may still be starting.
+/// registered atSign may still be starting. A caller that stops [atLookUp]
+/// during the activation ends it with [StoppedException]; during the
+/// provisioning wait, only once the atDirectory has answered. A stop after
+/// the PKAM has succeeded leaves [keys] written and the activation
+/// incomplete: `completeActivationOf` over a connection authenticated with
+/// those keys finishes it, rather than a second activation.
+///
+/// Every `from:` the activation sends carries [clientConfig], its four values
+/// as `clientConfigFor` fills and cuts them; empty, it names this program and
+/// at_auth.
 Future<String> activateAtSign({
   required String atSign,
   required String cramSecret,
@@ -49,6 +70,7 @@ Future<String> activateAtSign({
   String appName = 'firstApp',
   String deviceName = 'firstDevice',
   bool? mintLegacyMaterial,
+  ({String publicKey, String privateKey})? apkamKeyPair,
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder,
   ({
     SigningAlgoType algorithm,
@@ -60,6 +82,7 @@ Future<String> activateAtSign({
   void Function(ProgressEvent event)? onProgress,
   required AtLookupMuxable atLookUp,
   bool awaitProvisioning = false,
+  Map<String, dynamic> clientConfig = const {},
 }) async {
   final request = AtOnboardingRequest(atSign,
       signingAlgoType: signingAlgo,
@@ -69,12 +92,13 @@ Future<String> activateAtSign({
     ..appName = appName
     ..deviceName = deviceName
     ..mintLegacyMaterial = mintLegacyMaterial
+    ..apkamKeyPair = apkamKeyPair
     ..metadataBuilder = metadataBuilder
     ..advertisedSigningKey = advertisedSigningKey;
 
   final auth = awaitProvisioning
-      ? AtAuthImpl(atLookUp: atLookUp)
-      : _ConnectedActivation(atLookUp: atLookUp);
+      ? AtAuthImpl(atLookUp: atLookUp, clientConfig: clientConfig)
+      : _ConnectedActivation(atLookUp: atLookUp, clientConfig: clientConfig);
   final forward =
       onProgress == null ? null : auth.progressStream.listen(onProgress);
   try {
@@ -101,7 +125,7 @@ Future<String> activateAtSign({
 /// reached the atServer: the provisioning wait, whose job is to find out
 /// whether it can be reached, has nothing to wait for.
 class _ConnectedActivation extends AtAuthImpl {
-  _ConnectedActivation({required super.atLookUp});
+  _ConnectedActivation({required super.atLookUp, required super.clientConfig});
 
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {}

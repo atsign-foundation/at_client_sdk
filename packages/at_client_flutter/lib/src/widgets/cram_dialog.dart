@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:at_client/at_client.dart';
 import 'package:at_client_flutter/src/keychain/keychain_io_impl.dart';
 import 'package:at_client_flutter/src/lifecycle/atsign_flows.dart';
+import 'package:at_client_flutter/src/widgets/shared/dialog_showing.dart';
+import 'package:at_client_flutter/src/widgets/shared/failure_message.dart';
 import 'package:at_client_flutter/src/widgets/shared/loading.dart';
 import 'package:at_utils/at_progress.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +33,8 @@ import 'package:flutter/material.dart';
 /// - [progressBuilder]: An optional builder function to customize the display
 ///   of progress events. When supplied it takes over rendering entirely.
 /// - [onOnboardingComplete]: invoked with the client once the activation
-///   completes.
+///   completes, even after the user has left the dialog; with none, a client
+///   the activation opens after the user has left is stopped.
 ///
 /// Returns:
 /// - The `AtClient` the activation opened, or null if the process fails or is
@@ -123,23 +126,36 @@ class _CramDialogState extends State<CramDialog> {
 
   Future<void> _onboard() async {
     final secret = _parseCramKey(widget.cramKey);
+    AtClient? opened;
     try {
-      final client = await widget.flows.activate(
+      final client = opened = await widget.flows.activate(
         widget.atSign,
         cramSecret: secret,
         keys: widget.keys ?? KeychainAtKeysIo(),
         preference: under(widget.preference, widget.rootDomain),
         storage: widget.storage,
         lookUps: widget.lookUps,
-        onProgress: _progress.add,
+        onProgress: (event) {
+          if (!_progress.isClosed) _progress.add(event);
+        },
       );
-      if (widget.onOnboardingComplete != null) {
-        widget.onOnboardingComplete!(client);
+      final onboarded = widget.onOnboardingComplete;
+      if (onboarded != null) {
+        onboarded(client);
       } else {
         _logger.info('Activated ${widget.atSign} as ${client.enrollmentId}');
       }
-      if (mounted) Navigator.of(context).pop(client);
+      if (dialogShowing(this)) {
+        Navigator.of(context).pop(client);
+      } else if (onboarded == null) {
+        // NOTE: nothing receives a client opened after the user left, and
+        // while it is live the atSign cannot be opened again.
+        await _stopClient(client);
+      }
     } catch (e) {
+      // NOTE: a client that opened before the failure reaches nobody, and
+      // while it is live the atSign cannot be opened again.
+      if (opened != null) await _stopClient(opened);
       // Activation failed or timed out. Without an error path the dialog would
       // stay on screen forever and CramDialog.show() would never complete
       // (issue #1905 / #1909).
@@ -147,14 +163,27 @@ class _CramDialogState extends State<CramDialog> {
       if (!mounted) return;
       // A timeout during activation usually means the newly-registered atSign
       // is still provisioning, not a hard failure — say so and invite a retry.
-      final message = e is AtTimeoutException
-          ? 'Onboarding is taking longer than expected — your atSign may still '
-                'be provisioning. Please try again in a moment.'
-          : 'Onboarding failed. Please check your connection and try again.';
+      final message = failureMessage(
+        widget.atSign,
+        e,
+        timedOut:
+            'Onboarding is taking longer than expected — your atSign may '
+            'still be provisioning. Please try again in a moment.',
+      );
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
-      Navigator.of(context).pop(null);
+      if (dialogShowing(this)) Navigator.of(context).pop(null);
+    }
+  }
+
+  /// Stops [client], which nothing receives. A failure is logged, since the
+  /// dialog is gone and there is nobody to tell.
+  Future<void> _stopClient(AtClient client) async {
+    try {
+      await client.stop();
+    } catch (e) {
+      _logger.warning('Could not stop the client of ${widget.atSign}: $e');
     }
   }
 

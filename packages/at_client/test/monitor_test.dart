@@ -24,10 +24,11 @@ import 'package:test/test.dart';
 /// callback, and the two states.
 class FakeMuxable extends Fake implements AtLookupMuxable {
   // Recreated on demand, exactly as AtLookupImpl does: stopNotifications()
-  // nulls AND closes both controllers, so the next read of `notifications` or
-  // `notificationConnectionUp` builds a fresh one. A fake that reused a single
-  // controller could not reproduce a stop-then-start race at all - the
-  // subscriptions would keep working and the bug would be invisible.
+  // nulls AND closes the controllers, so the next read of `notifications`,
+  // `notificationConnectionUp` or `notificationRefusals` builds a fresh one. A
+  // fake that reused a single controller could not reproduce a stop-then-start
+  // race at all - the subscriptions would keep working and the bug would be
+  // invisible.
   /// Counted so a test can prove the back-pressure seam is actually reached,
   /// rather than inferring it from handling order.
   int pauses = 0;
@@ -35,6 +36,8 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   late StreamController<String> _notifications = _newNotifications();
   StreamController<bool> _up = StreamController<bool>.broadcast();
+  StreamController<UnAuthenticatedException> _refusals =
+      StreamController<UnAuthenticatedException>.broadcast();
 
   StreamController<String> _newNotifications() => StreamController<String>(
       onPause: () => pauses++, onResume: () => resumes++);
@@ -49,18 +52,45 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   Future<int?> Function()? heldWatermarkSource;
 
   /// Set to make [startNotifications] fail, as an unreachable or rejecting
-  /// atServer does.
+  /// atServer does. Read as each start begins, so clearing it does not
+  /// rescue a start already held at [failGate].
   Object? startError;
+
+  /// Completed by the first [startNotifications], so a test can wait for an
+  /// attempt to be in flight.
+  final Completer<void> startBegan = Completer<void>();
 
   /// Awaited between the start and the watermark read, where the real
   /// muxable authenticates, so a test can land a stop() in that window.
   Future<void>? startGate;
+
+  /// Awaited before [stopNotifications] tears down, so a test can land an
+  /// event between a stop() and the teardown it queues.
+  Future<void>? stopGate;
+
+  /// Called as [stopNotifications] begins, as an atServer whose answer
+  /// changes once the client stops.
+  void Function()? onStopNotifications;
+
+  /// Awaited before [startError] is thrown, so a test can land a stop()
+  /// while a start that is failing is still in flight.
+  Future<void>? failGate;
+
+  /// Set to keep the refusals stream open across [stopNotifications], as an
+  /// implementation that does not close it would.
+  bool keepRefusalsOnStop = false;
+
+  /// Whether anything listens for refusals.
+  bool get refusalsHeard => _refusals.hasListener;
 
   @override
   Stream<String> get notifications => _notifications.stream;
 
   @override
   Stream<bool> get notificationConnectionUp => _up.stream;
+
+  @override
+  Stream<UnAuthenticatedException> get notificationRefusals => _refusals.stream;
 
   @override
   bool get isNotifying => started;
@@ -72,7 +102,12 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     bool selfNotificationsEnabled = true,
   }) async {
     startCalls++;
-    if (startError != null) throw startError!;
+    if (!startBegan.isCompleted) startBegan.complete();
+    final error = startError;
+    if (error != null) {
+      if (failGate != null) await failGate;
+      throw error;
+    }
     started = true;
     if (startGate != null) await startGate;
     // Invoked, as the real muxable does on every (re)connect - so these
@@ -84,19 +119,32 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
 
   @override
   Future<void> stopNotifications() async {
+    onStopNotifications?.call();
+    if (stopGate != null) await stopGate;
     started = false;
     if (!_up.isClosed) _up.add(false);
     // Closed and replaced, as the real one does.
     final n = _notifications;
     final u = _up;
+    final r = _refusals;
     _notifications = _newNotifications();
     _up = StreamController<bool>.broadcast();
     unawaited(n.close());
     unawaited(u.close());
+    if (!keepRefusalsOnStop) {
+      _refusals = StreamController<UnAuthenticatedException>.broadcast();
+      unawaited(r.close());
+    }
   }
 
   /// The atServer sends one.
   void deliver(String notification) => _notifications.add(notification);
+
+  /// The notification stream carries [error] as an error event.
+  void fail(Object error) => _notifications.addError(error);
+
+  /// The atServer refuses a reconnect, reported as the real muxable does.
+  void refuse(UnAuthenticatedException refusal) => _refusals.add(refusal);
 
   /// The connection drops under us - the muxable reports it and reconnects.
   @override
@@ -112,6 +160,26 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     // stopNotifications hang before it was fixed.
     if (!_notifications.isClosed) unawaited(_notifications.close());
     if (!_up.isClosed) unawaited(_up.close());
+    if (!_refusals.isClosed) unawaited(_refusals.close());
+  }
+}
+
+/// An [AtConnection] that keeps every state reported to it, in order.
+class RecordingConnection extends AtConnection {
+  RecordingConnection()
+      : super(
+            atSign: '@alice',
+            attempt: (_) async =>
+                AtConnectionState.offline(AtConnectionCause.unattempted));
+
+  final List<AtConnectionState> reports = [];
+
+  Iterable<AtConnectionState> get refusals => reports.where((r) => r.isRefused);
+
+  @override
+  Future<void> report(AtConnectionState state) {
+    reports.add(state);
+    return super.report(state);
   }
 }
 
@@ -149,13 +217,29 @@ void main() {
   tearDown(() async => muxable.dispose());
 
   group('the client connection state', () {
-    late AtConnection connection;
+    late RecordingConnection connection;
+
+    AtAuthErrorReplyException revoked() => AtAuthErrorReplyException(
+        'Failed connecting to @alice. '
+        'error:AT0027:enrollment_id: e1 is revoked',
+        errorCode: 'AT0027');
+
+    /// Completes when the monitor next reaches [state].
+    Future<void> reaches(NotificationListenerState state) =>
+        monitor.currentStateStream
+            .firstWhere((s) => s == state)
+            .timeout(const Duration(seconds: 5));
+
+    /// Refuses a reconnect and completes once the monitor, which subscribed
+    /// first, has handled the refusal.
+    Future<void> refuseReconnect() {
+      final heard = muxable.notificationRefusals.first;
+      muxable.refuse(revoked());
+      return heard.timeout(const Duration(seconds: 5));
+    }
 
     setUp(() {
-      connection = AtConnection(
-          atSign: '@alice',
-          attempt: (_) async =>
-              AtConnectionState.offline(AtConnectionCause.unattempted));
+      connection = RecordingConnection();
       monitor = Monitor(
         atSign: '@alice',
         atClientPreference: AtClientPreference(),
@@ -165,6 +249,29 @@ void main() {
         connection: connection,
       );
       monitor.logger.level = 'severe';
+    });
+
+    group(
+        'Given a lookup that leaves its refusals stream open after '
+        'stopNotifications', () {
+      test('when the monitor stops, then it no longer listens for refusals',
+          () async {
+        muxable.keepRefusalsOnStop = true;
+        final up = reaches(NotificationListenerState.listening);
+        monitor.start();
+        await up;
+        expect(muxable.refusalsHeard, isTrue,
+            reason: 'the control: a running monitor listens for refusals');
+
+        final stopped = reaches(NotificationListenerState.notConnected);
+        monitor.stop();
+        await stopped;
+        await pumpEventQueue();
+
+        expect(muxable.refusalsHeard, isFalse,
+            reason: 'a stopped monitor cancels its own refusal subscription, '
+                'whether or not the lookup closes the stream');
+      });
     });
 
     test('is told online when the monitor reaches listening', () async {
@@ -188,6 +295,269 @@ void main() {
       expect(connection.current.isOnline, isTrue,
           reason: 'a dropped monitor says nothing about whether the atServer '
               'is reachable; the next failing verb does');
+    });
+
+    test('a refused reconnect is reported refused', () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(revoked());
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isRefused, isTrue);
+      expect(connection.current.cause, AtConnectionCause.revoked);
+    });
+
+    test('a refused reconnect that arrives after stop() is not reported',
+        () async {
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      await muxable.dropConnection();
+      await Future.delayed(const Duration(milliseconds: 20));
+      final gate = Completer<void>();
+      muxable.stopGate = gate.future;
+
+      monitor.stop();
+      await Future.delayed(const Duration(milliseconds: 20));
+      muxable.refuse(revoked());
+      await Future.delayed(const Duration(milliseconds: 20));
+      gate.complete();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(connection.current.isOnline, isTrue,
+          reason: 'the caller stopped listening before the refusal arrived, '
+              'so the attempt ends as a stop does, with nothing reported');
+    });
+
+    test('a refused reconnect after stop() and start() is reported', () async {
+      final up = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await up;
+      final stopped = reaches(NotificationListenerState.notConnected);
+      monitor.stop();
+      await stopped;
+      final restarted = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await restarted;
+      final down = reaches(NotificationListenerState.notConnected);
+      await muxable.dropConnection();
+      await down;
+      await refuseReconnect();
+
+      expect(
+          connection.refusals.map((r) => r.cause), [AtConnectionCause.revoked],
+          reason: 'the restart subscribes to the refusals of the session it '
+              'starts');
+    });
+
+    test(
+        'a refused reconnect from before stop() then start() is not '
+        'reported', () async {
+      final up = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await up;
+      final down = reaches(NotificationListenerState.notConnected);
+      await muxable.dropConnection();
+      await down;
+      final stopping = Completer<void>();
+      muxable.stopGate = stopping.future;
+
+      monitor.stop();
+      monitor.start();
+      await refuseReconnect();
+      final restarted = reaches(NotificationListenerState.listening);
+      stopping.complete();
+      await restarted;
+
+      expect(connection.refusals, isEmpty,
+          reason: 'the refusal belongs to the session the stop ended, so it '
+              'is not reported over the restart');
+    });
+
+    test('a refusal is reported while a handler holds notifications back',
+        () async {
+      final handling = Completer<void>();
+      final handlerStarted = Completer<void>();
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) {
+          handlerStarted.complete();
+          return handling.future;
+        },
+        getLastNotificationTime: () async => null,
+        connection: connection,
+      );
+      monitor.logger.level = 'severe';
+      final up = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await up;
+      muxable.deliver('A');
+      await handlerStarted.future;
+      final down = reaches(NotificationListenerState.notConnected);
+      await muxable.dropConnection();
+      await down;
+      await refuseReconnect();
+
+      expect(
+          connection.refusals.map((r) => r.cause), [AtConnectionCause.revoked],
+          reason: 'refusals have a stream of their own, which a handler '
+              'holding notifications back does not pause');
+      handling.complete();
+    });
+
+    test(
+        'a refusal that arrives once the connection is back up is not '
+        'reported', () async {
+      final up = reaches(NotificationListenerState.listening);
+      monitor.start();
+      await up;
+      final back = reaches(NotificationListenerState.listening);
+      await muxable.dropConnection();
+      muxable.reconnected();
+      await back;
+      await refuseReconnect();
+
+      expect(monitor.currentState, NotificationListenerState.listening);
+      expect(connection.refusals, isEmpty,
+          reason: 'the refusal belongs to an attempt the recovery superseded, '
+              'so reporting it would leave a connected client reading '
+              'refused');
+    });
+
+    group('after a failed start', () {
+      late List<Duration> defaultStartRetries;
+      final delays = <Duration>[];
+
+      setUp(() {
+        defaultStartRetries = Monitor.startRetryDelays;
+        // Long enough that no retry runs inside a test.
+        Monitor.startRetryDelays = const [Duration(seconds: 10)];
+        delays.clear();
+        monitor
+          ..startRefusalRetryDelays = const [Duration(seconds: 20)]
+          ..onStartRetryDelay = delays.add;
+      });
+
+      tearDown(() {
+        monitor.stop();
+        Monitor.startRetryDelays = defaultStartRetries;
+      });
+
+      test(
+          'an UnAuthenticatedException is retried on the refusal schedule and '
+          'reported refused', () async {
+        muxable.startError = revoked();
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 20)]);
+        expect(connection.current.isRefused, isTrue);
+        expect(connection.current.cause, AtConnectionCause.revoked);
+      });
+
+      test(
+          'any other error is retried on the network schedule and not '
+          'reported, even when it carries a refusal code', () async {
+        muxable.startError =
+            AtLookUpException('AT0027', 'enrollment_id: e1 is revoked');
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(delays, [const Duration(seconds: 10)],
+            reason: 'a start counts as refused only what a reconnect does, an '
+                'UnAuthenticatedException, so the two back off alike');
+        expect(connection.current.isRefused, isFalse,
+            reason: 'and a reconnect would not report it');
+      });
+
+      test('a refusal after a start that was retried is reported once',
+          () async {
+        Monitor.startRetryDelays = const [Duration(milliseconds: 1)];
+        muxable.startError = AtLookUpException('AT0013', 'no route to host');
+        final up = reaches(NotificationListenerState.listening);
+        monitor.start();
+        await muxable.startBegan.future;
+        muxable.startError = null;
+        await up;
+        final down = reaches(NotificationListenerState.notConnected);
+        await muxable.dropConnection();
+        await down;
+        await refuseReconnect();
+
+        expect(muxable.startCalls, 2,
+            reason: 'the failed start and the retry that succeeded');
+        expect(connection.refusals.map((r) => r.cause),
+            [AtConnectionCause.revoked],
+            reason: 'the retry keeps the refusal subscription the failed '
+                'start made rather than adding a second');
+      });
+
+      test('a refused start that fails after stop() is not reported', () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = revoked()
+          ..failGate = failing.future;
+        monitor.start();
+        await Future.delayed(const Duration(milliseconds: 20));
+        monitor.stop();
+        failing.complete();
+        await Future.delayed(const Duration(milliseconds: 20));
+
+        expect(connection.current.isRefused, isFalse,
+            reason: 'the caller stopped listening before the start failed, so '
+                'the attempt ends as a stop does, with nothing reported');
+        expect(delays, isEmpty, reason: 'and nothing is retried');
+      });
+
+      test(
+          'a refused start that fails after stop() then start() is not '
+          'reported or retried', () async {
+        final failing = Completer<void>();
+        muxable
+          ..startError = revoked()
+          ..failGate = failing.future;
+        monitor.start();
+        await muxable.startBegan.future;
+        monitor.stop();
+        monitor.start();
+        muxable.startError = null;
+        final restarted = reaches(NotificationListenerState.listening);
+        failing.complete();
+        await restarted;
+
+        expect(connection.refusals, isEmpty,
+            reason: 'the stop ended the failing attempt, so its refusal is '
+                'not reported over the restart');
+        expect(delays, isEmpty,
+            reason: 'and it arms no retry that the restart never cancels');
+        expect(muxable.startCalls, 2,
+            reason: 'the failed attempt and the restart, nothing more');
+      });
+
+      test(
+          'a refused start queued before stop() then start() is not '
+          'reported or retried', () async {
+        muxable
+          ..startError = revoked()
+          ..onStopNotifications = () => muxable.startError = null;
+        final restarted = reaches(NotificationListenerState.listening);
+        monitor.start();
+        monitor.stop();
+        monitor.start();
+        await restarted;
+
+        expect(connection.refusals, isEmpty,
+            reason: 'the stop queued behind the first start ended it, so a '
+                'refusal it met is not reported over the restart');
+        expect(delays, isEmpty,
+            reason: 'and it arms no retry that the restart never cancels');
+        expect(muxable.startCalls, 1,
+            reason: 'the start the stop superseded makes no attempt of its '
+                'own; only the restart reaches the atServer');
+      });
     });
   });
 
@@ -427,6 +797,40 @@ void main() {
       expect(received, hasLength(2),
           reason: 'one bad notification must not deafen the client to every '
               'notification after it');
+    });
+
+    test(
+        'an error on the stream is logged at warning, and the next '
+        'notification still reaches handleNotification', () async {
+      final delivered = Completer<String>();
+      monitor = Monitor(
+        atSign: '@alice',
+        atClientPreference: AtClientPreference(),
+        lookUp: muxable,
+        handleNotification: (String n) async => delivered.complete(n),
+        getLastNotificationTime: () async => null,
+      );
+      final warnings = <String>[];
+      final records = monitor.logger.logger.onRecord
+          .where((r) => r.level.name == 'WARNING')
+          .listen((r) => warnings.add(r.message));
+      addTearDown(records.cancel);
+      monitor.logger.level = 'warning';
+      final up = monitor.currentStateStream
+          .firstWhere((s) => s == NotificationListenerState.listening);
+      monitor.start();
+      await up.timeout(const Duration(seconds: 5));
+      expect(warnings, isEmpty);
+
+      muxable.fail(StateError('the transport failed'));
+      muxable.deliver('A');
+
+      expect(await delivered.future.timeout(const Duration(seconds: 5)), 'A',
+          reason: 'an error event does not end the subscription');
+      expect(warnings,
+          ['Error on the notification stream: Bad state: the transport failed'],
+          reason: 'an error event is logged at warning, as at_client 4.0.0 '
+              'logs it');
     });
   });
 

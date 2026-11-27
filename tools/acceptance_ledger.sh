@@ -32,10 +32,10 @@ done
 CITATIONS="$ROOT/packages/at_client/citations.jsonl"
 
 # NOTE: pinned here so a ledger run cannot be split across images even if a
-# runner's default drifts. It has to be an image that verifies ML-DSA PKAM: the
-# CLI pack CRAM-onboards an atSign with a post-quantum keypair, and against
-# `atsigncompany/virtualenv:vip` that fails as a server-side `AT0010 RangeError`
-# out of PKAM, which reads as a client bug.
+# runner's default drifts. It has to be an image that verifies ML-DSA PKAM
+# (at_server p3.16.5 or later): the CLI pack CRAM-onboards an atSign with a
+# post-quantum keypair, and an older atServer fails that as a server-side
+# `AT0010 RangeError` out of PKAM, which reads as a client bug.
 export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 # NOTE: `provenIn` APPENDS to this file, so two runs against the same path

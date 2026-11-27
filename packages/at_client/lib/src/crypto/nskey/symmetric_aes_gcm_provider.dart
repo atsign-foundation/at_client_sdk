@@ -304,7 +304,8 @@ class SymmetricAesGcmProvider
   /// The conveyance itself is read after it, since one written before shares
   /// carried a `ttr` has no cached copy.
   ///
-  /// **Each from local storage first, then the atServer.** The remote leg is not an
+  /// **Each first where the client's preference routes a read, which is local
+  /// storage by default, then from the atServer.** The remote leg is not an
   /// optimisation: a value delivered remote-only — which every notification is
   /// — cites a conveyance its sender wrote remote-first, so the record is on
   /// the atServer before the value arrives and may not reach local storage

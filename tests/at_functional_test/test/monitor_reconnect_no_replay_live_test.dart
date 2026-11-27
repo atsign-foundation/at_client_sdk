@@ -9,9 +9,9 @@ import 'package:uuid/uuid.dart';
 
 import 'test_utils.dart';
 
-/// With [AtClientPreference.fetchOfflineNotifications] false, a notification
-/// delivered before the notification connection drops is not delivered again
-/// after the reconnect, against a live atServer.
+/// With [NotificationReplay.connect], a notification delivered before the
+/// notification connection drops is not delivered again after the reconnect,
+/// against a live atServer.
 ///
 /// NOTE: one atSign, notifying itself. `TestUtils.initAtClient` stops the
 /// client that was current, so a second client for the sender would stop this
@@ -30,7 +30,7 @@ void main() {
         posture: PqPosture.legacy,
         preference:
             TestUtils.getPreference(currentAtSign, posture: PqPosture.legacy)
-              ..fetchOfflineNotifications = false);
+              ..notificationReplay = const NotificationReplay.connect());
     atClientManager.atClient.syncService.sync();
   });
 

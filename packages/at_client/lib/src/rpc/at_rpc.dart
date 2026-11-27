@@ -145,7 +145,7 @@ class AtRpcClient implements AtRpcCallbacks {
   }
 }
 
-/// A simple rpc request-response abstraction which uses atProtocol
+/// A simple rpc request-response abstraction which uses Atsign Protocol
 /// notifications under the hood.
 /// - 'requests' are sent as notifications with a 'key' like:
 /// request.&lt;requestId&gt;.[domainNameSpace].[rpcsNameSpace].[baseNameSpace]

@@ -12,6 +12,13 @@ The Atsign Protocol for a Dart command-line program, daemon or server:
   online `AtClient`;
 - `CliKeys`, where those programs keep an atSign's keyfile and local store.
 
+A program imports `package:at_client_cli/at_client_cli.dart` and nothing else
+from the SDK, and does not add at_client to its pubspec. The barrel
+re-exports at_client, its storage backends and mixins, so `AtClient`,
+`Atsign`, `SignedEnvelope` and `verifySignedEnvelope` all come from that one
+import. A test may also import `package:at_client_cli/testing.dart`, for
+`TestEnvelopeSigner`.
+
 The lifecycle itself is [`at_client`](../at_client)'s — `Atsign.activate`,
 `Atsign.open` and `Atsign.enroll` do the work, and this package gives them a
 command line. It replaces at_onboarding_cli and at_cli_commons: see
@@ -77,7 +84,8 @@ The remaining commands run on the keyfile `-k` names (that one by default):
 | Command                                            | What it does                                                                                                             |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `status -a @alice`                                 | asks where the atSign stands; the exit code says: 0 activated, 1 atServer up but not yet activated, 2 atServer unreachable, 3 no such atSign, 4 atDirectory unreachable |
-| `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run again for the same app and device, it resumes the wait rather than submitting a second request |
+| `enroll -a @alice --app <app> --device <device> --namespaces <ns:rw,...> --passcode <otp>` | submits an APKAM enrollment for a new app and device and waits for its approval; run on a keyfile already waiting on a request, it resumes that wait rather than submitting another, whatever app or device the request was filed under, and says which when they differ; a request the manager denies, or that expires, is cleared from the keyfile by the next run |
+| `cancel -a @alice -k <keyfile>`                    | gives up the pending enrollment request the keyfile holds and removes its keys from it, sending nothing: the request stays on the atServer, for the Atsign's manager to deny, or to revoke if they approved it meanwhile; a keyfile holding live keys is refused, and left as it is |
 | `otp` / `spp`                                      | issues a one-time passcode, or sets a semi-permanent one, that a new enrollment quotes                                    |
 | `list`, `fetch`                                    | the enrollment roster, or one enrollment's record                                                                        |
 | `approve`, `deny`, `revoke`, `unrevoke`, `delete`  | decides an enrollment by its id; `auto` listens and approves the requests that match its app and device patterns        |
@@ -129,7 +137,7 @@ Full step-by-step walkthrough:
 `CLIBase` turns the standard command-line flags into an online client:
 
 ```dart
-import 'package:at_client_cli/at_client_cli.dart';
+import 'package:at_client_cli/at_client_cli.dart'; // the only SDK import
 
 Future<void> main(List<String> args) async {
   final parser = CLIBase.createArgsParser(namespace: 'my_app');
@@ -144,25 +152,46 @@ Future<void> main(List<String> args) async {
 
 `-a` names the atSign, `-k` its keyfile (`~/.atsign/keys/<atSign>_key.atKeys`
 by default), `-r` the atDirectory, `-s` the local store and `-P` the keyfile's
-pass-phrase; `--help` lists the rest. `fromCommandLineArgs` waits up to
+pass-phrase; `--help` lists the rest. Keys it cannot use (a keyfile that is
+missing or cannot be read, names another atSign, or holds no credential or no
+keypair it can sign with)
+throw `AtKeysUnusableException` before anything connects, once it has said on
+stderr what is wrong and what to do next. `fromCommandLineArgs` waits up to
 `--max-connect-attempts` tries, 3 seconds apart, for the client to come
 online. Otherwise it stops the client and throws:
 
 - `AtCredentialRefusedException` when the atServer refuses the keys, naming
   the cause, and saying when the enrollment awaits approval or was denied;
-- `AtEnrollmentException` when the enrollment request the keyfile holds is
-  denied or expires;
+- `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`, both
+  `AtEnrollmentException`s, when the enrollment request the keyfile holds is
+  denied or expires, removing its keys or, when the keyfile cannot be
+  written, saying in their message that the keys stay;
+- a plain `AtEnrollmentException` when the atServer keeps answering the wait
+  for approval with neither a decision nor "not yet", keeping the request for
+  the next run;
+- whatever fetching or decrypting the keys threw when the request was
+  approved but its keys could not be collected, keeping the request: an
+  `AtException` such as `AtLookUpException` for an error reply or none,
+  errors such as `FormatException` or `ArgumentError` for a reply that does
+  not parse or decrypt, and a plain `AtEnrollmentException` only when no
+  conveyed key decrypts them. The request may already be approved, so run
+  again rather than cancel it;
 - `SecondaryNotFoundException` when the atDirectory has no atServer for the
-  atSign;
-- `SecondaryServerConnectivityException` when the atServer is not reached in
-  time, the one a retry loop should catch.
+  Atsign;
+- `SecondaryServerConnectivityException` when no atServer accepted or refused
+  the keys in time (an outage, or a server error such as AT0011), the one a
+  retry loop should catch.
 
 A keyfile still holding only its enrollment request is resumed: the program
-says it is waiting for approval of that enrollment, waits as at_activate
+says it is waiting for approval of that enrollment, naming the
+`at_activate cancel` command that gives the request up, waits as at_activate
 does, and runs once it is approved. Ctrl-C while it waits keeps the request
 for the next run.
 
 Pass `preference:` an `AtClientPreference` to set anything the flags do not.
+Its `atClientParticulars.appName` and `appVersion` name your program to the
+atServer on every connection that authenticates; a client that names nothing
+is named after its program file, and logs a warning when it starts.
 
 ### The lifecycle verbs, with `CliKeys`
 
@@ -181,7 +210,7 @@ import 'package:at_client_cli/at_client_cli.dart';
 final preference = AtClientPreference(posture: PqPosture.pqActive)..namespace = 'my_app';
 final keys = CliKeys.fileFor('@alice');       // ~/.atsign/keys/@alice_key.atKeys
 final storage = CliKeys.storageFor('@alice', program: 'my_app');
-final lookUps = lookUpsFor(preference.rootDomain);
+final lookUps = secureSocketLookUps();
 final atDirectory =
     CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort);
 ```
@@ -191,10 +220,9 @@ puts the store at `~/.atsign/storage/<atSign>/<program>/<id>`, `single` when no
 `id` is given, where `CLIBase` keeps it for that namespace, or at `path`, and
 the client closes it when it stops. `lookUps` builds every connection the
 client opens, and
-`lookUpsFor(rootDomain)` is the one `CLIBase` uses: `proxyLookUps()` when the
-root domain names a proxy (`proxy:host:port`), which sends `from:<atSign>`
-first on every connection so the proxy can route it, and
-`secureSocketLookUps()`, TLS on TCP, otherwise.
+`secureSocketLookUps()` is the one `CLIBase` uses, TLS on TCP; `lookUpsFor(rootDomain)`
+is deprecated and returns it. When the root domain names a proxy (`proxy:host:port`), at_lookup
+sends `from:<atSign>` first on every connection so the proxy can route it.
 
 `at_activate`'s `onboard` and `enroll` share one local store per atSign, under
 `~/.atsign/storage/<atSign>/at_activate/`, so running two of them at once for
@@ -246,6 +274,14 @@ final passcode = await owner.enrollments.otp();
 
 Worked examples covering each flow are in [`example/bin/`](example/bin).
 
+### Embedding at_activate
+
+A program that ships at_activate's commands under its own name runs
+`AtActivate.main(args, program: 'my_tool', programVersion: '1.2.3')`, so
+every connection its commands authenticate names `my_tool` at `1.2.3`
+rather than at_activate. With no `programVersion`, the version named is
+`unknown`.
+
 ## Moving from at_onboarding_cli and at_cli_commons
 
 [Upgrading to at_client 4.0](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/docs/upgrade-to-4.md) takes a program through the whole move, at_client included; this section covers this package's own changes.
@@ -264,7 +300,7 @@ at_onboarding_cli 1.x wrote is read unchanged.
 | `package:at_onboarding_cli/at_onboarding_cli.dart`, `package:at_cli_commons/at_cli_commons.dart` | `package:at_client_cli/at_client_cli.dart`                                                                                                                              |
 | `dart pub global activate at_onboarding_cli`                                                     | `dart pub global activate at_client_cli`; the old command still installs the same tools                                                                                 |
 | `CLIBase(..., preference: AtOnboardingPreference())`                                             | unchanged, except that `preference:` takes an `AtClientPreference`                                                                                                      |
-| `CLIBase` on a refused first open, `AtOpenRefusedException`                                      | `AtCredentialRefusedException` for every refusal; `SecondaryNotFoundException` for an atSign the atDirectory does not know; `SecondaryServerConnectivityException` only for an outage |
+| `CLIBase` on a refused first open, `AtOpenRefusedException`                                      | `AtCredentialRefusedException` for every refusal; `SecondaryNotFoundException` for an atSign the atDirectory does not know; `SecondaryServerConnectivityException` only when no atServer accepted or refused the keys (an outage, or, with at_client 4.1.0, a server error such as AT0011) |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, then `.atClient`                         | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`                                                                                        |
 | `.onboard()`                                                                                     | `Atsign(atSign).activate(...)`, or `at_activate onboard`                                                                                                                |
 | `.enroll(...)`, `.sendEnrollRequest(...)`, `.awaitApproval(...)`, `.createAtKeysFile(...)`       | `Atsign(atSign).enroll(...)` and `PendingEnrollment.client(...)`; `Atsign.resumeEnrollment` picks a pending request up after a restart                                  |
@@ -293,6 +329,8 @@ at_onboarding_cli 1.x wrote is read unchanged.
   protocol layer under at_client
 - [`at_client_flutter`](../at_client_flutter) — the Flutter-UI
   equivalent of this package
+- [`at_client_skills`' package map](../at_client_skills/skills/at_client_skills-sdk/references/06-package-map.md)
+  — which SDK package a program of each kind imports
 
 ## Open source usage and contributions
 

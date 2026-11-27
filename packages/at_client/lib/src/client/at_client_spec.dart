@@ -291,7 +291,10 @@ abstract class AtClient {
   /// If you want to set both value and metadata please use [put]
   Future<bool> putMeta(AtKey key, {PutRequestOptions? putRequestOptions});
 
-  /// Get the value of [AtKey.key] from user's cloud secondary if [AtKey.sharedBy] is set. Otherwise looks up the key from local secondary.
+  /// Gets the value of [key]. An uncached key another Atsign owns is always
+  /// looked up on the atServer; any other key is read where
+  /// [getRequestOptions] and [AtClientPreference.remoteLocalPref] route it, as
+  /// [getMeta] describes: local storage by default.
   /// If the key was stored with public access, set [AtKey.metadata.isPublic] to true. If the key was shared with another atSign set [AtKey.sharedWith]
   ///
   /// ```
@@ -357,29 +360,52 @@ abstract class AtClient {
   ///
   Future<AtValue> get(AtKey key, {GetRequestOptions? getRequestOptions});
 
-  /// Gets the metadata of [AtKey.key]
+  /// Gets the metadata of [key] without its value: nothing is decrypted, so a
+  /// record this client cannot open still answers.
+  ///
+  /// [getRequestOptions] chooses where the lookup goes, as it does for [get]:
+  /// [GetRequestOptions.useRemoteAtServer] set to true asks the atServer, set
+  /// to false asks local storage, and left unset follows
+  /// [AtClientPreference.remoteLocalPref]. An uncached key another Atsign owns
+  /// is always looked up on the atServer, and [GetRequestOptions.bypassCache]
+  /// skips the atServer's cached copy of it; a `local:` key is always read
+  /// from local storage.
+  ///
+  /// Returns null when the record is held but not visible now: not yet
+  /// available, or expired and not yet removed.
+  ///
+  /// Throws [AtKeyNotFoundException] when no record is held under [key],
+  /// [AtKeyException] for an invalid [key], [AtClientException] when the lookup
+  /// fails any other way, including an answer that is not metadata, and
+  /// [StoppedException] after [stop].
   /// ```
   /// e.g alice is current atsign
-  /// llookup:phone@alice
+  /// llookup:meta:phone@alice
   ///   var atKey = AtKey()..key='phone'
   ///   getMeta(atKey);
-  /// llookup:public:phone@alice
+  /// llookup:meta:public:phone@alice
   ///   var metaData = Metadata()..isPublic=true;
   ///   var atKey = AtKey()..key='phone'
   ///             ..metadata=metaData
   ///   getMeta(atKey);
-  /// lookup:phone@bob
-  ///   var metaData = Metadata()..sharedWith='@bob';
-  ///    var atKey = AtKey()..key='phone'
+  /// lookup:meta:phone@bob
+  ///   var atKey = AtKey()..key='phone'
+  ///                   ..sharedBy='@bob'
+  ///   getMeta(atKey);
+  /// plookup:meta:phone@bob
+  ///   var metaData = Metadata()..isPublic=true;
+  ///   var atKey = AtKey()..key='phone'
+  ///                   ..sharedBy='@bob'
   ///                   ..metadata=metaData
   ///   getMeta(atKey);
   ///
   /// ```
-  Future<Metadata?> getMeta(AtKey key);
+  Future<Metadata?> getMeta(AtKey key, {GetRequestOptions? getRequestOptions});
 
   /// Deletes [key] from local storage, and sync later pushes the removal to
   /// the atServer; [DeleteRequestOptions.useRemoteAtServer] sends it to the
-  /// atServer directly.
+  /// atServer directly, as a `remoteOnly` preference does when it is unset.
+  /// A `local:` key is only ever deleted from local storage.
   /// By default namespace that is used to create the [AtClient] instance will be appended to the key. phone@alice translates to
   /// phone.persona@alice where 'persona' is the namespace. If you want to ignoring the namespace set [AtKey.metadata.namespaceAware]
   /// to false.
@@ -433,6 +459,9 @@ abstract class AtClient {
   /// Get all the keys stored in user's secondary in [AtKey] format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
   /// If [sharedWith] is specified, then gets the keys shared to [sharedWith] user from the current atClient user.
+  /// The scan reads the atServer when [useRemoteAtServer] is true and local
+  /// storage when it is false; `AtClientImpl` reads an omitted one as unset
+  /// and follows [AtClientPreference.remoteLocalPref].
   /// ```
   /// e.g alice is the current atsign
   ///  scan
@@ -453,6 +482,9 @@ abstract class AtClient {
   /// Get all the keys stored in user's secondary in string format. If [regex] is specified only matching keys are returned.
   /// If [sharedBy] is specified, then gets the keys from [sharedBy] user shared with current atClient user.
   /// If [sharedWith] is specified, then gets the keys shared to [sharedWith] user from the current atClient user.
+  /// The scan reads the atServer when [useRemoteAtServer] is true and local
+  /// storage when it is false; `AtClientImpl` reads an omitted one as unset
+  /// and follows [AtClientPreference.remoteLocalPref].
   /// ```
   /// e.g alice is the current atsign
   ///  scan
@@ -581,6 +613,19 @@ abstract class AtClient {
   /// minifier / tree-shaker — see [AtCollection.registerFactory] for
   /// the full rationale.
   ///
+  /// [writeTypeTag] stamps items this collection creates with that tag when
+  /// no factory is registered for their type, without registering a
+  /// [fromJson]. When [typeTag] is also set, the two must match.
+  ///
+  /// [namespace] is folded to lower case, as atProtocol keys are, and a
+  /// client hands back the collection it already built for the same folded
+  /// [namespace] and [eventSource]. While any collection of [namespace] is
+  /// open, an open that would stamp a new [T] with another tag throws
+  /// [ArgumentError] and caches nothing. An open stamps [typeTag], else the
+  /// tag of the factory registered for [T], else [writeTypeTag], else `n/a`.
+  /// The check holds on this client only: another client, session or device
+  /// of the atSign does not see it. Implementers should refuse the same way.
+  ///
   /// When [cleanupOrphansOnCreation] is true, the returned collection runs
   /// a one-shot `cleanupOrphans()` sweep before the `Future` completes.
   /// Idempotent: the sweep runs at most once per collection instance
@@ -610,6 +655,7 @@ abstract class AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   });
 }

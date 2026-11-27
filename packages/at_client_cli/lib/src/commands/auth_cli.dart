@@ -9,6 +9,7 @@ import 'package:at_auth/at_auth_io.dart'
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_client_cli/at_client_cli.dart';
 import 'package:at_client_cli/src/util/at_file_util.dart';
+import 'package:at_client_cli/src/util/keys_problem.dart';
 import 'package:at_client_cli/src/commands/parser_usage.dart';
 import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/registrar_api_constants.dart';
@@ -101,14 +102,21 @@ void deleteStorage() {
   }
 }
 
-Future<int> main(List<String> arguments) async {
+/// Runs at_activate with [arguments] as [program] at [programVersion], the
+/// app its clients name on every `from:` they send to authenticate, and
+/// answers its exit code. With no [programVersion], at_activate and
+/// at_register name at_client_cli's version and any other program names
+/// `unknown`.
+Future<int> main(List<String> arguments,
+    {String program = commandNamespace, String? programVersion}) async {
   AtSignLogger.defaultLoggingHandler = StdErrLoggingHandler();
   // NOTE: a retrofit reads a keyfile and writes back what it decided from what
   // it read, so two CLIs on one keyfile can each write a different enrollment
   // into it. This serialises the whole sequence on a lock beside the keyfile.
   retrofitSerializer = fileRetrofitSerializer;
   try {
-    return await wrappedMain(arguments);
+    return await wrappedMain(arguments,
+        program: program, programVersion: programVersion);
   } on ArgumentError catch (e) {
     stderr.writeln('Invalid argument: ${e.message}');
     aca.parser.printAllCommandsUsage();
@@ -151,7 +159,8 @@ Future<int> main(List<String> arguments) async {
   );
 }
 
-Future<int> wrappedMain(List<String> arguments) async {
+Future<int> wrappedMain(List<String> arguments,
+    {required String program, required String? programVersion}) async {
   if (arguments.isEmpty) {
     stderr.writeln('Version: $packageVersion');
     stderr.writeln('You must supply a command.');
@@ -248,7 +257,8 @@ Future<int> wrappedMain(List<String> arguments) async {
         // then authenticate with PKAM to verify
         // and then delete the cram secret
         // Write keys to the usual output file @atSign_keys.atKeys
-        await onboard(commandArgResults);
+        await onboard(commandArgResults,
+            program: program, programVersion: programVersion);
 
       case AuthCliCommand.spp:
         // set a semi-permanent passcode for this atSign. This is a passcode
@@ -260,7 +270,9 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await setSpp(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -280,7 +292,9 @@ Future<int> wrappedMain(List<String> arguments) async {
         // where users are bombarded with spurious enrollment requests.
         await outputOtp(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -296,7 +310,9 @@ Future<int> wrappedMain(List<String> arguments) async {
         // - setting spp, generating otp, etc
         await interactive(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -308,7 +324,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.list:
         await list(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -320,7 +338,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.fetch:
         await fetch(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -333,7 +353,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.approve:
         await approve(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -345,7 +367,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.auto:
         await autoApprove(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -357,7 +381,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.deny:
         await deny(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -370,7 +396,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.revoke:
         await revoke(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -386,12 +414,19 @@ Future<int> wrappedMain(List<String> arguments) async {
         // app which has permissions to approve enrollment requests.
         // Write keys to @atSign_keys.atKeys IFF it doesn't already exist; if
         // it does exist, then write to @atSign_appName_deviceName_keys.atKeys
-        await enroll(commandArgResults);
+        await enroll(commandArgResults,
+            program: program, programVersion: programVersion);
+
+      case AuthCliCommand.cancel:
+        return await cancel(commandArgResults,
+            program: program, programVersion: programVersion);
 
       case AuthCliCommand.unrevoke:
         await unrevoke(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -404,7 +439,9 @@ Future<int> wrappedMain(List<String> arguments) async {
       case AuthCliCommand.delete:
         await deleteEnrollment(
             commandArgResults,
-            await createAtClient(
+            await _commandClient(
+                program: program,
+                programVersion: programVersion,
                 atSign: commandArgResults[AuthCliArgs.argNameAtSign],
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain: commandArgResults[AuthCliArgs.argNameRootServer],
@@ -427,6 +464,15 @@ Future<int> wrappedMain(List<String> arguments) async {
     );
     aca.sharedArgsParser.printAllCommandsUsage();
     return 1;
+  } on AtKeysUnusableException catch (e) {
+    reportKeysProblem(e,
+        absentHint: e.cause == AtKeysUnusableCause.absent
+            ? await absentKeysHint(
+                e.atSign, commandArgResults[AuthCliArgs.argNameRootServer])
+            : const [],
+        keyfile: _keyfileIn(commandArgResults),
+        passphraseGiven: _passphraseIn(commandArgResults));
+    return 1;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     stderr.writeln();
@@ -442,13 +488,33 @@ Future<int> wrappedMain(List<String> arguments) async {
   return 0;
 }
 
+/// The keyfile a command run with [args] reads: the one -k names, else the
+/// default one for the atSign -a names, or null when there is no home
+/// directory to find that in.
+String? _keyfileIn(ArgResults args) {
+  final String? named = args[AuthCliArgs.argNameAtKeys];
+  if (named != null) return named;
+  final home = getHomeDirectory();
+  return home == null
+      ? null
+      : getDefaultAtKeysFilePath(
+          home, AtUtils.fixAtSign(args[AuthCliArgs.argNameAtSign]));
+}
+
+/// Whether a command run with [args] was given a passphrase with -P.
+bool _passphraseIn(ArgResults args) =>
+    (args[AuthCliArgs.argNamePassPhrase] as String?)?.isNotEmpty ?? false;
+
 /// Check the status of an atSign - returns
 ///  - 4 if the atDirectory cannot be reached
 ///  - 3 if atDirectory is reachable but the atSign does not exist
 ///  - 2 if the atSign exists but the atServer cannot be reached
 ///  - 1 if the atServer is reachable but there is no `public:publickey@<atsign>`
 ///  - 0 if the atServer is reachable and `public:publickey@<atsign>` exists
-Future<int> status(ArgResults ar) async {
+///
+/// [atLookUp] is a connection to look the public key up over, for a test; a
+/// run connects to the atServer the atDirectory names.
+Future<int> status(ArgResults ar, {AtLookUp? atLookUp}) async {
   String atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -463,53 +529,174 @@ Future<int> status(ArgResults ar) async {
     exit(1);
   }
 
-  SecondaryAddressFinder saf = CacheableSecondaryAddressFinder(
-      rootDomain.rootDomain, rootDomain.rootPort);
+  final found = await _lookUpPublicKey(
+      atSign,
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort),
+      (atDirectory) =>
+          atLookUp ??
+          secureSocketLookUps()(
+            atSign: atSign,
+            rootDomain: rootDomain,
+            authenticator: null,
+            secondaryAddressFinder: atDirectory,
+          ));
+  stderr.writeln('returning ${found.outcome.exitCode}: ${found.detail}');
+  return found.outcome.exitCode;
+}
+
+/// What looking up an atSign's public key found, with the exit code
+/// [status] returns for it.
+enum _PublicKey {
+  found(0),
+  absent(1),
+  atServerUnreachable(2),
+  notInAtDirectory(3),
+  atDirectoryUnreachable(4);
+
+  const _PublicKey(this.exitCode);
+
+  final int exitCode;
+}
+
+/// Asks [atDirectory] for [atSign]'s atServer and that atServer, over the
+/// connection [connect] builds on the same [atDirectory], for its public key,
+/// unauthenticated; [detail] says what was found. [atDirectoryTimeout]
+/// bounds the atDirectory's answer, which otherwise has its default budget.
+Future<({_PublicKey outcome, String detail})> _lookUpPublicKey(
+    String atSign,
+    SecondaryAddressFinder atDirectory,
+    AtLookUp Function(SecondaryAddressFinder atDirectory) connect,
+    {Duration? atDirectoryTimeout}) async {
   try {
-    await saf.findSecondary(atSign);
+    await atDirectory.findSecondary(atSign, timeout: atDirectoryTimeout);
   } on SecondaryNotFoundException {
-    stderr.writeln('returning 3: atDirectory has no record for $atSign');
-    return 3;
+    return (
+      outcome: _PublicKey.notInAtDirectory,
+      detail: 'atDirectory has no record for $atSign'
+    );
   } catch (e) {
-    stderr.writeln('returning 4: Caught ${e.runtimeType} : $e');
-    return 4;
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'Caught ${e.runtimeType} : $e'
+    );
   }
 
-  String? pk;
+  // NOTE: a public key lookup needs no authentication, and no credential is
+  // held here.
+  final al = connect(atDirectory);
+  final found = await _publicKeyFrom(al, atSign);
   try {
-    // NOTE: a public key lookup needs no authentication, and no credential is
-    // held here.
-    final settings = enrollerSettingsFrom(ar);
-    final AtLookUp al = settings.lookUps(
-      atSign: atSign,
-      rootDomain: rootDomain,
-      authenticator: null,
-      secondaryAddressFinder: settings.secondaryAddressFinder,
-    );
+    await al.close();
+  } catch (e) {
+    logger.finer('closing the public key lookup for $atSign failed: $e');
+  }
+  return found;
+}
+
+/// What [al] answers for [atSign]'s public key.
+Future<({_PublicKey outcome, String detail})> _publicKeyFrom(
+    AtLookUp al, String atSign) async {
+  ({_PublicKey outcome, String detail}) unreachable(AtException e) => (
+        outcome: _PublicKey.atServerUnreachable,
+        detail: 'atServer cannot be reached $atSign ($e)'
+      );
+  final String? pk;
+  try {
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
     } on AtLookUpException catch (e) {
-      final e1 = AtExceptionUtils.get(e.errorCode, e.errorMessage);
-      throw e1;
+      throw AtExceptionUtils.get(e.errorCode, e.errorMessage);
     }
   } on SecondaryServerConnectivityException catch (e) {
-    stderr.writeln('returning 2: atServer cannot be reached $atSign ($e)');
-    return 2;
+    return unreachable(e);
+  } on SecondaryConnectException catch (e) {
+    return unreachable(e);
   } on KeyNotFoundException catch (e) {
-    stderr.writeln('returning 1: $e');
-    return 1;
+    return (outcome: _PublicKey.absent, detail: '$e');
   } catch (e) {
-    stderr.writeln('returning 2: Caught unexpected ${e.runtimeType} : $e');
-    return 2;
+    return (
+      outcome: _PublicKey.atServerUnreachable,
+      detail: 'Caught unexpected ${e.runtimeType} : $e'
+    );
   }
 
-  if (pk == null || !pk.startsWith("data:")) {
-    stderr.writeln('returning 1: response was $pk');
-    return 1;
+  if (!holdsPublicKey(pk)) {
+    return (outcome: _PublicKey.absent, detail: 'response was $pk');
   }
+  return (
+    outcome: _PublicKey.found,
+    detail: 'found public:publickey$atSign OK'
+  );
+}
 
-  stderr.writeln('returning 0: found public:publickey$atSign OK');
-  return 0;
+/// Whether [response] to `lookup:publickey@<atsign>` carries a key: a
+/// `data:` reply whose value is neither empty nor `null`, which an atServer
+/// that is provisioned but not activated answers.
+@visibleForTesting
+bool holdsPublicKey(String? response) {
+  if (response == null || !response.startsWith('data:')) return false;
+  final value = response.substring('data:'.length).trim();
+  return value.isNotEmpty && value != 'null';
+}
+
+/// How long at_activate waits for the absent keys' hint lookup before it
+/// gives both hints.
+const Duration _absentKeysHintBudget = Duration(seconds: 5);
+
+/// The next step for [atSign], whose keys are not on this machine, from
+/// whether the atServer the atDirectory at [rootServer] names for it holds
+/// its public key, looked up as [status] looks it up, within
+/// [_absentKeysHintBudget]. When the budget is spent, the lookup is stopped:
+/// its connection is closed, and it opens no other.
+///
+/// [atDirectory] stands in for the atDirectory at [rootServer].
+@visibleForTesting
+Future<List<String>> absentKeysHint(String atSign, String rootServer,
+    {SecondaryAddressFinder? atDirectory}) async {
+  final AtRootDomain rootDomain;
+  try {
+    rootDomain = AtRootDomain.parse(rootServer);
+  } catch (_) {
+    return eitherKeysHint(atSign, rootServer);
+  }
+  final finder = atDirectory ??
+      CacheableSecondaryAddressFinder(
+          rootDomain.rootDomain, rootDomain.rootPort);
+  final lookUp = secureSocketLookUps()(
+    atSign: atSign,
+    rootDomain: rootDomain,
+    authenticator: null,
+    secondaryAddressFinder: finder,
+  );
+  final found = await _lookUpPublicKey(atSign, finder, (_) => lookUp,
+          atDirectoryTimeout: _absentKeysHintBudget)
+      .timeout(_absentKeysHintBudget, onTimeout: () {
+    unawaited(lookUp.stop().catchError((Object e) {
+      logger.finer('stopping the hint lookup for $atSign failed: $e');
+    }));
+    return (
+      outcome: _PublicKey.atDirectoryUnreachable,
+      detail: 'no answer within $_absentKeysHintBudget'
+    );
+  });
+  return switch (found.outcome) {
+    _PublicKey.absent => [
+        '$atSign has not been activated yet. To activate it: at_activate '
+            'onboard -a $atSign -r $rootServer'
+      ],
+    _PublicKey.found => [
+        '$atSign is activated, but not on this machine. Run this command on '
+            'the machine that activated it, or enroll this machine first.'
+      ],
+    _PublicKey.notInAtDirectory => [
+        '$atSign is not in the atDirectory at $rootServer. Check the '
+            'spelling, or -r.'
+      ],
+    _PublicKey.atServerUnreachable ||
+    _PublicKey.atDirectoryUnreachable =>
+      eitherKeysHint(atSign, rootServer),
+  };
 }
 
 /// How often a client waiting for its enrollment to be approved asks again,
@@ -526,12 +713,16 @@ const Duration provisioningPollInterval = Duration(seconds: 2);
 /// [atLookUp] is a connection to activate over, for a test; a run finds the
 /// atServer through the atDirectory.
 @visibleForTesting
-Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
+Future<bool> onboard(ArgResults argResults,
+    {required String program,
+    required String? programVersion,
+    AtLookupMuxable? atLookUp}) async {
   if (argResults[AuthCliArgs.argNameVersion]) {
     stdout.writeln('Version: $packageVersion');
     return false;
   }
-  final settings = enrollerSettingsFrom(argResults);
+  final settings = enrollerSettingsFrom(argResults,
+      program: program, programVersion: programVersion);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
   logger.info('Root server is ${argResults[AuthCliArgs.argNameRootServer]}');
   logger.info(
@@ -560,6 +751,8 @@ Future<bool> onboard(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
         maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
         atLookUp: atLookUp);
     return true;
+  } on AtKeysUnusableException {
+    rethrow;
   } catch (e) {
     await Future.delayed(Duration(milliseconds: 10));
     throw ('Onboarding failed : $e');
@@ -648,10 +841,7 @@ Future<bool> _isActivated(
     try {
       final response = await connection
           .executeCommand('lookup:publickey$atSign\n', auth: false);
-      return response != null &&
-          response.startsWith('data:') &&
-          !response.contains('null') &&
-          response.trim().length > 'data:'.length;
+      return holdsPublicKey(response);
     } catch (e) {
       logger.info('lookup:publickey$atSign failed, so $atSign is taken as '
           'not activated: $e');
@@ -677,17 +867,22 @@ Future<bool> _isActivated(
 
 /// auth enroll : require atSign, app name, device name, otp, atKeys path
 ///     If atKeys file doesn't exist, then this is a new enrollment
-///     If it holds a request submitted earlier for this app and device, the
-///         wait for approval resumes from it
+///     If it holds a request waiting for approval, whatever app or device it
+///         was filed under, the wait resumes from it; a request the manager
+///         denies, or that expires, is cleared from it by the next run
 ///
 /// [atLookUp] is a connection to enrol over, for a test.
 @visibleForTesting
-Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
+Future<bool> enroll(ArgResults argResults,
+    {required String program,
+    required String? programVersion,
+    AtLookupMuxable? atLookUp}) async {
   if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
     throw ArgumentError('The --${AuthCliArgs.argNameAtKeys} option is'
         ' mandatory for the "enroll" command');
   }
-  final settings = enrollerSettingsFrom(argResults);
+  final settings = enrollerSettingsFrom(argResults,
+      program: program, programVersion: programVersion);
   final atSign = AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]);
 
   Map<String, String> namespaces = {};
@@ -734,9 +929,11 @@ Future<bool> enroll(ArgResults argResults, {AtLookupMuxable? atLookUp}) async {
 /// Enrols this device as [app] on [device], waits for the approval, and
 /// opens a client on the keys it completes, which the caller stops.
 ///
-/// The keyfile [settings] names is the resume record: a request submitted
-/// earlier for the same app and device is waited on again rather than
-/// repeated, and a keyfile already holding live keys is refused.
+/// The keyfile [settings] names is the resume record: a request waiting for
+/// approval there is waited on again rather than repeated, whatever app or
+/// device it was filed under. A request the manager denies, or that expires,
+/// is cleared from the keyfile by the next run, and a keyfile already holding
+/// live keys is refused.
 @visibleForTesting
 Future<AtClient> enrolDevice({
   required String atSign,
@@ -756,16 +953,23 @@ Future<AtClient> enrolDevice({
   final atKeysFilePath = settings.atKeysFilePath;
   final keys = settings.keysFor(atSign);
   var pending = await Atsign(atSign).resumeEnrollment(
-      app: app,
-      device: device,
       keys: keys,
       preference: preference,
       atLookUp: atLookUp,
       lookUps: settings.lookUps,
       secondaryAddressFinder: settings.secondaryAddressFinder);
   if (pending != null) {
+    final filedApp = clipForMessage(pending.app);
+    final filedDevice = clipForMessage(pending.device);
+    final recorded = '${filedApp.isEmpty ? '' : ' as $filedApp'}'
+        '${filedDevice.isEmpty ? '' : ' on $filedDevice'}';
+    final filed = pending.app == app && pending.device == device
+        ? ', submitted earlier from this keyfile'
+        : recorded.isEmpty
+            ? ''
+            : ', filed$recorded';
     stderr.writeln('${chalk.blue('[Information]')} Resuming enrollment '
-        '${pending.enrollmentId}, submitted earlier from this keyfile');
+        '${clipForMessage(pending.enrollmentId)}$filed');
   } else {
     pending = await Atsign(atSign).enroll(
         otp: otp,
@@ -782,6 +986,11 @@ Future<AtClient> enrolDevice({
         secondaryAddressFinder: settings.secondaryAddressFinder);
   }
   stdout.writeln('Enrollment ID: ${pending.enrollmentId}');
+  final giveUp = cancelCommand(atSign,
+      keyfile: atKeysFilePath,
+      passphraseGiven: settings.passPhrase?.isNotEmpty ?? false);
+  stderr.writeln('To give the request up instead, stop this program and '
+      'run $giveUp');
   final narration = pending.progress.listen(printProgress);
   try {
     final client = await pending.client(preference,
@@ -795,6 +1004,77 @@ Future<AtClient> enrolDevice({
   } finally {
     await narration.cancel();
   }
+}
+
+/// `at_activate cancel`: gives up the pending enrollment request the keyfile
+/// `-k` names holds, as [cancelPending] does, and answers the exit code.
+@visibleForTesting
+Future<int> cancel(ArgResults argResults,
+    {required String program, required String? programVersion}) async {
+  if (!argResults.wasParsed(AuthCliArgs.argNameAtKeys)) {
+    throw ArgumentError('The -k option is mandatory for the "cancel" command');
+  }
+  return cancelPending(
+      atSign: AtUtils.fixAtSign(argResults[AuthCliArgs.argNameAtSign]),
+      settings: enrollerSettingsFrom(argResults,
+          program: program,
+          programVersion: programVersion,
+          announcePosture: false));
+}
+
+/// Gives up the pending enrollment request the keyfile [settings] names holds
+/// for [atSign], removing its keys from that keyfile, and answers the exit
+/// code: 0 once the request is gone, 1 when the keyfile holds none or holds
+/// live keys, which it never removes.
+///
+/// It sends nothing, so the request stays on the atServer for the atSign's
+/// manager to deny, or to revoke if it was approved meanwhile.
+@visibleForTesting
+Future<int> cancelPending(
+    {required String atSign, required EnrollerSettings settings}) async {
+  final keys = settings.keysFor(atSign);
+  final store = theAtKeysStore(keys.describeSource(atSign));
+
+  final pending = await Atsign(atSign).resumeEnrollment(
+      keys: keys,
+      preference: settings.preference,
+      lookUps: settings.lookUps,
+      secondaryAddressFinder: settings.secondaryAddressFinder);
+  if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
+  if (pending == null) {
+    stderr.writeln(chalk.brightRed('$atSign has no pending enrollment request '
+        'in $store, so there is nothing to cancel.'));
+    return 1;
+  }
+  await pending.cancel();
+  // NOTE: read again: an approval another process filed after the first read
+  // is kept, and cancel does not say so.
+  if (await _holdsLiveKeys(keys, atSign)) return _refuseLiveKeys(atSign, store);
+  stdout.writeln('${chalk.green('[Success]')} Enrollment '
+      '${clipForMessage(pending.enrollmentId)} of $atSign is cancelled, and '
+      'its keys are removed from $store.');
+  stdout.writeln('The request is still on the atServer: the manager of '
+      '$atSign can deny it, or revoke it if they approved it already.');
+  return 0;
+}
+
+/// Whether [keys] hold live keys for [atSign]; an absent keyfile holds none.
+Future<bool> _holdsLiveKeys(WrittenAtKeysIo keys, String atSign) async {
+  try {
+    return (await keys.read(atSign)).holdsAuthenticationMaterial;
+  } on AtKeysSourceAbsentException {
+    return false;
+  }
+}
+
+/// Says that [store] holds live keys for [atSign], which `cancel` leaves as
+/// they are, and answers the exit code.
+int _refuseLiveKeys(String atSign, String store) {
+  stderr.writeln(chalk.brightRed('${store.replaceFirst('the', 'The')} holds '
+      'live keys for $atSign, '
+      'which at_activate cancel never removes, so nothing is changed. The '
+      "manager of $atSign can revoke this device's enrollment."));
+  return 1;
 }
 
 @visibleForTesting
@@ -825,8 +1105,9 @@ Future<void> outputOtp(ArgResults argResults, AtClient atClient) async {
 }
 
 /// Only usable if there are atKeys already available.
-/// All commands available same as the CLI as a whole, except for
-/// 'onboard' and 'enroll'
+/// All commands available same as the CLI as a whole, except for those that
+/// run without the session's client: 'onboard', 'enroll', 'cancel',
+/// 'status', 'decrypt' and 'interactive' itself.
 Future<void> interactive(ArgResults argResults, AtClient atClient) async {
   const String exitHint =
       'Type "exit" or "quit" to end the interactive session.';
@@ -894,6 +1175,7 @@ Future<void> interactive(ArgResults argResults, AtClient atClient) async {
         case AuthCliCommand.interactive:
         case AuthCliCommand.status:
         case AuthCliCommand.enroll:
+        case AuthCliCommand.cancel:
         case AuthCliCommand.decrypt:
           stderr.writeln('The "${cliCommand.name}" command'
               ' may not be used in interactive session');
@@ -983,22 +1265,30 @@ Future<void> list(ArgResults ar, AtClient atClient,
   stdout.write('Anchored'.padRight(26));
   stdout.writeln('Namespaces');
   for (final e in records) {
-    stdout.writeln('${(e.enrollmentId ?? '').padRight(38)}'
-        '${(e.status ?? '').padRight(10)}'
-        '${(e.appName ?? '').padRight(20)}'
-        '${(e.deviceName ?? '').padRight(38)}'
+    stdout.writeln('${clipForMessage(e.enrollmentId ?? '').padRight(38)}'
+        '${clipForMessage(e.status ?? '').padRight(10)}'
+        '${clipForMessage(e.appName ?? '').padRight(20)}'
+        '${clipForMessage(e.deviceName ?? '').padRight(38)}'
         '${_describeKeysExpiry(e.apkamKeysExpiryDuration).padRight(14)}'
         '${(e.expiresAt?.toIso8601String() ?? '-').padRight(26)}'
-        '${(await _describeAnchoring(e, anchoring)).padRight(26)}'
-        '${e.namespace}');
+        '${clipForMessage(await _describeAnchoring(e, anchoring)).padRight(26)}'
+        '${_describeNamespaces(e.namespace)}');
   }
+}
+
+/// [namespaces] as a row shows them, `{namespace: access, ...}`, each
+/// namespace and access escaped and clipped by [clipForMessage].
+String _describeNamespaces(Map<String, dynamic>? namespaces) {
+  if (namespaces == null) return 'null';
+  final shown = namespaces.entries
+      .map((n) => '${clipForMessage(n.key)}: ${clipForMessage('${n.value}')}');
+  return '{${shown.join(', ')}}';
 }
 
 /// Whether [e]'s keys are anchored, as a row shows it: `anchored`,
 /// `unsigned`, or the verdict for a key that fails followed by its kid; `-`
 /// for an enrollment that is not approved, and `?` when it could not be read.
-Future<String> _describeAnchoring(
-    Enrollment e,
+Future<String> _describeAnchoring(Enrollment e,
     Future<ChainResult> Function(String enrollmentId) anchoring) async {
   final id = e.enrollmentId;
   if (id == null || e.enrollmentStatus != EnrollmentStatus.approved) {
@@ -1091,16 +1381,17 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
   // Iterate through the requests, approve each one
   for (final er in toApprove) {
     final eId = er.enrollmentId!;
-    stdout.writeln('Approving enrollmentId $eId'
-        ' with appName "${er.appName}"'
-        ' and deviceName "${er.deviceName}"');
+    final shownId = clipForMessage(eId);
+    stdout.writeln('Approving enrollmentId $shownId'
+        ' with appName "${clipForMessage('${er.appName}', quote: '"')}"'
+        ' and deviceName "${clipForMessage('${er.deviceName}', quote: '"')}"');
     if (warnsOfLegacyExchange && _atLegacyKeyExchange(er)) {
-      stderr.writeln('Warning: $eId asks at the legacy key exchange, so '
+      stderr.writeln('Warning: $shownId asks at the legacy key exchange, so '
           'approving it conveys none of ${atClient.getCurrentAtSign()}\'s '
           'namespace keys. Run legacy, it reads none of the atSign\'s '
           'post-quantum data; run at pqReady or above, it re-enrolls at its '
           'first start and asks for them. To convey them, revoke it with '
-          '`at_activate revoke -a ${atClient.getCurrentAtSign()} -i $eId` '
+          '`at_activate revoke -a ${atClient.getCurrentAtSign()} -i $shownId` '
           'and request again with --posture pqReady. Approving as asked.');
     }
     // NOTE: approving is also when this atSign's secrets are sealed to the new
@@ -1108,10 +1399,11 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     final record = await atClient.enrollments.approve(eId);
     final expiresAt = record.expiresAt;
     stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
-        ? 'Approved $eId, but it has since been revoked'
+        ? 'Approved $shownId, but it has since been revoked'
         : expiresAt == null
-            ? 'Approved $eId'
-            : 'Approved $eId, which expires at ${expiresAt.toIso8601String()}');
+            ? 'Approved $shownId'
+            : 'Approved $shownId, which expires at '
+                '${expiresAt.toIso8601String()}');
 
     approved++;
 
@@ -1179,19 +1471,27 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
 
   final stream = atClient.notificationService.subscribe(
       regex: r'.*\.new\.enrollments\.__manage', shouldDecrypt: false);
+  final atSign = atClient.getCurrentAtSign()!;
 
   Future<void> approveIfMatching(AtNotification n) async {
+    if (n.from.toAtsign() != atSign.toAtsign()) {
+      stderr.writeln('Ignoring notification ${clipForMessage(n.key)} from '
+          '"${clipForMessage(n.from, quote: '"')}": only $atSign announces '
+          'its own enrollment requests');
+      return;
+    }
     String eId = n.key.substring(0, n.key.indexOf('.'));
+    final shownId = clipForMessage(eId);
 
     final er = jsonDecode(n.value ?? '');
     if (er is! Map || er['appName'] is! String || er['deviceName'] is! String) {
-      stderr.writeln('Ignoring notification ${n.key}, which is not an '
-          'enrollment request naming an appName and a deviceName');
+      stderr.writeln('Ignoring notification ${clipForMessage(n.key)}, which '
+          'is not an enrollment request naming an appName and a deviceName');
       return;
     }
-    stdout.writeln('Got enrollment request ID $eId'
-        ' with appName "${er['appName']}"'
-        ' and deviceName "${er['deviceName']}"');
+    stdout.writeln('Got enrollment request ID $shownId'
+        ' with appName "${clipForMessage(er['appName'], quote: '"')}"'
+        ' and deviceName "${clipForMessage(er['deviceName'], quote: '"')}"');
 
     // check the request matches our params
     String appName = er['appName'];
@@ -1208,10 +1508,10 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       final record = await atClient.enrollments.approve(eId);
       final expiresAt = record.expiresAt;
       stdout.writeln(record.enrollmentStatus == EnrollmentStatus.revoked
-          ? 'Approval successful, but $eId has since been revoked'
+          ? 'Approval successful, but $shownId has since been revoked'
           : expiresAt == null
               ? 'Approval successful.'
-              : 'Approval successful; $eId expires at '
+              : 'Approval successful; $shownId expires at '
                   '${expiresAt.toIso8601String()}');
 
       // increment approved count
@@ -1240,11 +1540,11 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       await approveIfMatching(n);
     } catch (e) {
       stderr.writeln('Could not act on enrollment request notification '
-          '${n.key}: $e');
+          '${clipForMessage(n.key)}: ${clipForMessage('$e')}');
     }
   }, onError: (Object e) {
     stderr.writeln('The enrollment request notifications reported an '
-        'error: $e');
+        'error: ${clipForMessage('$e')}');
   });
 
   // await future then cancel the subscription
@@ -1364,9 +1664,13 @@ Future<void> passPhraseDecryptAtKeys(ArgResults ar) async {
 
 /// What `onboard` and `enroll` are told, under the posture an enroller
 /// command runs at; the posture is final on a preference, so it is fixed at
-/// construction.
+/// construction. With [announcePosture] false, at_client's default is taken
+/// without saying so, for a command no posture changes.
 @visibleForTesting
-EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
+EnrollerSettings enrollerSettingsFrom(ArgResults ar,
+    {required String program,
+    required String? programVersion,
+    bool announcePosture = true}) {
   final atSign = AtUtils.fixAtSign(ar[AuthCliArgs.argNameAtSign]);
 
   // rootServer is now an alias of root-server, ArgParser handles both automatically
@@ -1382,16 +1686,18 @@ EnrollerSettings enrollerSettingsFrom(ArgResults ar) {
   }
 
   final enroller = AuthCliArgs.postureForEnroller(ar);
-  if (enroller.notice != null) {
+  if (announcePosture && enroller.notice != null) {
     stderr.writeln('${chalk.blue('[Information]')} ${enroller.notice}');
   }
   return EnrollerSettings(
-      AuthCliArgs.preferenceUnder(enroller.posture)
+      namedAs(program, programVersion,
+          AuthCliArgs.preferenceUnder(enroller.posture))
         ..rootDomain = rootDomain.rootDomain
         ..rootPort = rootDomain.rootPort
         ..cramSecret = ar[AuthCliArgs.argNameCramSecret],
       atKeysFilePath: ar[AuthCliArgs.argNameAtKeys] ??
-          getDefaultAtKeysFilePath(getHomeDirectory(throwIfNull: true)!, atSign),
+          getDefaultAtKeysFilePath(
+              getHomeDirectory(throwIfNull: true)!, atSign),
       passPhrase: ar[AuthCliArgs.argNamePassPhrase],
       registrarUrl: ar[AuthCliArgs.argNameRegistrarFqdn],
       registrarApiKey: Platform.environment[registrarApiKeyVariable]);
@@ -1425,14 +1731,34 @@ class EnrollerSettings {
   AtClientStorage storageFor(String atSign) =>
       CliKeys.storageFor(atSign, program: commandNamespace, path: storagePath);
 
-  AtLookUpFactory get lookUps => lookUpsFor(preference.rootDomain);
+  AtLookUpFactory get lookUps => secureSocketLookUps();
 
-  SecondaryAddressFinder get secondaryAddressFinder => _atDirectoryOf(preference);
+  SecondaryAddressFinder get secondaryAddressFinder =>
+      _atDirectoryOf(preference);
 }
 
-/// The namespace at_activate's clients run under, and the program its stores
-/// are kept for.
+/// The namespace at_activate's clients run under, the program its stores are
+/// kept for, and the app they name to their atServer.
 const String commandNamespace = 'at_activate';
+
+/// The program at_register runs at_activate's onboarding under.
+const String registerProgram = 'at_register';
+
+/// The programs at_client_cli ships, which name its version when given none.
+const Set<String> _ownPrograms = {commandNamespace, registerProgram};
+
+/// Changes [preference] to name [program] at [version] as the app on every
+/// `from:` its clients send to authenticate, and returns it.
+///
+/// With no [version], at_activate and at_register name at_client_cli's
+/// version, and any other program names none, so `unknown` is sent.
+@visibleForTesting
+AtClientPreference namedAs(
+        String program, String? version, AtClientPreference preference) =>
+    preference
+      ..atClientParticulars.appName = program
+      ..atClientParticulars.appVersion =
+          version ?? (_ownPrograms.contains(program) ? packageVersion : null);
 
 /// The atDirectory [preference] names, asked over TLS.
 SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
@@ -1446,10 +1772,11 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 ///
 /// [rootDomain] is the atDirectory as `host:port`, `root.atsign.org` when
 /// null; one of the form `proxy:host:port` sends every connection through
-/// that proxy, as [lookUpsFor] does. The connection is given
-/// [maxConnectAttempts] tries, three seconds apart, to come online; a client
-/// the atServer refuses, or that is still offline after that, is stopped and
-/// an [UnAuthenticatedException] says so.
+/// that proxy, and at_lookup names the atSign first on each connection to it.
+/// Keys it cannot use throw [AtKeysUnusableException] before it connects. The
+/// connection is given [maxConnectAttempts] tries, three seconds apart, to
+/// come online; a client the atServer refuses, or that is still offline after
+/// that, is stopped and an [UnAuthenticatedException] says so.
 ///
 /// [waitForPqStartup] holds the call until the client's post-quantum startup
 /// has finished, for at most 30 seconds; a command that reads what that
@@ -1461,8 +1788,41 @@ SecondaryAddressFinder _atDirectoryOf(AtClientPreference preference) =>
 /// `~/.atsign/storage/<atSign>/at_activate/<milliseconds>` (under `TEMP` on
 /// Windows), which at_activate deletes when its command ends, except on
 /// Windows, and nothing else deletes.
+///
+/// [appName] and [appVersion] name the calling program on its `from:`;
+/// without them it is named after its program file, at version `unknown`.
 Future<AtClient> createAtClient(
-    {required String atSign,
+        {required String atSign,
+        String? atKeysFilePath,
+        String? rootDomain,
+        String? passPhrase,
+        PqPosture? posture,
+        bool waitForPqStartup = true,
+        int maxConnectAttempts = 5,
+        String? appName,
+        String? appVersion}) =>
+    _commandClient(
+        program: null,
+        programVersion: null,
+        appName: appName,
+        appVersion: appVersion,
+        atSign: atSign,
+        atKeysFilePath: atKeysFilePath,
+        rootDomain: rootDomain,
+        passPhrase: passPhrase,
+        posture: posture,
+        waitForPqStartup: waitForPqStartup,
+        maxConnectAttempts: maxConnectAttempts);
+
+/// [createAtClient]'s client, whose `from:` names [program] as [namedAs]
+/// names it when [program] is set, and [appName] at [appVersion] when it is
+/// not.
+Future<AtClient> _commandClient(
+    {required String? program,
+    required String? programVersion,
+    String? appName,
+    String? appVersion,
+    required String atSign,
     String? atKeysFilePath,
     String? rootDomain,
     String? passPhrase,
@@ -1482,6 +1842,13 @@ Future<AtClient> createAtClient(
     ..namespace = commandNamespace
     ..rootDomain = parsedRootDomain.rootDomain
     ..rootPort = parsedRootDomain.rootPort;
+  if (program != null) {
+    namedAs(program, programVersion, preference);
+  } else {
+    preference.atClientParticulars
+      ..appName = appName
+      ..appVersion = appVersion;
+  }
 
   stderr.write(chalk.brightBlue('\r\x1b[KConnecting ... '));
   final AtClient client;
@@ -1492,7 +1859,7 @@ Future<AtClient> createAtClient(
         preference: preference,
         storage: CliKeys.storageFor(atSign,
             program: commandNamespace, path: storageDir!.path),
-        lookUps: lookUpsFor(preference.rootDomain),
+        lookUps: secureSocketLookUps(),
         secondaryAddressFinder: _atDirectoryOf(preference),
         serviceFactory: ServiceFactoryWithNoOpSyncService());
   } on AtOpenRefusedException catch (e) {

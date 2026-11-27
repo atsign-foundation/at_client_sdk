@@ -5,6 +5,7 @@ import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
 import 'package:at_client/src/preference/posture_floor.dart'
     show raisedDataSigning, strongerOf;
+import 'package:at_client/src/preference/notification_replay.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -172,7 +173,7 @@ class AtClientPreference {
       ..monitorSilenceTimeout = monitorSilenceTimeout
       ..monitorAutoStart = monitorAutoStart
       ..expiryCheckTimeInterval = expiryCheckTimeInterval
-      ..fetchOfflineNotifications = fetchOfflineNotifications
+      ..notificationReplay = notificationReplay
       ..atClientParticulars = atClientParticulars
       ..remoteLocalPref = remoteLocalPref
       ..crypto = crypto
@@ -375,24 +376,47 @@ class AtClientPreference {
   /// Please provide duration ONLY in minutes e.g. Duration(minutes: x) [x should be between 1 and 59]
   Duration expiryCheckTimeInterval = Duration(minutes: 10);
 
-  /// Fetch the notifications received while the client was offline, from the
-  /// last one it received; a store that has received none starts from when its
-  /// client first started, so a new device or a reinstall gets nothing sent
-  /// before it. Notifications are not a history: keep history in records.
-  /// Defaults to true.
+  /// Where the monitor's notification replay starts.
+  /// Defaults to [NotificationReplay.resume]: the last notification the store
+  /// holds, or the service's creation time when it holds none. Notifications
+  /// are not a history: keep history in records.
   ///
-  /// Set to false to ignore those. Notifications received since the client's
-  /// notification service was created are delivered once either way, including
-  /// any that arrived before its monitor connected.
-  bool fetchOfflineNotifications = true;
+  /// Notifications received since the notification service was created are
+  /// delivered once under every policy, including any that arrived before
+  /// the monitor connected.
+  ///
+  /// The service reads this once, when it first resolves its start. Changing
+  /// it afterwards does not affect that service; build a new notification
+  /// service to change policy.
+  NotificationReplay notificationReplay = const NotificationReplay.resume();
+
+  /// Alias of [notificationReplay]. Reads false only for connect. Setting false
+  /// selects connect; setting true selects resume only when the policy is
+  /// connect.
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  bool get fetchOfflineNotifications =>
+      notificationReplay != const NotificationReplay.connect();
+
+  @Deprecated('Set notificationReplay instead. '
+      'Use NotificationReplay.connect() for false and resume() for true.')
+  set fetchOfflineNotifications(bool value) {
+    if (!value) {
+      notificationReplay = const NotificationReplay.connect();
+    } else if (notificationReplay == const NotificationReplay.connect()) {
+      notificationReplay = const NotificationReplay.resume();
+    }
+  }
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  /// Set this to [RemoteLocalPref.remoteOnly]
-  /// if you require all data operations (get / put / delete) to be performed
-  /// on the remote atServer rather than on local storage. (When operations are
-  /// performed locally, we depend on sync to get eventual consistency between
-  /// local and remote.
+  /// Where a get, getMeta, put, putMeta, delete or key scan goes when the
+  /// call leaves `useRemoteAtServer` unset: local storage, which sync keeps in
+  /// step with the atServer, or the atServer itself.
+  ///
+  /// A `local:` key always stays on the device, an uncached key another
+  /// Atsign owns is always looked up on the atServer, and a notification
+  /// always goes to the atServer, whatever this says.
   RemoteLocalPref remoteLocalPref = RemoteLocalPref.localOnly;
 
   /// Configures the crypto providers used for encrypted puts and reads.
@@ -451,20 +475,16 @@ class AtClientPreference {
   final List<String> keyEstablishmentAlgorithms;
 }
 
-/// Default preference on how to handle get, put and delete requests with
-/// regards to use of local storage vs the remote atServer.
+/// Where an operation goes when the call leaves `useRemoteAtServer` unset;
+/// see [AtClientPreference.remoteLocalPref].
 enum RemoteLocalPref {
   /// The default - operate on local storage, and rely on the background
   /// sync processing to push changes to the remote atServer.
   localOnly,
 
-  // /// Operate on remote first. If there is an exception, rethrow it back to
-  // /// application code. If remote operation was successful, then perform the
-  // /// operation on local storage.
-  // remoteFirst,
-  //
-  /// Operate on remote only - i.e. do not interact with local storage at all.
-  /// Note that if the application is syncing, then the change will be pulled
-  /// to local from remote as part of the sync process.
+  /// Send the operation to the atServer, without reading or writing local
+  /// storage for it; sync, when it runs, still pulls the change into local
+  /// storage. A call that sets `useRemoteAtServer` to false still uses local
+  /// storage.
   remoteOnly,
 }

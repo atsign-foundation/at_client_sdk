@@ -30,8 +30,7 @@
 /// shared constant would move them in lockstep.
 library;
 
-import 'dart:convert' show jsonEncode;
-
+import 'package:at_client/src/signing/envelope_signature.dart' show quotedClaim;
 import 'package:at_client/src/util/at_key_grammar.dart'
     show isAtKeyAtSign, isAtKeyNamespace, isIdShaped;
 import 'package:at_commons/at_commons.dart'
@@ -326,7 +325,7 @@ String requireRecordAtSign(String value, String field) =>
 String _requireRecordField(
     bool Function(String) shaped, String value, String field, String what) {
   if (shaped(value)) return value;
-  throw AtDecryptionException('a record names ${jsonEncode(value)} as its '
+  throw AtDecryptionException('a record names ${quotedClaim(value)} as its '
       '$field, which is not $what an atKey can carry');
 }
 

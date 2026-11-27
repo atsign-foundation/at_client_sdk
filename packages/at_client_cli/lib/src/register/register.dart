@@ -10,6 +10,7 @@ import 'package:at_client_cli/src/register/register_api_task.dart';
 
 import 'package:at_client_cli/src/register/onboarding_util.dart';
 import 'package:at_client_cli/src/register/registrar_api_constants.dart';
+import 'package:meta/meta.dart';
 
 ///Class containing logic to register a free atsign to email provided
 ///through [args] by utilizing methods defined in [RegisterUtil]
@@ -75,17 +76,22 @@ class Register {
         .add(ValidateOtp())
         .start();
 
-    final activated = await auth_cli.main(
-      [
-        'onboard',
-        '-a',
-        params['atsign']!,
-        '-c',
-        params['cramkey']!,
-      ],
-    );
+    final activated =
+        await onboardRegistered(params['atsign']!, params['cramkey']!);
     if (activated != 0) exit(activated);
   }
+}
+
+/// Activates [atSign] with [cramKey] as `at_activate onboard` does, run as
+/// at_register, and answers its exit code; [onboard] runs that command line,
+/// at_activate's own when it is null.
+@visibleForTesting
+Future<int> onboardRegistered(String atSign, String cramKey,
+    {Future<int> Function(List<String> arguments, {required String program})?
+        onboard}) {
+  final run = onboard ?? auth_cli.main;
+  return run(['onboard', '-a', atSign, '-c', cramKey],
+      program: auth_cli.registerProgram);
 }
 
 ///class that handles multiple tasks of type [RegisterApiTask]

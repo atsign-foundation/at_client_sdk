@@ -10,7 +10,9 @@ for atKeys, and Flutter-specific extensions — so a new Flutter app can
 go from "user has an atSign" to "`AtClient` in hand" with a few widget
 calls. One import covers an app:
 `package:at_client_flutter/at_client_flutter.dart` re-exports
-`at_client`, and nothing here asks an app to import `at_auth`.
+`at_client`, and nothing here asks an app to import `at_auth`. Import only
+that barrel, and do not add at_client to the app's pubspec. A test may also
+import `package:at_client_flutter/testing.dart`, for `TestEnvelopeSigner`.
 
 Supports mobile, desktop, and IoT targets via Flutter. **Flutter
 web is not supported** — atSign onboarding and key handling rely
@@ -29,6 +31,7 @@ implementations today.
 | Manage enrollments               | `client.enrollments` — list, approve, deny, revoke, passcodes (from `at_client`)                       |
 | Keychain read / write / delete   | `KeychainStorage` ([`lib/src/keychain/keychain_storage.dart`](lib/src/keychain/keychain_storage.dart)) |
 | Flutter helpers on core types    | `import 'package:at_client_flutter/extensions.dart';`                                                  |
+| Verify a signed envelope offline | `verifySignedEnvelope(envelope, signer: publishedApsk)` → `EnvelopeVerified` or `EnvelopeRefused` (experimental) |
 
 ## Examples
 
@@ -41,8 +44,9 @@ example app. Read these rather than copying snippets from here:
   `AtClient` in hand. If you only read one file, read this one.
 - [`example/lib/apkam_example.dart`](example/lib/apkam_example.dart) —
   the approve/deny side of APKAM (e.g. a "manager" device approving a
-  new phone's enrollment request), with a simulated requester built on
-  `client.enrollments.otp()` and `Atsign.enroll`.
+  new phone's enrollment request), with a passcode from
+  `client.enrollments.otp()` that the new device quotes to request
+  enrollment.
 - [`example/lib/main.dart`](example/lib/main.dart) — minimal host app
   wiring the two flows above into navigation.
 
@@ -146,6 +150,7 @@ What a Flutter app should do:
    either way. An offline client still serves what it holds locally and reports
    on `client.connection.changes` when the atServer is reached; a refused one
    (revoked, an unapproved enrollment) is the state an app asks the user about.
+   Keys it cannot use fail at once, and the dialog says why.
 
 > **Note:** the activation has no cancellation token, so the 5-minute poll runs
 > to completion or timeout even if the user navigates away — a "Cancel" button
@@ -186,7 +191,8 @@ copied into once the client is open — so a login from a `.atKeys` file
 populates the keychain for next time.
 
 `KeychainAtKeysIo` is a full `WrittenAtKeysIo`: as well as `read` and
-`write` it implements `flush`, and inherits `update`. That matters because
+`write` it implements `flush`, and overrides `update` to hold the
+keychain's write lock from its read to its write. That matters because
 the post-quantum paths add key material to the store as they run — a
 namespace key's private half, the atSign's signing-root private — and on
 Flutter this is the *default* store. Use `update` for any addition, never a
@@ -195,7 +201,8 @@ hand-rolled `read` → mutate → `flush`; see
 
 `write` is create-only, like every other `WrittenAtKeysIo`: it throws
 `AtKeysFileOverwriteException` if the atSign already has an entry. To
-persist a change to keys that are already stored, use `flush` or `update`.
+change keys that are already stored, use `update`; `flush` is only for a
+keyset that was not read from the keychain.
 `read` of an atSign the keychain does not hold throws
 `AtKeysSourceAbsentException`, as the file store does, which is how
 `Atsign.enroll` tells "no keys yet" from "keys this process cannot read".

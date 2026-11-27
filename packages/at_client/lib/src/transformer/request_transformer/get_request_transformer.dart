@@ -11,23 +11,20 @@ import 'package:at_commons/at_builders.dart';
 class GetRequestTransformer implements RequestTransformer<AtKey, VerbBuilder> {
   late final AtClient _atClient;
 
-  GetRequestTransformer(this._atClient);
+  /// The lookup's operation: `all` for the value and its metadata, `meta` for
+  /// the metadata alone.
+  final String operation;
+
+  GetRequestTransformer(this._atClient, {this.operation = 'all'});
 
   @override
   VerbBuilder transform(AtKey atKey, {RequestOptions? requestOptions}) {
     // Set sharedBy to currentAtSign if not set.
     atKey.sharedBy ??= _atClient.getCurrentAtSign();
     atKey.sharedBy = AtClientUtil.fixAtSign(atKey.sharedBy);
-    // Get the verb builder for the given atKey
-    VerbBuilder verbBuilder;
-    if (requestOptions != null) {
-      verbBuilder = LookUpBuilderManager.get(
-          atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
-          getRequestOptions: requestOptions as GetRequestOptions);
-    } else {
-      verbBuilder = LookUpBuilderManager.get(
-          atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!);
-    }
-    return verbBuilder;
+    return LookUpBuilderManager.get(
+        atKey, _atClient.getCurrentAtSign()!, _atClient.getPreferences()!,
+        getRequestOptions: requestOptions as GetRequestOptions?,
+        operation: operation);
   }
 }

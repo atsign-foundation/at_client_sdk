@@ -3,7 +3,7 @@ import 'package:at_client/at_client_io.dart';
 import 'package:at_client/memory.dart';
 import 'test_util.dart';
 import '../test_utils/no_keys.dart';
-import '../test_utils/transport.dart';
+import 'sample_transport.dart';
 
 void main() async {
   try {
@@ -15,7 +15,7 @@ void main() async {
           namespace: 'wavi',
           preference: preference,
           lookUps: secureSocketLookUps(),
-          secondaryAddressFinder: atDirectoryOf(preference),
+          secondaryAddressFinder: sampleAtDirectoryOf(preference),
           atKeysIo: noKeysFor(atsign),
           storage: InMemoryAtClientStorage(atSign: atsign)));
     var atClient = atClientManager.atClient;

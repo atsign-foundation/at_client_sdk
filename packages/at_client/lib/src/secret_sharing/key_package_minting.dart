@@ -401,6 +401,7 @@ class KeyPackageMinting with ApkamSigning {
             'keyPackage': signEnvelope(
               payload,
               type: EnvelopeType.keyPackage,
+              atSign: atClient.getCurrentAtSign()!,
               keys: await signingKeys,
             ).toJson(),
           },

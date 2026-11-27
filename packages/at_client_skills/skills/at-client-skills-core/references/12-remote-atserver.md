@@ -110,7 +110,9 @@ collection layer. Typical use: a stateless agent instance that pairs
 
 One subtlety: passing a request-options object overrides the preference with
 that object's `useRemoteAtServer` value — which defaults to `false`. So on a
-`remoteOnly` client, supply options only when you actually set the flag.
+`remoteOnly` client, supply options only when you actually set the flag. A
+`get` or `put` of a `local:` key never leaves the device, whatever the
+preference or option says.
 
 ---
 

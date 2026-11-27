@@ -1,0 +1,22 @@
+name: released_envelope_4_0_0
+publish_to: none
+description: >-
+  at_client 4.0.0, resolved from pub.dev, verifying the envelopes this tree
+  signs.
+version: 1.0.0
+
+# Deliberately NOT a workspace member: anything inside the workspace resolves
+# at_client by path, and this arm has to run what pub.dev ships. pubspec.lock
+# is committed, so its transitive set does not move under it.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # Exact: this arm stays on the release it names.
+  at_client: 4.0.0
+  at_auth: any
+  at_chops: any
+
+dev_dependencies:
+  test: ^1.25.0

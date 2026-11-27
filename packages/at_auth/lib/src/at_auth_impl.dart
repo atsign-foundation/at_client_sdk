@@ -5,6 +5,7 @@ import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
+import 'package:at_auth/src/auth/complete_activation.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/onboarding_mint.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -15,9 +16,9 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/at_keys_unusable.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_logger.dart';
@@ -45,12 +46,18 @@ class AtAuthImpl implements AtAuth {
   @override
   final AtLookupMuxable atLookUp;
 
+  /// What every `from:` this activation sends carries, as
+  /// `authenticatorFor` completes it.
+  final Map<String, dynamic> clientConfig;
+
   AtAuthImpl(
       {required this.atLookUp,
       this.cramAuthenticator,
       this.pkamAuthenticator,
-      AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      AtEnrollment? atEnrollment,
+      required this.clientConfig})
+      : atEnrollment =
+            atEnrollment ?? AtEnrollment.create(clientConfig: clientConfig);
 
   /// The keystore the authenticator should read, matching the precedence
   /// [authenticate] itself uses.
@@ -82,6 +89,14 @@ class AtAuthImpl implements AtAuth {
   /// Onboard a new atSign using CRAM
   /// Requires an AtOnboardingRequest and a cramSecret
   ///
+  /// Nothing is sent until the request's `atKeysIo` has been read and checked
+  /// with [WrittenAtKeysIo.checkWritable]: a missing or read-only `atKeysIo`
+  /// throws [AtAuthenticationException], keys already there are refused with
+  /// an [AtAuthenticationException] naming the source, and
+  /// any read failure other than [AtKeysSourceAbsentException] throws
+  /// [AtKeysUnusableException] with cause [AtKeysUnusableCause.unreadable],
+  /// naming the source.
+  ///
   /// returns an `AtOnboardingResponse` indicating success or failure of onboarding
   @override
   Future<AtOnboardingResponse> onboard(
@@ -92,23 +107,54 @@ class AtAuthImpl implements AtAuth {
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
 
-    //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    // NOTE: activation reads the keys source, and checks it can write it,
+    // before it sends the CRAM secret; only an absent source lets it go on.
+    final keysIo = atOnboardingRequest.atKeysIo;
     AtKeys? existingKeys;
     try {
-      existingKeys = await atOnboardingRequest.atKeysIo?.read(
-        atOnboardingRequest.atSign,
-      );
-    } catch (e) {
-      _logger.info(
-        'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
-      ); //swallow the error, we just want to know if keys exist or not
+      existingKeys = await keysIo?.read(atOnboardingRequest.atSign);
+    } catch (e, stackTrace) {
+      if (e is! AtKeysSourceAbsentException) {
+        Error.throwWithStackTrace(
+            AtKeysUnusableException.unreadable(atOnboardingRequest.atSign,
+                source: keysIo!.describeSource(atOnboardingRequest.atSign),
+                error: e),
+            stackTrace);
+      }
     }
 
     if (existingKeys != null) {
+      final source = keysIo!.describeSource(atOnboardingRequest.atSign);
       throw AtAuthenticationException(
-        'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
+        'atSign: ${atOnboardingRequest.atSign} is already onboarded: its keys '
+        'are ${whereKeysAre(source)}. Cannot perform onboarding again.',
       );
     }
+    // Onboarding mints key material and must persist it, so a writable store
+    // is required. There is no default: the core cannot assume a filesystem.
+    if (keysIo == null) {
+      throw AtAuthenticationException(
+          'onboarding needs somewhere to persist the key material it mints: '
+          'set AtOnboardingRequest.atKeysIo. On a platform with a '
+          'filesystem that is usually FileAtKeysIo() from '
+          'package:at_auth/at_auth_io.dart');
+    }
+    if (keysIo is! WrittenAtKeysIo) {
+      throw AtAuthenticationException(
+          'onboarding mints key material and must write it, but the AtKeysIo '
+          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
+          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
+    }
+    await keysIo.checkWritable(atOnboardingRequest.atSign);
+
+    // A supplied pair is judged before the atServer is contacted, so a bad
+    // one costs no connection and no CRAM login. The canonical pair the check
+    // returns is the one minted from.
+    final suppliedApkam = atOnboardingRequest.apkamKeyPair;
+    final checkedApkam = suppliedApkam == null
+        ? null
+        : await checkApkamKeyPair(
+            atOnboardingRequest.signingAlgoType, suppliedApkam);
 
     await validateAtServer(atOnboardingRequest);
     //1. cram auth
@@ -117,6 +163,7 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atSign,
       cramSecret,
       atLookUp,
+      clientConfig: clientConfig,
     );
     if (!cramAuthResult) {
       _addProgress(
@@ -129,24 +176,10 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
-    //2. generate key pairs. Onboarding mints key material and must persist
-    // it, so a writable store is required. There is no default: the core
-    // cannot assume a filesystem.
-    if (atOnboardingRequest.atKeysIo == null) {
-      throw AtAuthenticationException(
-          'onboarding needs somewhere to persist the key material it mints: '
-          'set AtOnboardingRequest.atKeysIo. On a platform with a '
-          'filesystem that is usually FileAtKeysIo() from '
-          'package:at_auth/at_auth_io.dart');
-    }
-    if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
-      throw AtAuthenticationException(
-          'onboarding mints key material and must write it, but the AtKeysIo '
-          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
-          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
-    }
+    //2. generate key pairs.
     final OnboardingMint mint = await mintOnboardingKeys(
         signingAlgo: atOnboardingRequest.signingAlgoType,
+        apkamKeyPair: checkedApkam,
         // Null resolves to the release default, not to false: legacy
         // material is retained until the ecosystem is PQ, not until this
         // atSign is.
@@ -156,6 +189,7 @@ class AtAuthImpl implements AtAuth {
     atLookUp.authenticator = authenticatorFor(
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
+      clientConfig: clientConfig,
     );
 
     //3. send onboarding enrollment
@@ -176,6 +210,7 @@ class AtAuthImpl implements AtAuth {
       await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
       atOnboardingRequest.atSign,
       enrollmentId: enrollmentIdFromServer,
+      clientConfig: clientConfig,
     );
 
     //4. Drop the CRAM-authenticated connection; the PKAM below opens another
@@ -202,7 +237,7 @@ class AtAuthImpl implements AtAuth {
           "onboarding",
           "PKAM authentication failed for atSign: ${atOnboardingRequest.atSign}",
           ProgressEventType.error);
-      throw AtAuthenticationException('Pkam auth failed - $e ');
+      throw AtAuthenticationException('Pkam auth failed - $e');
     }
 
     //6b. Store the keys
@@ -266,41 +301,10 @@ class AtAuthImpl implements AtAuth {
   }
 
   @override
-  Future<void> completeActivation() async {
-    final encryptionPublicKey = _atAuthKeys.defaultEncryptionPublicKey;
-    // Absent only when the caller opted out of legacy material. Publishing
-    // "null" would be worse than publishing nothing: a legacy peer would find
-    // a key, encrypt to it, and produce ciphertext nobody can ever read —
-    // whereas an absent publickey tells them plainly that this atSign has no
-    // legacy path.
-    if (encryptionPublicKey != null) {
-      UpdateVerbBuilder updateBuilder = UpdateVerbBuilder()
-        ..atKey = (AtKey()
-          ..key = 'publickey'
-          ..sharedBy = _atOnboardingRequest.atSign
-          ..metadata = (Metadata()
-            ..isPublic = true
-            ..ttr = -1))
-        ..value = encryptionPublicKey;
-      String? encryptKeyUpdateResult =
-          await atLookUp.executeVerb(updateBuilder);
-      _logger
-          .info('Encryption public key update result $encryptKeyUpdateResult');
-    } else {
-      _logger.info(
-          'No encryption keypair was minted for ${_atOnboardingRequest.atSign}, '
-          'so public:publickey is not published: a legacy peer cannot send to '
-          'this atSign, which is what mintLegacyMaterial:false asks for');
-    }
-
-    // Unconditional: the CRAM secret is a one-shot activation credential and
-    // leaving it in the keystore is a live path back into the atSign,
-    // whichever material was minted.
-    DeleteVerbBuilder deleteBuilder = DeleteVerbBuilder()
-      ..atKey = (AtKey()..key = AtConstants.atCramSecret);
-    String? deleteResponse = await atLookUp.executeVerb(deleteBuilder);
-    _logger.info('Cram secret delete response : $deleteResponse');
-  }
+  Future<void> completeActivation() => completeActivationOf(
+      atLookUp: atLookUp,
+      atSign: _atOnboardingRequest.atSign,
+      encryptionPublicKey: _atAuthKeys.defaultEncryptionPublicKey?.toString());
 
   Future<String> _sendOnboardingEnrollment(
       AtOnboardingRequest atOnboardingRequest,
@@ -400,7 +404,10 @@ class AtAuthImpl implements AtAuth {
   /// atServer answers.
   ///
   /// Retried until the request's overall deadline, then throws an
-  /// [AtTimeoutException] carrying the last failure.
+  /// [AtTimeoutException] carrying the last failure. A [StoppedException]
+  /// from a lookup its owner has stopped is thrown at once; the check meets
+  /// one only once the atDirectory has answered, so a stop while the
+  /// atDirectory fails still waits out the deadline.
   @override
   Future<void> validateAtServer(AuthRequest atRequest) async {
     // Floor the poll interval so a zero/tiny retryDelay can't hammer the network
@@ -436,6 +443,8 @@ class AtAuthImpl implements AtAuth {
 
         final check = await checkAtSignServer(atLookUp, atRequest.atSign,
             timeout: AtNetworkTimeouts.cap(deadline.difference(DateTime.now())));
+        final cause = check.cause;
+        if (cause is StoppedException) throw cause;
         switch (check.state) {
           case AtSignServerState.notInDirectory:
             throw AtException('atSign: ${atRequest.atSign} is not in the '
@@ -459,6 +468,8 @@ class AtAuthImpl implements AtAuth {
 
         validated = true;
         break; // Exit loop if no exception occurs
+      } on StoppedException {
+        rethrow;
       } catch (e) {
         lastError = e is _AtServerNotAnswering ? e.cause : e;
         if (e is _AtServerNotAnswering) {

@@ -103,7 +103,7 @@ class AtKeysAssurance {
         return candidate;
       }
     }
-    throw AtKeysValidationException('Unsupported value "$token" at $fieldName');
+    throw AtKeysValidationException('Unsupported value at $fieldName');
   }
 
   DateTime expectDateTime(Object? value, String fieldName) {
@@ -111,7 +111,7 @@ class AtKeysAssurance {
     try {
       return DateTime.parse(token);
     } on FormatException catch (e) {
-      throw AtKeysParseException('Malformed date at $fieldName: $e');
+      throw AtKeysParseException('Malformed date at $fieldName: ${e.message}');
     }
   }
 
@@ -156,7 +156,8 @@ class AtKeysAssurance {
   /// reader meeting a document with two live enrollments gets a refusal
   /// from here rather than a silently chosen one.
   void validateKeyMaterials(List<CryptographicMaterial> materials) {
-    final typesByEnrollment = <String, Set<String>>{};
+    final typesByEnrollment = <String,
+        Set<(CryptographicMaterialRole, CryptographicMaterialAlgorithm)>>{};
     for (final material in materials) {
       if (material.status != CryptographicMaterialStatus.active) {
         continue;
@@ -166,11 +167,12 @@ class AtKeysAssurance {
         continue;
       }
       final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-      if (!types.add('${material.role}/${material.algorithm}')) {
-        throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one active '
-            '${material.role} key material for '
-            '${material.algorithm}');
+      // Keyed by the pair itself, not by a `role/algorithm` string: both are
+      // open tokens and may contain '/' themselves, so concatenating them
+      // aliases `x/y` + `z` with `x` + `y/z`.
+      if (!types.add((material.role, material.algorithm))) {
+        throw AtKeysEnrollmentException('an enrollment holds more than one '
+            'active key material of one role and algorithm');
       }
     }
   }
@@ -308,7 +310,12 @@ class AtKeysAssurance {
         _assertSame(_asAtsign(existing['atsign']),
             _asAtsign(atsign?.toString()), 'map.atsign');
       } else if (!emptied) {
-        _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
+        // `AtKeys.fromJson` normalizes the document's atsign through
+        // `toAtsign`, and `AtKeys.toJson` writes the already-normalized
+        // value, so the stored side can be spelled differently from the
+        // candidate while naming the same atSign.
+        _assertSame(_asAtsign(existing['atsign']),
+            _asAtsign(candidate['atsign']), 'map.atsign');
         _assertSame(existing['version'], candidate['version'], 'map.version');
       } else if (atsign != null && existing['atsign'] != null) {
         _assertSame(_asAtsign(existing['atsign']), _asAtsign(atsign.toString()),

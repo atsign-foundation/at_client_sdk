@@ -97,7 +97,7 @@ void main() {
         auth: any(named: 'auth'))).thenAnswer((_) async => 'data:[]');
 
     await AtClientImpl.create(atSign, 'buzz', preferenceAt(posture, atSign),
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         remoteSecondary: mockRemote,
         atKeysIo: keysIo,

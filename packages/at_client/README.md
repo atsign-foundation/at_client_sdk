@@ -26,8 +26,8 @@ Upgrading from 3.x: see
 
 | If you're building…                                     | Start with                                                                                                         |
 |---------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools             |
-| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported)            |
+| A **Dart CLI, daemon, server or IoT program**           | [`at_client_cli`](../at_client_cli) — `CLIBase`, `CliKeys` and the `at_activate` / `at_register` tools. Import only its barrel; do not add at_client to your pubspec |
+| A **Flutter app** (mobile/desktop/IoT)                  | [`at_client_flutter`](../at_client_flutter) — onboarding / APKAM / keychain widgets (web not supported). Import only its barrel; do not add at_client to your pubspec |
 | A **platform package**, or a program that passes every dependency itself | this package                                                                      |
 | **Understanding** the atSign lifecycle                  | [`at_auth`](../at_auth) — platform-neutral onboarding / authentication core with a detailed lifecycle writeup      |
 
@@ -36,9 +36,15 @@ Upgrading from 3.x: see
 The `AtClient` interface ([`lib/src/client/at_client_spec.dart`](lib/src/client/at_client_spec.dart))
 is the main entry point once authentication is complete.
 
-- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, eventSource, cleanupOrphansOnCreation})` —
+- `collection<T>(namespace, defaultExpiration, {fromJson, typeTag, writeTypeTag, eventSource, cleanupOrphansOnCreation})` —
   returns a `Future<AtCollection<T>>`. `fromJson` and `typeTag` travel
-  together; pass either both or neither. AtCollections hide the
+  together; pass either both or neither. `writeTypeTag` can be passed
+  without a factory to stamp the items an untyped collection writes; it must
+  be non-blank, and must equal `typeTag` when both are given (else
+  `ArgumentError`). Reopening an open namespace on the same client so that a
+  new `T` would be stamped with another tag (`typeTag`, else the factory tag
+  registered for `T`, else `writeTypeTag`, else `n/a`) throws
+  `ArgumentError`. The namespace is folded to lower case. AtCollections hide the
   low-level keystore plumbing and let you work directly with your own
   domain objects and types (see [Collections](#collections) below).
 - `notificationService` — fire-and-forget and pub/sub messaging
@@ -173,8 +179,8 @@ final pending = await Atsign('@alice').enroll(otp: otp, app: 'todos',
     secondaryAddressFinder: atDirectory);
 final enrolled = await pending.client(preference,
     storage: storage());                                 // waits for approval
-final resumed = await Atsign('@alice').resumeEnrollment(app: 'todos',
-    device: 'phone', keys: keys, preference: preference, lookUps: lookUps,
+final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
+    preference: preference, lookUps: lookUps,
     secondaryAddressFinder: atDirectory);
 
 // Approve, from an enrolled client: the atSign's roster and passcodes.
@@ -215,15 +221,17 @@ final client = await Atsign('@alice').open(
     preference: AtClientPreference(posture: PqPosture.pqActive)..namespace = 'todos',
     secondaryAddressFinder: CacheableSecondaryAddressFinder('root.atsign.org', 64),
     lookUps: secureSocketLookUps(
-        config: SecureSocketConfig()..pathToCerts = '/certs',
-        onConnect: (connection) => connection.sendSync('from:@alice\n')));
+        config: SecureSocketConfig()..pathToCerts = '/certs'));
 ```
 
 `lookUps` builds every connection the client opens. `secureSocketLookUps`
 connects with TLS on TCP, taking a `SecureSocketConfig` and an `onConnect`
-run on each new connection before anything else (a proxy that routes on
-`from:` is what that is for). A factory of your own can hand back any
-`AtLookUp`.
+run on each new connection before anything else. Behind a proxy that routes
+on the atSign, set the preference's `rootDomain` to `proxy:<host>` and its
+`rootPort` to the proxy's port, and give the address finder the same two:
+at_lookup then sends `from:<atSign>` first on every connection itself, so
+`onConnect` must not send it too. A factory of your own can hand
+back any `AtLookUp`.
 
 Every client keeps local storage, even if only in memory: `storage` is
 required, and `InMemoryAtClientStorage` keeps nothing on disk.
@@ -234,11 +242,18 @@ needs types at_client doesn't export, so raise a
 for it.
 
 `Atsign.authenticatesAs(keys: ..., rootDomain: ..., lookUps: ...,
-secondaryAddressFinder: ...)` answers which enrollment a keys store
-authenticates as without building a client.
+secondaryAddressFinder: ..., particulars: ...)` answers which enrollment a
+keys store authenticates as without building a client.
 Flutter apps get the same verbs behind dialogs in
 [`at_client_flutter`](../at_client_flutter); CLI apps get them behind
 [`at_client_cli`](../at_client_cli)'s `CLIBase` and `at_activate` commands.
+
+Every connection that authenticates names the app to its atServer; one that
+does not, such as a public lookup or a proxy's preamble, sends no
+clientConfig. Set `AtClientPreference.atClientParticulars.appName` and
+`appVersion`; a client whose preference sets no `appName` is named after its
+program file, or "unknown" where there is none, and logs a warning when it
+starts.
 
 `AtClientManager.setCurrentAtSign` and `fromAuthSession`, which built the
 current client for the caller, are removed in 4.0: build the client with a
@@ -449,19 +464,32 @@ For Flutter, the canonical reference app is
 through the mobile / desktop widget stack the way a shipping app
 would use it.
 
-**Key-length note.** atServer keys are capped at 255 chars and
-atSigns at 55. The absolute worst-case wire shape is the
-cached-copy form
-`cached:<other>:<itemId>.<composedNs>@<self>`, which fixes the
-wrapper overhead at 118 chars (`cached:` + 55 + `:` + 55) and
-leaves **137 chars** for everything inside (item id + every
-level of namespace). With 8-char auto-generated ids and 1 char
-for the separator, **`composedNs` is capped at 128 chars** — a
-budget enforced by `subCollection(...)` at construction time
-with a hard `ArgumentError`, so oversized keys never reach the
-wire. Plenty of room: with 1-char collection / sub-collection
-names and a 15-char application namespace, the theoretical
-ceiling is **11 levels (root + 10 nested sub-collections)**.
+**Key-length note.** An atServer key is at most 248 characters, and the
+cached copy a recipient's atServer keeps at most 255. An Atsign is at most
+56 characters including its `@`. The longest shape an item's key takes is
+that cached copy, `cached:<other>:<itemId>.<composedNs>@<self>`, whose
+wrapper is 120 characters when both Atsigns are that long, leaving 135 for
+`<itemId>.<composedNs>`. `subCollection(...)` caps `composedNs` at 128
+characters with an `ArgumentError` at construction, so an 8-character
+generated id fits while each Atsign is at most 55 characters with its `@`.
+An Atsign of emoji takes up to 111 UTF-16 code units, so no fixed cap
+covers every pair; a key that does not fit is refused when it is written.
+Plenty of room in practice: with 1-char collection / sub-collection names
+and a 15-char application namespace, the ceiling is **11 levels (root + 10
+nested sub-collections)**.
+
+## Verifying a signed envelope offline
+
+`verifySignedEnvelope`, which is experimental, checks an application
+envelope from `wrapAndSign` against the `_apsk` its signer's enrollment
+published, held as a `PublishedApsk`, with no `AtClient`, network or clock.
+It returns `EnvelopeVerified`, naming the key, algorithm and key status, or
+`EnvelopeRefused`, naming an `EnvelopeRefusal` and a reason. Read envelope
+text with `SignedEnvelope.parse(text, maxLength: ...)`, and fetch the
+`_apsk` with `fetchPublishedApsk` or hold one read earlier.
+`selectEnvelopeKey` makes the same checks without the signature. In tests,
+`TestEnvelopeSigner`, from the platform package's `testing.dart`, signs
+offline and gives the `PublishedApsk` that verifies it.
 
 ## Crypto providers
 
@@ -686,7 +714,7 @@ What each posture switches on:
   the new generation.
 - **OpenSSL.** On macOS (Homebrew) and Linux, where OpenSSL 3's libcrypto is
   installed, or wherever `AT_CHOPS_LIBCRYPTO_PATH` points, value AES-256-GCM
-  runs through it, and X-Wing does too with OpenSSL 3.5 or later. Elsewhere
+  runs through it, and X-Wing does too with OpenSSL 3.5.1 or later. Elsewhere
   both are pure Dart, and each opens what the other wrote.
 - **Post-quantum enrollment.** Under `pqReady` or `pqActive`,
   `Atsign.enroll` submits a request that advertises a key package, and the
@@ -729,7 +757,7 @@ the client holds no current copy of the recipient's key. Once a device has
 written in a namespace, it goes on writing there offline, across restarts.
 The design,
 the acceptance catalogue and the decision log are under
-[`docs/projects/pq/`](../../docs/projects/pq/roadmap.md).
+[`docs/projects/pq/`](../../docs/projects/pq/design.md).
 
 ## Known traps in sync
 

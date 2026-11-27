@@ -1,5 +1,210 @@
-## 4.0.1
+## 4.1.0-rc.1
 
+- fix: keys and enrollment messages, `AtNoCredentialException`'s and
+  `AtEnrollmentPendingException`'s among them, name where the keys are as
+  "the AtKeys store (<path>)", "the AtKeys store (this device's keychain)"
+  or "the AtKeys store".
+- fix: `AtEnrollmentPendingException` names each pending enrollment id in
+  double quotes, with its control characters escaped.
+- fix: `Atsign.enroll`'s refusal of an AtKeys store already waiting on an
+  enrollment names its id, app and device in double quotes, with their
+  control characters escaped.
+- fix: `Atsign.enroll` refuses an AtKeys store already waiting on an
+  enrollment for the Atsign, whatever that enrollment's app and device,
+  before anything is sent, and names it: resume it with `resumeEnrollment`.
+  at_client_flutter 2.1.0-rc.1's `ApkamActivationDialog` resumes such a request.
+- fix: of two `Atsign.enroll` calls into one keyfile at once, or into one
+  keychain from one isolate, only one files its request. The other throws
+  `AtEnrollmentException` naming the enrollment it sent, which the Atsign's
+  manager can deny.
+- fix: when another `PendingEnrollment` for the same request has cancelled
+  it, an approval that lands in a wait files nothing and throws
+  `AtEnrollmentCancelledException`, saying the Atsign's manager can revoke
+  it. When another has already filed the approval, the wait ends approved.
+- fix: `Atsign.resumeEnrollment` returns the AtKeys store's one pending
+  enrollment whatever app and device it was filed under, so its `app` and
+  `device` parameters are deprecated and ignored.
+  `AtEnrollmentPendingException.several` is deprecated, since nothing throws
+  it.
+- feat: `AtKeysPassphraseException` is exported: it is an unreadable
+  keyfile's `error` when its passphrase is missing or does not open it.
+- fix: a pending enrollment's wait that the atServer denies throws `AtEnrollmentDeniedException`, now exported, and removes the pending keys; when the AtKeys store cannot remove them after a denial or expiry, the exception's message says they stay; a wait that ends on any other refusal keeps the request for `resumeEnrollment`, even when the atServer's error text contains "denied".
+- docs: the names of the passkey records on the atServer (the `atkeys.<enrollmentId>.a.__e` document, the `_<lookupHex>.<ns>` pointer, the `atkeys-lock.<enrollmentId>.a.__e` lock and the `completion-due.<enrollmentId>.a.__e` record) are promised from the first stable release, as at_auth's passkey HKDF labels and record layout are: after it they change only with a compatibility path.
+- fix: passkey errors show an unexpected atServer reply or a refused Atsign in quotes, with its control and format characters escaped, so each stays on one line. An unexpected reply to a read of the sealed `@keys` document is named by its length, not shown. A sealed record or document that holds a newline or a carriage return is refused without showing it.
+- fix: a client opened through `PasskeyCustody` keeps working after its first connection. `AtServerAtKeysIo` holds the passkey-derived APKAM key pair for the session, files it as the enrollment's authentication material in every read (after the first, from the document it last read, with no atServer round trip), and never stores the private half in the `@keys` document, nor the public half as typed authentication material. A write that carries other private authentication material is refused with `AtServerAtKeysWriteException`. `close()` zeroes the private key and a read after it throws. A write still running at `close()` finishes whole; a write queued behind it is refused with `AtServerAtKeysWriteException` and makes no atServer call. Passkey custody also refuses a restored document whose flat APKAM public key is not the passkey-derived one, binds each sealed record to its Atsign and type, and accepts only an Atsign with one leading `@` (`alice` and `left@right` are refused as invalid).
+- fix: the passkey vault's auth seed is zeroed as soon as the APKAM key pair is derived from it, before PKAM, and stopping the passkey session zeroes what it can. The APKAM private key (an immutable `String` in the authenticator) and the `@keys` private keys stay in memory for the session and cannot be wiped in Dart.
+- fix: `AtServerAtKeysIo.update` builds on a fresh read of the stored document, not the copy read at login, so a second tab's update after another tab's write lands.
+- fix: `AtServerAtKeysIo` runs `write`, `flush` and `update` on one instance one at a time, so overlapping updates from one client each keep the other's change.
+- feat: every `AtServerAtKeysIo` write holds the enrollment's lock on the atServer, which lasts 10 seconds by default, so two tabs or devices writing one enrollment's `@keys` take turns; a write reuses its store's lease while at least half the ttl is left, and otherwise waits for that lock to run out before it takes the lock again. The lock is not a fence: a put sent while the lease is held can land after it expires, once another writer has taken the lock and put, and then drops that writer's material while both writes report success; needing half the ttl left is the only guard. A write whose lease has less than half the ttl left when it is ready to put takes the lock again, and an `update` then runs its mutate again on a fresh read. A write that cannot take the lock within 15 seconds by default, or whose third lease is also too short, throws `AtServerAtKeysLockedException`, puts nothing and leaves the store usable. The lock needs an atServer from p3.13.0, and an expired lock stops blocking at once from p3.16.5. `EnrollmentDocumentStore` gains `tryLock`, and `ServerMutexLease` gains `remaining`.
+- fix: `AtServerAtKeysIo` takes `atSign`, `seal` and `open` in place of the passkey vault, and throws `ArgumentError` for a call naming another Atsign. An enrollment whose keys it strips keeps its namespaces, app and device names.
+- docs: `PasskeyLostException` and `PasskeyCustody.open` say that a failed prompt (a `PasskeyCeremonyException` cause) may be a plain cancel, because WebAuthn reports a cancel and a missing passkey alike, and that nothing is deleted, revoked or cleared after a failed or cancelled prompt. An app offers "Try again" and "Reset" and never resets on its own. `PasskeyCustody.onboard` says that a failed or cancelled prompt that registers the passkey writes nothing, so the same call can be made again.
+- feat: when `PasskeyCustody.onboard` registers a new passkey and then fails before it starts completing the activation, including because the assertion that follows is cancelled, fails or yields no usable PRF output, the passkey is reported to the platform as unknown (where the port supports it) and the error propagates unchanged, without waiting for the platform to take the report. A failure while completing the activation, or after it, reports nothing.
+- feat: `PasskeyCustody.onboard` writes the sealed `@keys` document and pointer before it deletes the CRAM secret, so an interrupted onboarding can be run again with the same CRAM secret; once the secret is deleted the Atsign is onboarded, and `open` logs in with the passkey. Nothing is kept on the device until then, and onboarding asks for persistent storage before it activates.
+- feat: `PasskeyCustody.onboard` stores a new record on the atServer, `completion-due.<enrollmentId>.a.__e@<atSign>`, from before it writes the `@keys` document until the completion's last step, and records in it when the CRAM secret is deleted. Onboarding fails if a write of that record fails.
+- feat: when an exception stops `PasskeyCustody.onboard` once the passkey's pointer is written, it throws `PasskeyOnboardingIncompleteException`, naming the Atsign, with the failure as its `cause`; `open` with the passkey then finishes the onboarding, unless its enrollment has been revoked since or `open` refuses another published encryption public key. A failure before that is thrown as it is, and the onboarding is run again with the same CRAM secret.
+- fix: `PasskeyCustody.open` finishes an onboarding that stopped after writing its pointer, while that onboarding's completion is due: it deletes the CRAM secret, then revokes every other approved enrollment, then publishes the document's key. It publishes over another key only when the onboarding recorded that its own delete of the CRAM secret answered, and otherwise refuses another key with `PublicKeyMismatchException` before it sends any delete, revoke or publish. Once the completion is done it revokes nothing: it publishes the document's key when none is published, and refuses another. Each revoke is logged as a warning naming the Atsign and the revoked enrollment. It fails the open if any of these fails. A login that succeeds with the device's saved hints sends none of them. `EnrollmentSession.publicKeysMatch` is replaced by `publishedEncryptionKey`, which says whether the atServer publishes no encryption public key, the document's, or another; a document holding none counts as matching.
+- feat: `EnrollmentSession` gains `recordCompletionDue`, `completionDue` and `clearCompletionDue`, which an implementation must add, and `package:at_client/passkey.dart` exports `CompletionDue`.
+- feat: `AtServerAtKeysIo.keepsAllOf` reports whether the stored document already holds everything the given keys hold.
+- fix: `AtServerAtKeysIo` throws `ArgumentError` when built with a `lockTtl` under a millisecond or over 15 minutes, or a `lockWait` that is not positive, instead of failing at its first write.
+- feat: an onboarding deletes the CRAM secret, then revokes every other approved enrollment of the Atsign, then publishes its encryption public key, so no enrollment approved before the CRAM secret was deleted survives, and a passkey from an interrupted attempt is refused as lost. A revoke that fails fails the onboarding without reporting the new passkey to the platform, and `open` then finishes it unless its enrollment has been revoked since. A revoke the atServer refuses (`AT0028`, `AT0029`, `AT0031` or `AT0032`, as for an enrollment that has expired, no longer exists, is no longer approved or is one it will not revoke) fails the onboarding only when another approved enrollment is still listed afterwards; any other failed revoke, such as a lost connection, a timeout or a paused or busy atServer, fails it at once.
+- fix: `PasskeyCustody.open` takes the saved hints only when it has both ids; one alone is treated as none. When the narrowed ceremony fails or the atServer refuses PKAM for the saved enrollment, it retries once as a device with no hints, under the setup lock, and a success replaces the saved ids. A cancelled ceremony cannot be told from a deleted passkey and is retried too. Both ids are saved in one write.
+- fix: a passkey login reads the atServer's refusal of its PKAM in any form the atServer writes it, so AT0025, AT0027 and AT0028 whether or not the reply names the enrollment, AT0029, and a reply with no code report a lost passkey, at once on a device with no saved hints, and on a device with hints when a retry without them is refused too. Neither a failure before the `pkam:` is sent, such as an error answer to its `from:`, nor a proxy's error answer to the `from:` of a reconnect after the `pkam:` is a lost passkey, and each keeps the device's saved hints.
+- fix: the `from:` of a passkey login's PKAM, and of the PKAM that follows an onboarding's activation, names at_client as the SDK, with its version.
+- fix: a write of the passkey hints that fails with an `Exception` does not fail `PasskeyCustody.onboard` or `open`: it is logged as a warning naming the Atsign, and the next login saves the hints. A remembered credential id or enrollment id whose read fails with an `Exception`, or an enrollment id outside the enrollment id alphabet, counts as no hints and is never sent; an `Error` from either read still fails `open`.
+- feat: `package:at_client/passkey.dart` is a new library for onboarding and
+  opening an atSign with a passkey. `PasskeyCustody.onboard` and `open` each
+  return a `PasskeySession`: the `AtClient` running as the Atsign's enrollment,
+  which persists its `@keys` through an `AtServerAtKeysIo`, and the passkey's
+  vault. Stopping the session, or its client, closes the key store and then
+  the vault once the client has stopped, or after 10 seconds plus the longest
+  one write may wait for the enrollment's lock (`AtServerAtKeysIo.lockWaitBound`,
+  75 seconds by default) if that stop or a queued `@keys` write is still
+  running, so one write waiting out another writer's lock still lands, though a
+  write queued behind it may be refused;
+  `AtClient.stop()` closes no key
+  store. `PasskeyCustody` takes one `PasskeyHintStore` for the device's saved
+  hints and a `setupLockPrefix` for its per-atSign setup lock, and `PkamRefusedException`
+  says an approver can `enroll:unrevoke` a revoked enrollment.
+  `AtServerAtKeysIo` keeps the sealed
+  @keys document on the atServer: it creates the document, reads each write
+  back, and refuses as follows: `write` refuses when a document exists; `flush`
+  creates a missing document and refuses a change that drops stored material;
+  after that refusal, a foreign private authentication key or a read-back that
+  differs, it accepts no further writes. The library also
+  exports the enrollment gateway, session and document and pointer stores that
+  onboarding and open run on.
+- fix: an atServer whose answer to `from:` holds no challenge to sign
+  leaves the connection offline with cause `unreachable`, not refused,
+  and a first open hands back its client. The client still signs
+  nothing.
+- fix: a code other than a refusal in reply to a PKAM, such as AT0011, no
+  longer reads as a refusal: connecting reports offline carrying the error,
+  a verb that meets it leaves the connection state as it was, a first open
+  hands back its client, and `Atsign.authenticatesAs` throws the error.
+- fix: `Atsign.activate` over an `atLookUp` of your own that you stop while
+  it authenticates by PKAM throws `StoppedException`, not
+  `AtAuthenticationException`; stopped while its client first connects, it
+  stops that client and throws `StoppedException` rather than returning it.
+  A post-quantum activation stopped while it mints its signing root does the
+  same, and `mintSigningRootAfterActivation` rethrows a `StoppedException`
+  instead of logging it, as it still logs every other error.
+- feat: a PKAM the atServer refuses with AT0028 reports the connection
+  refused with cause `invalidEnrollment`, as AT0029 does, and
+  `PendingEnrollment` removes an expired request's pending keys on either
+  code. AT0028 in reply to any verb but a PKAM and its `from:` still
+  leaves the connection online. `AtEnrollmentExpiredException` is
+  exported.
+- fix: a verb sent through `AtClient.getRemoteSecondary()` that is refused
+  when it authenticates throws the `AtAuthErrorReplyException` at_auth
+  raised, whose `errorCode` is the atServer's code, and the connection state
+  takes a refusal's cause from that code, never from the text of an
+  exception's message. An authenticator of your own reports a code by
+  throwing that exception. `AtAuthErrorReplyException` is exported.
+- fix: when an `AtLookUp` of your own returns an `error:` reply rather than
+  throwing, at_client's response parser throws the exception the reply's
+  code stands for, where it threw `AtClientException`. For AT0015, `get`
+  and `getMeta` throw `AtKeyNotFoundException`, still an
+  `AtClientException`, and `NotificationService.getStatus` throws
+  `KeyNotFoundException`, which is not one. For a code with no exception of
+  its own, such as AT0014 for a reply naming no code, the parser throws a
+  plain `AtException`, and `get` and `getMeta` still throw
+  `AtClientException`.
+- feat: every `from:` at_client sends to authenticate names the app, from
+  `AtClientPreference.atClientParticulars`, and at_client as the SDK. An app
+  that sets no `appName`, or a blank one, is named after its program file
+  and the client logs one warning when it starts; an unset `appVersion` is
+  sent as `unknown`. at_client sends its own version as `version` on every
+  one of them.
+- feat: `Atsign.authenticatesAs` and `PendingEnrollment` take optional
+  `particulars` to name the app, and `AtClientParticulars` is exported.
+- fix: under a `remoteOnly` `AtClientPreference.remoteLocalPref`, a get, put,
+  putMeta or delete whose request options leave `useRemoteAtServer` unset
+  goes to the atServer; an explicit true or false is still enforced. A
+  `remoteOnly` app that passed options to keep a write local should set
+  `useRemoteAtServer = false` explicitly. A delete or putMeta of a `local:`
+  key stays on the device.
+- fix: `putMeta` sends `noCommit` to the atServer, and throws an
+  `IllegalArgumentException` without writing anything when `noCommit` is set
+  but the call is not routed to the atServer, as `put` and `delete` do.
+- feat: `AtClientPreference.notificationReplay` chooses where the monitor replays from — connect, resume, window (default 1h) or full; `fetchOfflineNotifications` is deprecated.
+- feat: `collection`/`subCollection` take an optional `writeTypeTag` for new
+  items without a factory; `AtClient` implementers must add it. `AtCollection`
+  gains no public member.
+- fix: `collection` throws `ArgumentError` when a namespace already open on
+  the client, under any `eventSource`, would stamp a new `T` with another tag
+  than the open asks for (its `typeTag`, else the factory tag registered for
+  `T`, else its `writeTypeTag`, else `n/a`), instead of silently returning the
+  collection built with the first one. A refused open caches nothing. The
+  check holds on one client only, not across clients, sessions or devices,
+  and sub-collections, which are not cached, are not checked. `AtClient`
+  implementers must refuse the same way.
+- fix: `collection` folds the namespace to lower case, as atProtocol keys
+  are, so `Todos.wavi` and `todos.wavi` hand back the same collection, whose
+  `namespace` is `todos.wavi`.
+- fix: `AtCollection` folds an item id to lower case wherever it takes one,
+  and refuses, with an `ArgumentError` before any read or write, an id that is
+  empty or contains `.`, `:`, `@`, whitespace or a control character;
+  `create`, `upsert` and `draft` also refuse an id that starts with `_`. A new
+  item's id must be 1 to 64 characters of a-z, 0-9, `-` and `_`, starting with
+  a letter or digit. An item already stored under an id the check accepts
+  keeps its id. `subCollection` folds a `subName` to lower case, and refuses
+  one that is empty, contains `.`, `:`, `@`, whitespace or a control
+  character, or holds a character a key's name cannot. An event whose item id,
+  ancestor id or `subName` the check refuses is not emitted, and a warning
+  names the id and its owner; `getItems` and `getItemsAsStream` leave out an
+  item stored under such an id, with the same warning. `AtCollection` matches
+  a namespace or `subName` literally when it lists keys.
+  `upsert` looks up the metadata of an id that breaks the new-id rule, in local
+  storage and then on the atServer, without decrypting; an item either holds
+  counts as stored, and when the atServer lookup fails for any reason but the
+  item's absence or the client being stopped, the refusal stands and says so. A
+  client whose `remoteLocalPref` is `remoteOnly` asks the atServer alone, so an
+  item only local storage holds does not count.
+- feat: `AtClient.getMeta` reads a key's metadata without its value, so it no
+  longer decrypts and answers for a record this client cannot open; it takes
+  `getRequestOptions`, as `get` does, to choose between local storage and the
+  atServer. `AtClient` implementers must add the parameter. It returns null for
+  a record that is held but not visible now, no longer rewrites the metadata of
+  the key it is given, and reports `isCached` from the key asked for, not from
+  whether the atServer served it from its cache.
+- feat: every envelope at_client signs names its signer's Atsign, as `iss`
+  in its protected header. at_client's own verifiers, including
+  `verifyEnvelopeSignature`, refuse an envelope naming an Atsign other than
+  the one it is verified for, and accept one naming none, as at_client 4.0.0
+  signed them, until a later release re-signs what an enrollment publishes.
+  at_client 4.0.0 verifies the new envelopes unchanged.
+- feat: experimental `verifySignedEnvelope` checks an application envelope
+  against an `_apsk` value the caller supplies as a `PublishedApsk`, with no
+  `AtClient`, network or clock, and returns `EnvelopeVerified`, naming the
+  key, algorithm and key status that verified, or `EnvelopeRefused` with the
+  reason. It refuses an envelope naming another Atsign, and one naming no
+  enrollment or another. One naming no Atsign, as at_client 4.0.0 signed
+  them, verifies with `issuerConfirmed` false, and `minimumAlgorithm` refuses
+  one signed only under a weaker algorithm. `SignedEnvelope.parse` refuses
+  envelope text over a length in UTF-8 bytes the caller names before
+  decoding it. Every name these take reaches a program through
+  `at_client.dart`, and so through at_client_cli and at_client_flutter.
+- feat: experimental `selectEnvelopeKey` makes every check
+  `verifySignedEnvelope` makes except the signature, without the payload,
+  and returns the key and status it would use; `fetchPublishedApsk` returns
+  an enrollment's `_apsk` as a `PublishedApsk`; and
+  `package:at_client/testing.dart` offers `TestEnvelopeSigner`, which signs
+  offline and gives the `PublishedApsk` that verifies it.
+- fix: an `_apsk` value that cannot be read is refused with
+  `AtSigningVerificationException` on every verification path, rather than
+  escaping as a `FormatException`, so a key package whose enrollment's
+  `_apsk` cannot be read is reported rejected.
+- fix: every verification path refuses an `_apsk` RSA key whose public
+  exponent is not a positive odd number above 2^16 and below 2^256, and
+  `SignedEnvelope.fromJson` refuses a protected header whose `alg`, `typ`,
+  `kid`, `iss` or `enid` is not a string, or whose `v` is not an integer.
+- fix: an `_apsk`, signing-root or key package entry whose `status` is not a
+  string is skipped, as one whose other fields are of the wrong kind is.
+- fix: a refusal that quotes an envelope's enrollment id or namespace, a
+  record's key id or Atsign, or the `_apsk` value `verifyEnvelopeSignature`
+  fetched shows it escaped and cut to 80 characters.
+- chore: requires at_auth 4.1.0-rc.1, at_chops 3.8.0-rc.1, at_lookup
+  4.1.0-rc.1 and at_commons 5.26.0.
 - fix: each listener on a notification subscription is released when it
   cancels.
 - fix: a change one subscriber makes to a notification, its metadata
@@ -7,6 +212,40 @@
 - fix: notifications waiting for their key are no longer dropped sooner
   because several listeners want them, and one given up because its
   listener cancelled is reported on `droppedEvents`.
+- fix: `Enrollments.requests` reports only notifications from the client's
+  own atSign.
+- fix: the legacy encryption and decryption paths name the underlying
+  error's type in their `AtEncryptionException` and `AtDecryptionException`
+  rather than quoting its text.
+- feat: notifications are delivered once per (from, id) compound key, even
+  after a reconnect (latest 1024 ids capped per millisecond watermark).
+  Conflicting duplicate IDs trigger warnings and are reported on
+  `droppedEvents`.
+- fix: `Atsign.activate` and `pqNativeOnboard` throw before sending anything
+  when the AtKeys store holds keys they cannot read, or its keyfile cannot be
+  written; the exception names the store.
+- feat: `AtKeysUnusableException` and `AtKeysUnusableCause` are exported.
+- fix: `Atsign.open` throws `AtKeysUnusableException` before connecting, on
+  every device, for keys it cannot use: absent, unreadable, holding no
+  keypair it can sign with, or for another Atsign. `AtNoCredentialException`
+  and `AtEnrollmentPendingException` are `AtKeysUnusableException`s too.
+- fix: `Atsign.resumeEnrollment` throws `AtKeysUnusableException`, as
+  `Atsign.open` does, for keys it cannot read or that record another Atsign.
+- feat: `AtNoCredentialException` and `AtEnrollmentPendingException` say
+  which AtKeys store they came from in `source` when `Atsign.open` throws
+  them.
+- fix: `Atsign.enroll` refusing an AtKeys store that holds live keys starts
+  by saying to give the new enrollment an AtKeys store of its own, so a
+  dialog that clips the message still shows it.
+- feat: `Atsign.activate` takes an optional `apkamKeyPair`, enrolled by the
+  first activation in place of a minted one; a pair that does not sign under
+  the activation's algorithm is refused with `AtSigningException` before
+  anything is enrolled. Requires at_auth 4.1.0-rc.1.
+- feat: `client.connection` reads refused, with its cause, while the atServer
+  refuses the notification connection, and the connection keeps retrying,
+  waiting up to 5 minutes between attempts. Any other answer that doesn't let
+  the client in, such as AT0011, waits the same way and leaves
+  `client.connection` as it was.
 
 ## 4.0.0
 
@@ -768,7 +1007,7 @@ And some tech debt cleanup
 
 ## 3.6.0
 - feat: deprecate the (misleadingly named)
-  `AtClientPreference.Atsign ProtocolEmitted` and change its default value
+  `AtClientPreference.atProtocolEmitted` and change its default value
   from 1.5.0 to 2.0.0
 
 ## 3.5.3

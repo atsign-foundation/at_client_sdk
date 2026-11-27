@@ -174,4 +174,19 @@ void main() {
         reason: 'manifest.dart declares a file that is not here — a deleted '
             'scenario file silently drops its rows from the count');
   });
+
+  test('key-sources consistency test passes', () {
+    final script =
+        File('${repoRoot().path}/tools/key_sources_consistency_test.sh');
+    expect(script.existsSync(), isTrue,
+        reason: 'tools/key_sources_consistency_test.sh must exist');
+    final res = Process.runSync('bash', [script.path]);
+    expect(
+      res.exitCode,
+      equals(0),
+      reason: 'tools/key_sources_consistency_test.sh failed:\n'
+          'stdout:\n${res.stdout}\n'
+          'stderr:\n${res.stderr}',
+    );
+  });
 }

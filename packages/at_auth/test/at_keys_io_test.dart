@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
@@ -19,19 +20,8 @@ void main() {
   String atsign = '@alice🛠';
   String keyFilePath = 'test/data/@alice🛠_key.atKeys';
   String writeFilePath = 'test/data/@bober_key.atKeys';
-  late String homeDirKeys;
 
   group('FileAtKeysIo tests', () {
-    setUp(() {
-      var homeDir = getHomeDirectory();
-      homeDirKeys = '$homeDir/.atsign/keys/@alice🛠_key.atKeys';
-      Directory keysDir = Directory(homeDirKeys).parent;
-      if (!keysDir.existsSync()) {
-        keysDir.createSync(recursive: true);
-      }
-      File(keyFilePath).copySync(homeDirKeys);
-    });
-
     test('Test read() with valid atKeys file path', () async {
       final fileAtKeysIo = FileAtKeysIo(filePath: (_) => keyFilePath);
       final atKeys = await fileAtKeysIo.read(atsign);
@@ -53,15 +43,31 @@ void main() {
     });
 
     test('Test read() without atKeys file path', () async {
-      final fileAtKeysIo = FileAtKeysIo();
+      final tempHome =
+          Directory.systemTemp.createTempSync('at_keys_io_test_home');
+      try {
+        final keysDir = Directory('${tempHome.path}/.atsign/keys')
+          ..createSync(recursive: true);
+        File(keyFilePath).copySync('${keysDir.path}/${atsign}_key.atKeys');
 
-      final atKeys = await fileAtKeysIo.read(atsign);
-      expect(atKeys.apkamPrivateKey, isNotNull);
-      expect(atKeys.apkamPublicKey, isNotNull);
-      expect(atKeys.apkamSymmetricKey, isNotNull);
-      expect(atKeys.defaultEncryptionPrivateKey, isNotNull);
-      expect(atKeys.defaultEncryptionPublicKey, isNotNull);
-      expect(atKeys.defaultSelfEncryptionKey, isNotNull);
+        final packageConfig = await Isolate.packageConfig;
+        final result = await Process.run(
+          Platform.resolvedExecutable,
+          [
+            if (packageConfig != null)
+              '--packages=${packageConfig.toFilePath()}',
+            File('test/support/read_keyfile_at_default_path.dart')
+                .absolute
+                .path,
+            atsign,
+          ],
+          environment: {'HOME': tempHome.path},
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+      } finally {
+        tempHome.deleteSync(recursive: true);
+      }
     });
 
     test('Test write()', () async {
@@ -811,7 +817,6 @@ void main() {
       if (keyFile.existsSync()) {
         keyFile.deleteSync();
       }
-      File(homeDirKeys).deleteSync();
     });
   });
 

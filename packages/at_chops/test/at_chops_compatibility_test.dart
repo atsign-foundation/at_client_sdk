@@ -5,6 +5,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:crypton/crypton.dart';
+import 'package:pointycastle/asn1.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -238,6 +239,91 @@ void main() {
               e is AtDecryptionException &&
               e.toString().contains(
                   'Initialization vector required for decryption using SymmetricKey'))));
+    });
+
+    // A corrupted key fails to decode, and the decoder's message quotes the
+    // text it was given. Only the error's type may reach the exception.
+    group('a corrupted AES key is not quoted in the exception', () {
+      final String key =
+          AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key;
+      final String corrupted = '!${key.substring(1)}';
+      final AtChopsImpl atChops =
+          AtChopsImpl(AtChopsKeys()..selfEncryptionKey = AESKey(corrupted));
+      final InitialisationVector iv = AtChopsUtil.generateRandomIV(16);
+
+      Matcher withoutKey<T extends AtException>() => throwsA(predicate((e) =>
+          e is T &&
+          !e.toString().contains(key.substring(1)) &&
+          !e.getTraceMessage().contains(key.substring(1)) &&
+          e.message == 'FormatException'));
+
+      test('encryptBytes', () async {
+        await expectLater(
+            () async => await atChops.encryptBytes(
+                utf8.encode('abcd'), EncryptionKeyType.aes256, iv: iv),
+            withoutKey<AtEncryptionException>());
+      });
+
+      test('decryptBytes', () async {
+        await expectLater(
+            () async => await atChops.decryptBytes(
+                Uint8List(16), EncryptionKeyType.aes256, iv: iv),
+            withoutKey<AtDecryptionException>());
+      });
+    });
+
+    group('a corrupted RSA private key is not quoted in the exception', () {
+      final RSAKeypair keyPair = RSAKeypair.fromRandom();
+      final String key = keyPair.privateKey.toString();
+      final String corrupted = '!${key.substring(1)}';
+      final String publicKey = keyPair.publicKey.toString();
+      final AtChopsImpl atChops = AtChopsImpl(AtChopsKeys.create(
+          AtEncryptionKeyPair.create(publicKey, corrupted),
+          AtPkamKeyPair.create(publicKey, corrupted)));
+
+      for (final AtSigningMode mode in [
+        AtSigningMode.data,
+        AtSigningMode.pkam
+      ]) {
+        test('sign, $mode', () {
+          expect(
+              () => atChops.sign(AtSigningInput('abcd')..signingMode = mode),
+              throwsA(predicate((e) =>
+                  e is AtSigningException &&
+                  !e.toString().contains(key.substring(1)) &&
+                  e.message == 'FormatException')));
+        });
+      }
+    });
+
+    group('an Error raised while using an RSA key is reported by type', () {
+      final RSAKeypair keyPair = RSAKeypair.fromRandom();
+      final String inconsistent =
+          _withInconsistentModulus(keyPair.privateKey.toString());
+      final String publicKey = keyPair.publicKey.toString();
+      final AtChopsImpl atChops = AtChopsImpl(AtChopsKeys.create(
+          AtEncryptionKeyPair.create(publicKey, inconsistent),
+          AtPkamKeyPair.create(publicKey, inconsistent)));
+
+      test('decryptBytes', () async {
+        await expectLater(
+            () async => await atChops.decryptBytes(
+                Uint8List(256), EncryptionKeyType.rsa2048),
+            throwsA(predicate((e) =>
+                e is AtDecryptionException && e.message == 'ArgumentError')));
+      });
+
+      for (final AtSigningMode mode in [
+        AtSigningMode.data,
+        AtSigningMode.pkam
+      ]) {
+        test('sign, $mode', () {
+          expect(
+              () => atChops.sign(AtSigningInput('abcd')..signingMode = mode),
+              throwsA(predicate((e) =>
+                  e is AtSigningException && e.message == 'ArgumentError')));
+        });
+      }
     });
 
     test('validate encryption/decryption throws AtEncryptionException on unsupported keyName', () async {
@@ -588,4 +674,26 @@ void main() {
               'message', 'Exception: Unrecognized type of data: 213456777')));
     });
   });
+}
+
+/// [key], a base64 PKCS#8 RSA private key, with its modulus changed so that
+/// it no longer equals p * q.
+String _withInconsistentModulus(String key) {
+  final ASN1Sequence outer =
+      ASN1Parser(base64Decode(key)).nextObject() as ASN1Sequence;
+  final ASN1Sequence inner = ASN1Parser(
+          (outer.elements![2] as ASN1OctetString).valueBytes)
+      .nextObject() as ASN1Sequence;
+  final List<BigInt> values = [
+    for (final e in inner.elements!) (e as ASN1Integer).integer!
+  ];
+  values[1] += BigInt.two;
+  return base64Encode(ASN1Sequence(elements: [
+    ASN1Integer((outer.elements![0] as ASN1Integer).integer!),
+    outer.elements![1],
+    ASN1OctetString(
+        octets: ASN1Sequence(elements: [
+      for (final v in values) ASN1Integer(v)
+    ]).encode()),
+  ]).encode());
 }

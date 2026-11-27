@@ -14,6 +14,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/fake_at_server.dart' show FakeAtServerSocket;
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 /// Every connection the client owns authenticates from its keys, which name
 /// the algorithm, as its own enrollment. A self-retrofit's ML-DSA enrollment
@@ -36,7 +37,7 @@ void main() {
             privateKey: pqPair.atPrivateKey.privateKey);
       final lookUp = MockAtLookupImpl();
       RemoteSecondary(atSign, AtClientPreference(),
-          lookUps: secureSocketLookUps(),
+          lookUps: loopbackLookUps(),
           atLookUp: lookUp,
           atKeysIo: InMemoryAtKeysIo.holding(atSign, keys),
           enrollmentId: enrollmentId);

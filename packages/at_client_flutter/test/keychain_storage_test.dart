@@ -15,6 +15,7 @@ class MockBiometricStorage extends Mock implements BiometricStorage {}
 
 class MockBiometricStorageFile extends Mock implements BiometricStorageFile {}
 
+/// Catalogue: features/at_client_flutter/keychain_entry_not_json.feature
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -154,6 +155,7 @@ void main() {
           options: any(named: 'options'),
         ),
       ).thenAnswer((_) async => mockBiometricStorageFile);
+      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
       when(() => mockBiometricStorageFile.write(any())).thenThrow(Exception());
 
       expect(
@@ -225,6 +227,175 @@ void main() {
       final string = jsonEncode(result!.toJson());
       expect(string, equals(dummyAtKeysData));
     });
+
+    test('removeAtsignFromKeychain on Windows deletes the segments the smaller'
+        ' document no longer uses', () async {
+      KeychainStorage.isWindows = true;
+      final entries = <String, String>{};
+      when(
+        () => mockBiometricStorage.getStorage(
+          any(),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((invocation) async {
+        final name = invocation.positionalArguments[0] as String;
+        final file = MockBiometricStorageFile();
+        when(() => file.read()).thenAnswer((_) async => entries[name]);
+        when(() => file.write(any())).thenAnswer((i) async {
+          entries[name] = i.positionalArguments[0] as String;
+        });
+        when(() => file.delete()).thenAnswer((_) async {
+          entries.remove(name);
+        });
+        return file;
+      });
+      AtKeys keysFor(String atSign, {String padding = ''}) =>
+          AtKeys.legacy(
+              apkamPrivateKey: 'privateKey12',
+              apkamPublicKey: 'publicKey123',
+              selfEncryptionKey: 'selfEncKey12',
+              encryptionPrivateKey: 'encPrivateKey123',
+              encryptionPublicKey: 'encPublicKey',
+            )
+            ..metadata['name'] = atSign
+            ..metadata['padding'] = padding;
+
+      await keyChainStorage.appendAtKeysToKeychain(keys: keysFor('@alice'));
+      await keyChainStorage.appendAtKeysToKeychain(
+        keys: keysFor('@bob', padding: 'b' * 6000),
+      );
+      expect(entries.keys, contains('@atsigns:test_segment_2'));
+
+      await keyChainStorage.removeAtsignFromKeychain('@bob');
+
+      expect(
+        entries.keys.where((k) => k.startsWith('@atsigns:test_segment_')),
+        ['@atsigns:test_segment_0'],
+      );
+      expect(entries.values.join(), isNot(contains('bbbb')));
+      expect(await keyChainStorage.getAllAtsigns(), ['@alice']);
+    });
+
+    /// Stubs [mockBiometricStorage] on Windows with entries held in the
+    /// returned map. A delete of a name in [failingDeletes] returns normally
+    /// and leaves the entry in place.
+    Map<String, String> stubWindowsKeychain(Set<String> failingDeletes) {
+      KeychainStorage.isWindows = true;
+      final entries = <String, String>{};
+      when(
+        () => mockBiometricStorage.getStorage(
+          any(),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((invocation) async {
+        final name = invocation.positionalArguments[0] as String;
+        final file = MockBiometricStorageFile();
+        when(() => file.read()).thenAnswer((_) async => entries[name]);
+        when(() => file.write(any())).thenAnswer((i) async {
+          entries[name] = i.positionalArguments[0] as String;
+        });
+        when(() => file.delete()).thenAnswer((_) async {
+          if (!failingDeletes.contains(name)) entries.remove(name);
+        });
+        return file;
+      });
+      return entries;
+    }
+
+    AtKeys atKeysNamed(String atSign, {String padding = ''}) =>
+        AtKeys.legacy(
+            apkamPrivateKey: 'privateKey12',
+            apkamPublicKey: 'publicKey123',
+            selfEncryptionKey: 'selfEncKey12',
+            encryptionPrivateKey: 'encPrivateKey123',
+            encryptionPublicKey: 'encPublicKey',
+          )
+          ..metadata['name'] = atSign
+          ..metadata['padding'] = padding;
+
+    test('a stale Windows segment whose delete fails is deleted by the next'
+        ' write', () async {
+      final failingDeletes = {'@atsigns:test_segment_2'};
+      final entries = stubWindowsKeychain(failingDeletes);
+      await keyChainStorage.appendAtKeysToKeychain(keys: atKeysNamed('@alice'));
+      await keyChainStorage.appendAtKeysToKeychain(
+        keys: atKeysNamed('@bob', padding: 'b' * 6000),
+      );
+      expect(entries.keys, contains('@atsigns:test_segment_2'));
+
+      await keyChainStorage.removeAtsignFromKeychain('@bob');
+      expect(await keyChainStorage.getAllAtsigns(), ['@alice']);
+      await keyChainStorage.updateAtKeysInKeychain(
+        atSign: '@alice',
+        keys: atKeysNamed('@alice'),
+      );
+
+      failingDeletes.clear();
+      await keyChainStorage.appendAtKeysToKeychain(keys: atKeysNamed('@carol'));
+
+      expect(
+        entries.keys.where((k) => k.startsWith('@atsigns:test_segment_')),
+        ['@atsigns:test_segment_0'],
+        reason: 'the next write must delete the segment the failed delete left',
+      );
+      expect(entries.values.join(), isNot(contains('bbbb')));
+    });
+
+    test('a Windows keychain whose segments always read as stored does not '
+        'make a write search without end', () async {
+      KeychainStorage.isWindows = true;
+      final deleted = <String>[];
+      when(
+        () => mockBiometricStorage.getStorage(
+          any(),
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((invocation) async {
+        final name = invocation.positionalArguments[0] as String;
+        final file = MockBiometricStorageFile();
+        // NOTE: only segments read as stored; a header that did would be a
+        // legacy count the read refuses.
+        when(
+          () => file.read(),
+        ).thenAnswer((_) async => name.contains('_segment_') ? 'stored' : null);
+        when(() => file.write(any())).thenAnswer((_) async {});
+        when(() => file.delete()).thenAnswer((_) async => deleted.add(name));
+        return file;
+      });
+
+      await keyChainStorage.appendAtKeysToKeychain(keys: atKeysNamed('@alice'));
+
+      final indexes = deleted
+          .map((name) => RegExp(r'_segment_(\d+)$').firstMatch(name))
+          .whereType<RegExpMatch>()
+          .map((m) => int.parse(m[1]!));
+      expect(
+        indexes.where((i) => i >= 2560),
+        isEmpty,
+        reason: 'no segment at or above the bound is looked for or deleted',
+      );
+    });
+
+    test(
+      'a write over a legacy Windows header deletes the legacy segments',
+      () async {
+        final entries = stubWindowsKeychain({});
+        final half = legacyAtClientData.length ~/ 2;
+        entries['@atsigns:test'] = '2';
+        entries['test_data_0'] = legacyAtClientData.substring(0, half);
+        entries['test_data_1'] = legacyAtClientData.substring(half);
+
+        await keyChainStorage.removeAtsignFromKeychain('@bob');
+
+        expect(await keyChainStorage.getAllAtsigns(), ['@alice']);
+        expect(
+          entries.keys.where((k) => k.startsWith('test_data_')),
+          isEmpty,
+          reason: 'the write must delete the segments the legacy header named',
+        );
+        expect(entries.values.join(), isNot(contains('enrollId2')));
+      },
+    );
 
     tearDown(() {
       KeychainStorage.isWindows = false;
@@ -480,37 +651,34 @@ void main() {
       },
     );
 
-    test(
-      'readAtKeysData returns null when the legacy store read throws',
-      () async {
-        MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
+    test('readAtKeysData throws when the legacy store read throws, and writes '
+        'nothing', () async {
+      MockBiometricStorageFile legacyStorageFile = MockBiometricStorageFile();
 
-        when(
-          () => mockBiometricStorage.getStorage(
-            '@atsigns:test',
-            options: any(named: 'options'),
-          ),
-        ).thenAnswer((_) async => mockBiometricStorageFile);
-        when(
-          () => mockBiometricStorageFile.read(),
-        ).thenAnswer((_) async => null);
+      when(
+        () => mockBiometricStorage.getStorage(
+          '@atsigns:test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => mockBiometricStorageFile);
+      when(() => mockBiometricStorageFile.read()).thenAnswer((_) async => null);
 
-        when(
-          () => mockBiometricStorage.getStorage(
-            '@atsigns_test',
-            options: any(named: 'options'),
-          ),
-        ).thenAnswer((_) async => legacyStorageFile);
-        when(() => legacyStorageFile.read()).thenThrow(Exception('boom'));
-        when(() => legacyStorageFile.write(any())).thenAnswer((_) async {});
+      when(
+        () => mockBiometricStorage.getStorage(
+          '@atsigns_test',
+          options: any(named: 'options'),
+        ),
+      ).thenAnswer((_) async => legacyStorageFile);
+      when(() => legacyStorageFile.read()).thenThrow(Exception('boom'));
+      when(() => legacyStorageFile.write(any())).thenAnswer((_) async {});
 
-        final result = await keyChainStorage.readAtKeysData();
-
-        expect(result, isNull);
-        verifyNever(() => mockBiometricStorageFile.write(any()));
-        verifyNever(() => legacyStorageFile.write(any()));
-      },
-    );
+      await expectLater(
+        keyChainStorage.readAtKeysData(),
+        throwsA(isA<Exception>()),
+      );
+      verifyNever(() => mockBiometricStorageFile.write(any()));
+      verifyNever(() => legacyStorageFile.write(any()));
+    });
 
     test(
       'readAtKeysData migrates legacy `_` delimited store data on Windows platform',
@@ -655,6 +823,31 @@ void main() {
           ),
         ).thenAnswer((_) async => legacySegment0);
         when(() => legacySegment0.delete()).thenAnswer((_) async {});
+
+        for (final segment in [
+          currentSegment0,
+          currentSegment1,
+          legacySegment0,
+        ]) {
+          var held = true;
+          when(
+            () => segment.read(),
+          ).thenAnswer((_) async => held ? 'part' : null);
+          when(() => segment.delete()).thenAnswer((_) async => held = false);
+        }
+        final absent = MockBiometricStorageFile();
+        when(() => absent.read()).thenAnswer((_) async => null);
+        for (final name in [
+          '@atsigns:test_segment_2',
+          '@atsigns_test_segment_1',
+        ]) {
+          when(
+            () => mockBiometricStorage.getStorage(
+              name,
+              options: any(named: 'options'),
+            ),
+          ).thenAnswer((_) async => absent);
+        }
 
         await keyChainStorage.deleteAllAtKeysData();
 

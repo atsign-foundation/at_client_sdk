@@ -57,6 +57,25 @@ void main() {
     });
   });
 
+  group(
+      'Given a field holding an escape, a U+202E, a U+009B and 300,000 more '
+      'characters', () {
+    test('when it is refused, then the refusal shows it escaped and cut short',
+        () {
+      final value = '\u001b\u202e\u009b${'x' * 300000}';
+
+      expect(
+          () => requireRecordKid(value, 'nskeyKid'),
+          throwsA(isA<AtDecryptionException>()
+              .having(
+                  (e) => e.message.runes
+                      .where((r) => r == 0x1b || r == 0x202e || r == 0x9b),
+                  'raw boundary characters',
+                  isEmpty)
+              .having((e) => e.message.length, 'length', lessThan(400))));
+    });
+  });
+
   group('Given a client reading under the pqReady posture', () {
     late FakeAtServer server;
     late AtClientImpl client;

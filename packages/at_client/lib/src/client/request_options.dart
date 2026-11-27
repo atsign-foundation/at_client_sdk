@@ -1,38 +1,57 @@
 import 'package:meta/meta.dart' show internal;
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.get`, `AtClient.put` and `AtClient.delete` methods
-abstract class RequestOptions {}
-
-/// Parameters that application code can optionally provide when calling
-/// `AtClient.get`
-class GetRequestOptions extends RequestOptions {
-  /// Whether the `get` request should bypass this atSign's cache of data owned
-  /// by another atSign
-  ///
-  /// A get of another atSign's nskey advertisement or `_apsk` record bypasses
-  /// it whatever this says.
-  bool bypassCache = false;
-
-  /// Whether to send this get request directly to the remote atServer.
-  ///
-  /// A record this client wrote with the default routing sits in local storage
-  /// until sync pushes it, so a remote read can fail to find what a local read
-  /// would return; an uncached key owned by another atSign is unaffected,
-  /// because that read is a lookup and always goes to the atServer.
-  bool useRemoteAtServer = false;
+/// `AtClient.get`, `AtClient.getMeta`, `AtClient.put`, `AtClient.putText`,
+/// `AtClient.putBinary`, `AtClient.putMeta` and `AtClient.delete`
+abstract class RequestOptions {
+  bool? _useRemoteAtServer;
 }
 
 /// Parameters that application code can optionally provide when calling
-/// `AtClient.put`
+/// `AtClient.get` or `AtClient.getMeta`
+class GetRequestOptions extends RequestOptions {
+  /// Whether a `get` or `getMeta` lookup of data owned by another atSign
+  /// should bypass this atSign's cache of it
+  ///
+  /// A `get` or `getMeta` of another atSign's nskey advertisement or `_apsk`
+  /// record bypasses it whatever this says.
+  bool bypassCache = false;
+
+  /// Whether to send this `get` or `getMeta` request directly to the remote
+  /// atServer.
+  ///
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced, except that a `local:` key is always read from local storage
+  /// and an uncached key owned by another atSign is always looked up on the
+  /// atServer. It reads false while unset, so copying it into another options
+  /// object sets the copy explicitly.
+  ///
+  /// A record this client wrote to local storage stays off the atServer until
+  /// sync pushes it, so a remote read can fail to find what a local read would
+  /// return.
+  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+
+  set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
+}
+
+/// Parameters that application code can optionally provide when calling
+/// `AtClient.put`, `AtClient.putText`, `AtClient.putBinary` or
+/// `AtClient.putMeta`
 class PutRequestOptions extends RequestOptions {
   /// Whether to send this update request directly to the remote atServer.
   ///
-  /// The default writes to local storage and the record reaches the atServer
-  /// only when sync next pushes it, so a reader that is not this client's own
-  /// store — another client of this atSign, or a peer looking the key up — can
-  /// miss a record this call has already reported written.
-  bool useRemoteAtServer = false;
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced, except that a `local:` key never leaves the device. It reads
+  /// false while unset, so copying it into another options object sets the
+  /// copy explicitly.
+  ///
+  /// A put routed to local storage reaches the atServer only when sync next
+  /// pushes it, so a reader that is not this client's own store — another
+  /// client of this atSign, or a peer looking the key up — can miss a record
+  /// this call has already reported written.
+  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+
+  set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 
   /// Except public keys, shared keys and self keys are encrypted by default.
   /// If client prefers not to encrypt a shared key or self key, set this flag
@@ -82,11 +101,12 @@ class PutRequestOptions extends RequestOptions {
   /// key already has, and answers `-1` in place of a commit id.
   ///
   /// ⚠️ An operation that is not routed to the atServer — by
-  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
-  /// `IllegalArgumentException`, because a local write sends no command and
-  /// sync would later push it with no flag. An atServer that does not honour
-  /// the flag ignores it silently, so treat it as an optimisation that may not
-  /// happen, never as a guarantee that a record stayed out of the commit log.
+  /// [useRemoteAtServer] set true, or left unset under a `remoteOnly`
+  /// preference — is refused with an `IllegalArgumentException`, because a
+  /// local write sends no command and sync would later push it with no flag.
+  /// An atServer that does not honour the flag ignores it silently, so treat
+  /// it as an optimisation that may not happen, never as a guarantee that a
+  /// record stayed out of the commit log.
   bool noCommit = false;
 }
 
@@ -95,20 +115,49 @@ class PutRequestOptions extends RequestOptions {
 class DeleteRequestOptions extends RequestOptions {
   /// Whether to send this delete request directly to the remote atServer.
   ///
-  /// The default deletes from local storage and the removal reaches the
-  /// atServer only when sync next pushes it, so another client or a peer can
-  /// still read the record after this call returns.
-  bool useRemoteAtServer = false;
+  /// Left unset, it follows `AtClientPreference.remoteLocalPref`; once set, it
+  /// is enforced, except that a `local:` key never leaves the device. It reads
+  /// false while unset, so copying it into another options object sets the
+  /// copy explicitly.
+  ///
+  /// A delete routed to local storage reaches the atServer only when sync next
+  /// pushes it, so another client or a peer can still read the record after
+  /// this call returns.
+  bool get useRemoteAtServer => _useRemoteAtServer ?? false;
+
+  set useRemoteAtServer(bool value) => _useRemoteAtServer = value;
 
   /// Whether the atServer should carry out this operation **without recording
   /// a commit** — an atServer honouring it also purges any commit entry the
   /// key already has, and answers `-1` in place of a commit id.
   ///
   /// ⚠️ An operation that is not routed to the atServer — by
-  /// [useRemoteAtServer] or a `remoteOnly` preference — is refused with an
-  /// `IllegalArgumentException`, because a local write sends no command and
-  /// sync would later push it with no flag. An atServer that does not honour
-  /// the flag ignores it silently, so treat it as an optimisation that may not
-  /// happen, never as a guarantee that a record stayed out of the commit log.
+  /// [useRemoteAtServer] set true, or left unset under a `remoteOnly`
+  /// preference — is refused with an `IllegalArgumentException`, because a
+  /// local write sends no command and sync would later push it with no flag.
+  /// An atServer that does not honour the flag ignores it silently, so treat
+  /// it as an optimisation that may not happen, never as a guarantee that a
+  /// record stayed out of the commit log.
   bool noCommit = false;
+}
+
+/// The `useRemoteAtServer` [options] carry: null where it was never set or
+/// there are no options.
+///
+/// A subclass or another implementation of an options class may compute the
+/// value, so for one of those this is its getter's value.
+@internal
+bool? useRemoteAtServerIfSet(RequestOptions? options) {
+  final type = options?.runtimeType;
+  if (type == GetRequestOptions ||
+      type == PutRequestOptions ||
+      type == DeleteRequestOptions) {
+    return options!._useRemoteAtServer;
+  }
+  return switch (options) {
+    GetRequestOptions o => o.useRemoteAtServer,
+    PutRequestOptions o => o.useRemoteAtServer,
+    DeleteRequestOptions o => o.useRemoteAtServer,
+    _ => null,
+  };
 }

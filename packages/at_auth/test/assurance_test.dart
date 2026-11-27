@@ -13,6 +13,15 @@ void main() {
   group('AtKeysAssurance', () {
     const assurance = AtKeysAssurance();
 
+    test('an enum value it does not know is named by its field, not quoted',
+        () {
+      const token = 'Zq7Yw4Lp9Xk2Rm6TbN3vQ8sD';
+      expect(
+          () => assurance.expectEnum(token, _Known.values, 'keys[0].role'),
+          throwsA(isA<AtKeysValidationException>().having((e) => e.message,
+              'message', equals('Unsupported value at keys[0].role'))));
+    });
+
     test('rejects map update when any legacy field value changes', () {
       final existing = _fixtureLegacyJson();
 
@@ -441,8 +450,37 @@ void main() {
           existing: existing,
           candidate: candidate,
         ),
-        throwsA(isA<AtKeysValidationException>()),
+        throwsA(isA<AtKeysValidationException>().having(
+            (e) => e.message, 'message', contains('Duplicate atKeys keyId'))),
+        reason: 'the duplicate is the parse\'s own refusal; without that '
+            'guard this candidate would instead fail material preservation '
+            'with an AtKeysAssuranceException, which is also an '
+            'AtKeysValidationException and must not satisfy this assertion',
       );
+    });
+
+    test(
+        'accepts a typed-keys rewrite whose atsign differs only in spelling',
+        () {
+      // `AtKeys.fromJson` normalizes the document's atsign through
+      // `toAtsign`, while `AtKeys.toJson` writes the normalized value. A
+      // stored '@Alice🛠' therefore has to compare equal to '@alice🛠'; a raw
+      // comparison refuses every flush of a readable keyfile whose owner
+      // spelled its atSign differently.
+      final existing = _documentMap(
+        atsign: '@Alice🛠',
+        keys: [_symmetricMaterial()],
+      );
+      final candidate = _documentMap(
+        atsign: '@alice🛠',
+        keys: [_symmetricMaterial()],
+      );
+
+      expect(
+          () => assurance.validateMapUpdate(
+              existing: existing, candidate: candidate),
+          returnsNormally,
+          reason: 'atSigns are compared folded on this branch too');
     });
 
     test(
@@ -614,6 +652,31 @@ void main() {
         expect(
           () => assurance.validateKeyMaterials([authMaterial('apkam:anon:1')]),
           returnsNormally,
+        );
+      });
+
+      test('distinct role/algorithm pairs containing "/" are not aliased', () {
+        // Roles and algorithms are open tokens accepted verbatim from the
+        // keyfile, so `role/algorithm` concatenation would collide here and
+        // refuse a perfectly readable document.
+        CryptographicMaterial open(
+                String keyId, String role, String algorithm) =>
+            CryptographicMaterial(
+              keyId: keyId,
+              enrollmentId: 'e-1',
+              role: CryptographicMaterialRole.of(role),
+              algorithm: CryptographicMaterialAlgorithm.of(algorithm),
+              bytes: AtBytes.fromString('dmFsdWU='),
+              createdAt: _createdAt,
+            );
+
+        expect(
+          () => assurance.validateKeyMaterials([
+            open('a', 'x/y', 'z'),
+            open('b', 'x', 'y/z'),
+          ]),
+          returnsNormally,
+          reason: 'these are two different (role, algorithm) pairs',
         );
       });
     });
@@ -1116,3 +1179,5 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
     ],
   };
 }
+
+enum _Known { known }

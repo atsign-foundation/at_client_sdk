@@ -13,8 +13,6 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/client/pq_client_bootstrap.dart'
     show PqStartupGates;
-import 'package:at_client/src/preference/at_client_particulars.dart'
-    show AtClientParticulars;
 import 'package:at_client/src/preference/posture_floor.dart';
 import 'package:test/test.dart';
 
@@ -99,7 +97,7 @@ void main() {
     'monitorSilenceTimeout': (p) => p.monitorSilenceTimeout,
     'monitorAutoStart': (p) => p.monitorAutoStart,
     'expiryCheckTimeInterval': (p) => p.expiryCheckTimeInterval,
-    'fetchOfflineNotifications': (p) => p.fetchOfflineNotifications,
+    'notificationReplay': (p) => p.notificationReplay,
     'atClientParticulars': (p) => p.atClientParticulars,
     'remoteLocalPref': (p) => p.remoteLocalPref,
     '_crypto': (p) => p.crypto,

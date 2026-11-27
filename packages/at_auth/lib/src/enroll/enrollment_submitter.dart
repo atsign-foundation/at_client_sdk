@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/src/auth/onboarding_mint.dart' show mintApkamKeyPair;
+import 'package:at_auth/src/auth/onboarding_mint.dart' as mint
+    show ApkamKeyPairMinter, checkApkamKeyPair, mintApkamKeyPair;
 import 'package:at_auth/src/enroll/apsk_advertisement.dart';
 import 'package:at_auth/src/enroll/enrollment_approver.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
@@ -37,7 +38,11 @@ class EnrollmentSubmitter {
   final EnrollmentProgress _progress;
   final EnrollmentApprover _approver;
 
-  EnrollmentSubmitter(this._progress, this._approver);
+  final mint.ApkamKeyPairMinter _mintApkamKeyPair;
+
+  EnrollmentSubmitter(this._progress, this._approver,
+      {mint.ApkamKeyPairMinter mintApkamKeyPair = mint.mintApkamKeyPair})
+      : _mintApkamKeyPair = mintApkamKeyPair;
 
   Future<AtEnrollmentResponse> submit(
       EnrollmentRequest enrollmentRequest, AtLookUp atLookUp) async {
@@ -237,13 +242,19 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
+    final suppliedRaw = atEnrollmentRequest.apkamKeyPair;
+    final supplied = suppliedRaw == null
+        ? null
+        : await mint.checkApkamKeyPair(
+            atEnrollmentRequest.signingAlgo, suppliedRaw);
     // NOTE: under the algorithm the CALLER named. Minting RSA-2048 regardless
     // hands an atSign whose deployment has moved to post-quantum an
     // RSA-authenticating enrollment, which the client retrofits away on its
     // first start — leaving that enrollment behind, revoked when its
     // replacement first authenticates if it is scoped, and live for good if
     // it is fully privileged.
-    final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
+    final apkam =
+        supplied ?? await _mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
@@ -313,8 +324,7 @@ class EnrollmentSubmitter {
     // what every published approver knows how to unwrap.
     String? encryptedAPKAMSymmetricKey;
     if (!isPq) {
-      final SymmetricKey apkamSymmetricKey =
-          AESKey.generate(32);
+      final SymmetricKey apkamSymmetricKey = AESKey.generate(32);
       atAuthKeys.apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey.key);
       // encrypting the following APKAM keys:
       // apkamSymmetricKey for the enroll verb
@@ -335,6 +345,16 @@ class EnrollmentSubmitter {
       ..namespaces = atEnrollmentRequest.namespaces
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
       ..metadata = metadata;
+    // NOTE: the keyfile's spelling of the advertised algorithm is resolved
+    // BEFORE the request goes out. [_materialAlgorithmOf] throws for an
+    // algorithm no material can be filed under, and once `enroll:` has run
+    // that throw escapes past the point where the enrollment id is known:
+    // the caller loses the id of a record the atServer has already created,
+    // so a retry files a second enrollment beside the first.
+    final signing = atEnrollmentRequest.advertisedSigningKey;
+    final signingMaterialAlgo =
+        signing == null ? null : _materialAlgorithmOf(signing.algorithm);
+
     // Without an `_apsk` the atServer publishes nothing, and the approver has
     // no key to verify the advertised key package against — so it seals no
     // secrets to an enrollment that is otherwise perfectly good. It advertises
@@ -391,11 +411,10 @@ class EnrollmentSubmitter {
     // enrollment's own signing material, not something the metadataBuilder
     // minted, and it is filed here because only now is there an id to file it
     // under.
-    final signing = atEnrollmentRequest.advertisedSigningKey;
     if (signing != null) {
       atAuthKeys.fileSigningMaterial(
           enrollmentId: enrollmentIdFromServer,
-          algorithm: _materialAlgorithmOf(signing.algorithm),
+          algorithm: signingMaterialAlgo!,
           publicKey: signing.publicKey,
           privateKey: signing.privateKey);
     }
@@ -501,6 +520,17 @@ class EnrollmentSubmitter {
             atAuthKeys: existing,
             session: request.session);
       }
+
+      // NOTE: the advertised signing key's keyfile spelling is resolved BEFORE
+      // anything is sent, for the same reason as the OTP path. Resolving it
+      // after `enroll:` would throw past the approval, leaving an enrollment
+      // the atServer has already approved with no keyfile holding its private
+      // half — and a retry, finding nothing filed, creates a second one. It
+      // sits after the re-run check above so an idempotent re-run still
+      // returns the existing enrollment without filing anything.
+      final signingMaterialAlgo = request.advertisedSigningKey == null
+          ? null
+          : _materialAlgorithmOf(request.advertisedSigningKey!.algorithm);
 
       // NOTE: the keyfile must take a write before anything is minted or sent.
       // `update`, not `flush`: a flush recreates a keyfile deleted since the
@@ -619,7 +649,7 @@ class EnrollmentSubmitter {
       if (signing != null) {
         existing.fileSigningMaterial(
             enrollmentId: newEnrollmentId,
-            algorithm: _materialAlgorithmOf(signing.algorithm),
+            algorithm: signingMaterialAlgo!,
             publicKey: signing.publicKey,
             privateKey: signing.privateKey);
       }

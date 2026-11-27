@@ -10,7 +10,8 @@ import 'package:at_lookup/at_lookup.dart'
 /// [lookUps] builds the connection, which finds the atServer through
 /// [secondaryAddressFinder]. A refusal throws
 /// [UnAuthenticatedException], or whatever the handshake threw, and the
-/// connection is closed first.
+/// connection is closed first. Its `from:` carries [clientConfig], as at_auth
+/// completes it.
 Future<AtLookUp> authenticatedLookUp(
   String atSign,
   AtKeysIo keys,
@@ -18,13 +19,15 @@ Future<AtLookUp> authenticatedLookUp(
   required AtLookUpFactory lookUps,
   required SecondaryAddressFinder secondaryAddressFinder,
   String? enrollmentId,
+  required Map<String, dynamic> clientConfig,
 }) async {
   final id =
       enrollmentId ?? (await keys.read(atSign)).enrollmentToAuthenticateAs();
   final lookUp = lookUps(
       atSign: atSign,
       rootDomain: rootDomain,
-      authenticator: authenticatorFor(keys, atSign, enrollmentId: id),
+      authenticator: authenticatorFor(keys, atSign,
+          enrollmentId: id, clientConfig: clientConfig),
       secondaryAddressFinder: secondaryAddressFinder);
   try {
     if (!await lookUp.pkamAuthenticate()) {

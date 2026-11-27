@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuthSession, AtEnrollment, AtKeysIo, AtKeys;
+import 'package:at_auth/at_auth.dart' show AtAuthSession, AtKeysIo, AtKeys;
 import 'package:at_client/src/enroll/at_sign_credential.dart';
 import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_client/src/enroll/first_enrollment.dart'
@@ -29,6 +28,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeedOutcome, NskeySeeding;
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/preference/client_config.dart';
 import 'package:at_client/src/preference/posture_floor.dart';
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
@@ -44,6 +44,7 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/storage/at_client_storage.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
@@ -630,7 +631,7 @@ class AtClientImpl implements AtClient {
   // the same namespace with different event sources are independent
   // instances: each has its own listener wiring and pending-events
   // buffer, so sharing one cache slot would conflate their event
-  // streams.
+  // streams. The namespace is lower-cased, as atProtocol keys are.
   final Map<(String, EventSource), AtCollection> _collections = {};
   final Set<(String, EventSource)> _collectionsSwept =
       <(String, EventSource)>{};
@@ -642,6 +643,7 @@ class AtClientImpl implements AtClient {
     EventSource eventSource = EventSource.both,
     T Function(Map<String, dynamic>)? fromJson,
     String? typeTag,
+    String? writeTypeTag,
     bool cleanupOrphansOnCreation = false,
   }) async {
     _refuseIfStopped('hand out the collection $namespace');
@@ -653,16 +655,31 @@ class AtClientImpl implements AtClient {
         'automatically.',
       );
     }
-    final cacheKey = (namespace, eventSource);
+    checkCollectionTagArgs<T>(
+      hasFromJson: fromJson != null,
+      typeTag: typeTag,
+      writeTypeTag: writeTypeTag,
+    );
+    final folded = namespace.toLowerCase();
+    // Every eventSource of a namespace writes the same items, so each must
+    // stamp them alike. A refused open caches nothing.
+    for (final MapEntry(key: (ns, _), value: open) in _collections.entries) {
+      if (ns == folded) {
+        refuseCollectionTagChange<T>(open,
+            typeTag: typeTag, writeTypeTag: writeTypeTag);
+      }
+    }
+    final cacheKey = (folded, eventSource);
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
         this,
-        namespace,
+        folded,
         defaultExpiration,
         eventSource: eventSource,
         fromJson: fromJson,
         typeTag: typeTag,
+        writeTypeTag: writeTypeTag,
       ),
     ) as AtCollection<T>;
     if (cleanupOrphansOnCreation && !_collectionsSwept.contains(cacheKey)) {
@@ -955,6 +972,12 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
+    if ((_preference!.atClientParticulars.appName ?? '').trim().isEmpty) {
+      _logger.warning('AtClientPreference.atClientParticulars sets no '
+          'appName, so this client names itself to its atServer after its '
+          'program file, or "unknown" where there is none. Set '
+          'atClientParticulars.appName and appVersion to name the app');
+    }
     // NOTE: resolved before anything signs, so nothing signs with the
     // rsa2048 fallback under an ML-DSA enrollment.
     await _resolveSigningAlgoFromKeyMaterial();
@@ -1031,11 +1054,12 @@ class AtClientImpl implements AtClient {
       createsSigningRoot:
           _configuredPreference?.posture.configuresPqProviders ?? true,
       privilege: EnrollmentRecordPrivilegeResolver(this,
-          listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
+          listEnrollments: EnrollmentServiceImpl(
+                  this, enrollmentFor(_preference?.atClientParticulars))
               .fetchEnrollmentRequests),
-      sweepUnanchoredEnrollments: () =>
-          EnrollmentServiceImpl(this, AtEnrollment.create())
-              .sweepUnanchoredEnrollments(),
+      sweepUnanchoredEnrollments: () => EnrollmentServiceImpl(
+              this, enrollmentFor(_preference?.atClientParticulars))
+          .sweepUnanchoredEnrollments(),
     );
 
     _adoptEraCryptoDefault();
@@ -1578,10 +1602,8 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
-    final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
-      deleteRequestOptions?.useRemoteAtServer,
-      preference?.remoteLocalPref,
-    );
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(deleteRequestOptions));
     _refuseNoCommitWithoutRemote(
         deleteRequestOptions?.noCommit ?? false, prefForOp);
 
@@ -1590,8 +1612,8 @@ class AtClientImpl implements AtClient {
     return deleteResult != null;
   }
 
-  /// Where a put goes: a `local:` key never leaves the device, and everything
-  /// else is decided by the caller's preference.
+  /// Where an operation on [atKey] goes: a `local:` key never leaves the
+  /// device, and everything else is decided by the caller's preference.
   RemoteLocalPref _routingFor(
           AtKey atKey, bool? useRemoteAtServer) =>
       atKey.isLocal
@@ -1632,48 +1654,46 @@ class AtClientImpl implements AtClient {
   Future<AtValue> get(
     AtKey atKey, {
     GetRequestOptions? getRequestOptions,
-  }) async {
+  }) =>
+      _lookUp(atKey, getRequestOptions, 'all', (response) async {
+        if (_heldButNotVisible(response)) return AtValue();
+        return await GetResponseTransformer(this)
+            .transform(Tuple<AtKey, String>()
+              ..one = atKey
+              ..two = response!);
+      });
+
+  @override
+  Future<Metadata?> getMeta(AtKey atKey,
+          {GetRequestOptions? getRequestOptions}) =>
+      _lookUp(
+          atKey,
+          getRequestOptions,
+          'meta',
+          (response) async => _heldButNotVisible(response)
+              ? null
+              : _metadataFrom(response!, atKey));
+
+  /// Looks [atKey] up with [operation], where [getRequestOptions] and the
+  /// preference route it, and returns what [answer] makes of the response.
+  ///
+  /// Every [AtException] on the way, [answer]'s included, is rethrown as
+  /// [AtExceptionManager.createException] rebuilds it.
+  Future<T> _lookUp<T>(AtKey atKey, GetRequestOptions? getRequestOptions,
+      String operation, Future<T> Function(String? response) answer) async {
     Secondary? secondary;
     try {
-      // validate the get request.
       await AtClientValidation().validateAtKey(atKey);
-      // Get the verb builder for the atKey
-      var verbBuilder = GetRequestTransformer(
-        this,
-      ).transform(atKey, requestOptions: getRequestOptions);
-      // Execute the verb.
-      if (atKey.isLocal) {
-        secondary = getLocalSecondary()!;
-      } else {
-        if (getRequestOptions?.useRemoteAtServer == true) {
-          secondary = getRemoteSecondary()!;
-        } else {
-          secondary = SecondaryManager.getSecondary(
-            this,
-            verbBuilder,
-            SecondaryManager.getRemoteLocalPrefForOp(
-              getRequestOptions?.useRemoteAtServer,
-              preference?.remoteLocalPref,
-            ),
-          );
-        }
-      }
-      var getResponse = await secondary.executeVerb(verbBuilder);
-      // Return empty value if getResponse is null.
-      if (getResponse == null ||
-          getResponse.isEmpty ||
-          getResponse == 'data:null') {
-        return AtValue();
-      }
-      // Send AtKey and AtResponse to transform the response to AtValue.
-      var getResponseTuple = Tuple<AtKey, String>()
-        ..one = atKey
-        ..two = (getResponse);
-      // Transform the response and return
-      var atValue = await GetResponseTransformer(
-        this,
-      ).transform(getResponseTuple);
-      return atValue;
+      final verbBuilder = GetRequestTransformer(this, operation: operation)
+          .transform(atKey, requestOptions: getRequestOptions);
+      final routing =
+          _routingFor(atKey, useRemoteAtServerIfSet(getRequestOptions));
+      // NOTE: getSecondary sends any lookup to the atServer, and a `local:` key
+      // is read from local storage whatever verb it builds.
+      secondary = atKey.isLocal
+          ? getLocalSecondary()!
+          : SecondaryManager.getSecondary(this, verbBuilder, routing);
+      return await answer(await secondary.executeVerb(verbBuilder));
     } on AtException catch (e) {
       var exceptionScenario = (secondary is LocalSecondary)
           ? ExceptionScenario.localVerbExecutionFailed
@@ -1685,10 +1705,29 @@ class AtClientImpl implements AtClient {
     }
   }
 
-  @override
-  Future<Metadata?> getMeta(AtKey atKey) async {
-    var atValue = await get(atKey);
-    return atValue.metadata;
+  /// Whether [response] is a lookup's answer for a record that is held but
+  /// not visible now: not yet available, or expired and not yet removed.
+  static bool _heldButNotVisible(String? response) =>
+      response == null || response.isEmpty || response == 'data:null';
+
+  /// The metadata in [response] to a `meta` lookup of [atKey], or an
+  /// [InvalidResponseException] when it is not metadata.
+  ///
+  /// The response names no key, so `isPublic` and `isCached` come from
+  /// [atKey].
+  static Metadata _metadataFrom(String response, AtKey atKey) {
+    try {
+      final body = jsonDecode(DefaultResponseParser().parse(response).response)
+          as Map<String, dynamic>;
+      return AtClientUtil.prepareMetadata(body, atKey.metadata.isPublic,
+          isCached: atKey.metadata.isCached)!;
+    } on FormatException catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with text that does not parse: ${e.message}');
+    } on TypeError catch (e) {
+      throw InvalidResponseException('The metadata lookup of $atKey was '
+          'answered with something that is not metadata: $e');
+    }
   }
 
   @override
@@ -1863,8 +1902,9 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
-    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
-        _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    final routing =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false, routing);
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -1910,9 +1950,7 @@ class AtClientImpl implements AtClient {
           sealToNamespace: options.sealToNamespace,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
-          useRemoteAtServer:
-              _routingFor(atKey, putRequestOptions?.useRemoteAtServer) ==
-                  RemoteLocalPref.remoteOnly,
+          useRemoteAtServer: routing == RemoteLocalPref.remoteOnly,
           // Not stamped here: the catch below may re-route this write to
           // legacy, and a key stamped with the provider that then declined
           // would claim a scheme its value was never sealed under.
@@ -1963,8 +2001,7 @@ class AtClientImpl implements AtClient {
       );
     }
 
-    var putResponse = await executeUpdateOrDelete(
-        putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
+    var putResponse = await executeUpdateOrDelete(putBuilder, routing);
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {
@@ -2003,18 +2040,18 @@ class AtClientImpl implements AtClient {
     AtKey atKey, {
     PutRequestOptions? putRequestOptions,
   }) async {
+    final noCommit = putRequestOptions?.noCommit ?? false;
     var builder = UpdateVerbBuilder();
     builder
       ..atKey = atKey
-      ..operation = AtConstants.updateMeta;
+      ..operation = AtConstants.updateMeta
+      ..noCommit = noCommit;
 
-    var updateMetaResult = await executeUpdateOrDelete(
-      builder,
-      SecondaryManager.getRemoteLocalPrefForOp(
-        putRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      ),
-    );
+    final prefForOp =
+        _routingFor(atKey, useRemoteAtServerIfSet(putRequestOptions));
+    _refuseNoCommitWithoutRemote(noCommit, prefForOp);
+
+    var updateMetaResult = await executeUpdateOrDelete(builder, prefForOp);
     return updateMetaResult != null;
   }
 
@@ -2341,13 +2378,16 @@ class AtClientImpl implements AtClient {
   /// fails until a field added to [PutRequestOptions] is placed.
   @visibleForTesting
   static PutRequestOptions copyOptionsForLegacyFallback(
-          PutRequestOptions options) =>
-      PutRequestOptions()
-        ..useRemoteAtServer = options.useRemoteAtServer
-        ..shouldEncrypt = options.shouldEncrypt
-        ..alreadyEncrypted = options.alreadyEncrypted
-        ..noCommit = options.noCommit
-        ..cryptoProviderId = legacyCryptoProviderId;
+      PutRequestOptions options) {
+    final copy = PutRequestOptions()
+      ..shouldEncrypt = options.shouldEncrypt
+      ..alreadyEncrypted = options.alreadyEncrypted
+      ..noCommit = options.noCommit
+      ..cryptoProviderId = legacyCryptoProviderId;
+    final useRemoteAtServer = useRemoteAtServerIfSet(options);
+    if (useRemoteAtServer != null) copy.useRemoteAtServer = useRemoteAtServer;
+    return copy;
+  }
 
   /// Fails fast at construction if the configured default provider id can't be
   /// resolved — neither among `AtClientPreference.crypto.providers` nor the

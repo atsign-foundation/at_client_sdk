@@ -29,7 +29,7 @@ export 'src/commands/auth_cli.dart' show createAtClient;
 export 'src/commands/auth_cli_args.dart';
 export 'src/keys/cli_keys.dart';
 export 'src/register/at_register.dart';
-export 'src/register/register.dart';
+export 'src/register/register.dart' hide onboardRegistered;
 export 'src/util/proxy_lookups.dart';
 export 'src/util/request_enrollment_otp.dart';
 export 'src/util/service_factories.dart';

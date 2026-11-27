@@ -140,7 +140,7 @@ the compiler once the member is deleted.
 
 The 1317 uses are 5 unrelated deprecations that happen to arrive together.
 
-A triage on 2026-08-26, kept as [section 14.11 of the PQ plan](../pq/implementation-plan.md#1411-deprecated_member_use-findings-across-the-workspace),
+A triage on 2026-08-26, kept as [section 14.11 of the PQ plan](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1411-deprecated_member_use-findings-across-the-workspace),
 split the same debt into lettered buckets and ruled that only the
 credential-ladder bucket (its B) was D1 work, with the at_auth response
 family (its D) waiting for v5; the bucket table itself was cut from the live
@@ -233,7 +233,7 @@ and every test that builds a legacy fixture.
 
 ### F4, the inert `sync:` flag (declared in at_lookup)
 
-Already written up as [section 14.46 of the PQ plan](../pq/implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries), which
+Already written up as [section 14.46 of the PQ plan](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries), which
 enumerates all 6 declarations, at_lookup's 2 and at_client's 4, and holds the
 4.0 deletion. What this plan adds is only the count that matters here: the 3
 remaining uses are all in at_auth's tests (`enrollment_test.dart:41` and
@@ -1448,7 +1448,7 @@ wire, so it is reachable in principle. Typing the switch
 `AtHashingAlgorithm<List<int>, String>` would refuse it at compile time, and
 needs a decision on what a malformed record should do.
 
-The inert `sync:` flag's 4.0 deletion is [section 14.46](../pq/implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)'s, not
+The inert `sync:` flag's 4.0 deletion is [section 14.46](https://github.com/atsign-foundation/at_client_sdk/blob/8cfd1f4e7247ce15573dfc707ebf822d4da8ba04/docs/projects/pq/implementation-plan.md#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)'s, not
 this plan's. One detail found on 2026-09-11 that it does not record: the two
 `remote_secondary.dart` declarations write `sync = false` with no type, so
 they infer `dynamic` where the interface says `bool?`.

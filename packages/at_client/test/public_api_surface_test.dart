@@ -93,10 +93,53 @@ void main() {
     });
   });
 
+  group('a refused passphrase is reachable through the barrel', () {
+    test('an app tells a refused passphrase from other unreadable keys', () {
+      final unusable = AtKeysUnusableException.unreadable('@alice',
+          source: '/keys/@alice_key.atKeys',
+          error: AtKeysPassphraseException('the passphrase does not open it'));
+
+      expect(unusable.error, isA<AtKeysPassphraseException>());
+      expect(unusable.error, isA<AtDecryptionException>());
+      expect(unusable.cause, AtKeysUnusableCause.unreadable);
+    });
+  });
+
+  group('a refusal and its code are reachable through the barrel', () {
+    test('an app names AtAuthErrorReplyException and reads its code', () {
+      final refusal =
+          AtAuthErrorReplyException('pkam: refused', errorCode: 'AT0027');
+      expect(refusal.errorCode, 'AT0027');
+    });
+  });
+
   // The group above catches a surface REMOVAL; this one catches the opposite,
   // an `src/` file exported by accident. Every change to what a barrel exports
   // is a deliberate diff against a checked-in set — an intended change updates
   // the golden set in the SAME commit, and that edit is the review.
+  group('the offline envelope verifier is reachable through the barrel', () {
+    test('every name its calls take and return is nameable', () {
+      final signer =
+          PublishedApsk(atSign: '@alice', enrollmentId: 'e1', value: '');
+      final SignedEnvelope envelope = SignedEnvelope.parse(
+          '{"payload": "", "signatures": [{"protected": "e30", '
+          '"signature": ""}]}',
+          maxLength: 1024);
+      final EnvelopeSignature entry = envelope.signature;
+      final EnvelopeKeySelection selection =
+          selectEnvelopeKey(envelope, signer: signer);
+
+      expect(entry.alg, isNull);
+      expect(selection, isA<EnvelopeRefused>());
+      expect(EnvelopeRefusal.values, hasLength(11));
+      expect([EnvelopeVerified, EnvelopeKeySelected, EnvelopeVerification],
+          everyElement(isA<Type>()));
+      expect(maxPublishedApskLength, 512 * 1024);
+      expect(verifySignedEnvelope, isA<Function>());
+      expect([ApskSigningKey, KeyEntryStatus], everyElement(isA<Type>()));
+    });
+  });
+
   group('the exported file surface is a reviewed golden', () {
     Set<String> exportsOf(String barrel) {
       final file = File('lib/$barrel');
@@ -186,11 +229,16 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/listener/at_sign_change_listener.dart',
   'package:at_client/src/listener/switch_at_sign_event.dart',
   'package:at_client/src/manager/at_client_manager.dart',
+  // Atsign.authenticatesAs's particulars: the app its from: names.
+  'package:at_client/src/preference/at_client_particulars.dart',
   'package:at_client/src/preference/at_client_preference.dart',
+  // AtClientPreference.notificationReplay's type: the policy an app names.
+  'package:at_client/src/preference/notification_replay.dart',
   'package:at_client/src/preference/pq_posture.dart',
   // show-narrowed to the key stores an app names (AtKeys, AtKeysIo,
   // WrittenAtKeysIo, InMemoryAtKeysIo), what reading a keyfile that is not a
-  // JSON object throws (AtKeysFormatException), the grant type an
+  // JSON object throws (AtKeysFormatException), what a refused passphrase
+  // throws (AtKeysPassphraseException), the grant type an
   // enrollment's namespaces read as (NamespacePermission), and
   // EnrollmentKeyExchangeMode:
   // an app opens, activates and enrols through this package and must not
@@ -209,6 +257,11 @@ const Set<String> _atClientBarrelExports = {
   // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
+  // show-narrowed to SignedEnvelope and EnvelopeSignature: what
+  // verifySignedEnvelope and selectEnvelopeKey take, and its entries.
+  'package:at_client/src/signing/envelope_signature.dart',
+  // The experimental offline verifier of application envelopes.
+  'package:at_client/src/signing/envelope_verification.dart',
   // show-narrowed to AtSignLogger, so an app logs through the SDK's logger
   // without importing at_utils.
   'package:at_utils/at_logger.dart',

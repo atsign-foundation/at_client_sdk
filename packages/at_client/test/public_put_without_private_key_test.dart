@@ -8,6 +8,7 @@ import 'package:test/test.dart';
 
 import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/transport.dart';
 
 /// A public write is signed with the atSign's encryption private key. A
 /// client whose key source and keystore hold none is refused with the
@@ -36,9 +37,8 @@ void main() {
         AtClientPreference()
           ..namespace = 'unit'
           ..rootDomain = 'test.atsign.wtf',
-        lookUps: secureSocketLookUps(),
-        secondaryAddressFinder:
-            CacheableSecondaryAddressFinder('test.atsign.wtf', 64),
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: defaultAtDirectory,
         remoteSecondary: remote,
         storage: InMemoryAtClientStorage(atSign: atSign, closedByClient: true),
         atKeysIo: keys);

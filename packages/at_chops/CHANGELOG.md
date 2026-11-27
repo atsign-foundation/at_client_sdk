@@ -1,13 +1,36 @@
-## 3.8.0
+## 3.8.0-rc.1
 
 - feat: `MlDsa65PureDartAlgo.keyPairFromSeed` and `MlDsa65FfiAlgo.keyPairFromSeed`
   derive the same ML-DSA-65 key pair from a 32-byte FIPS 204 seed
   (`MlDsa65Sizes.seedBytes`). The seed is the private key; see the README's
-  "Persisting an ML-DSA-65 key".
+  "Persisting an ML-DSA-65 key". `MlDsa65Sizes.newSeed()` draws a fresh
+  seed and `MlDsa65Sizes.validateSeed` throws `ArgumentError` for one of the
+  wrong length.
 - feat: `AtSeededSignatureAlgorithm`, an `AtSignatureAlgorithm` that also has
   `keyPairFromSeed` and `newSeed`. Both ML-DSA-65 classes implement it, and
   `AtPqc.mlDsa65` is now typed as it, so a caller going through `AtPqc` can
   reach the seeded path.
+- fix: the X25519, ML-DSA-65 and ML-KEM-768 FFI backends clear each native
+  buffer that held a private key, seed or shared secret before freeing it.
+  Copies the caller holds as `Uint8List` are not affected.
+- fix: `RsaSignatureAlgo`'s message for an unreadable private key names the
+  parse error's type rather than quoting its text.
+- fix: `AtChopsImpl.encryptBytes`, `decryptBytes` and `sign` name the
+  underlying error's type, an `Error`'s included, rather than quoting its
+  text. An `AtException`'s message is kept. `sign` reports the failure as an
+  `AtSigningException`.
+- fix: `libCryptoSupportsMlKem768` requires OpenSSL 3.5.1 or later, and
+  `MlKem768FfiAlgo.fromLib` and `XWingFfiAlgo.fromLib` throw an
+  `UnsupportedError` on an earlier release. On 3.5.0, `AtPqc.xWing` uses the
+  pure-Dart backend.
+- perf: `AesGcm256FfiAlgo.encrypt` and `AesGcm256EncryptionAlgo.encrypt` build
+  the ciphertext and tag in one buffer, which is faster for a 1.1 MB
+  plaintext. The output is unchanged.
+- perf: `ChaCha20Poly1305Algo.encrypt` builds the ciphertext and tag in one
+  buffer, which is faster for plaintexts from 32 bytes to 1.1 MB. The output
+  is unchanged.
+- fix: `AesGcm256FfiAlgo.decrypt` throws a `StateError` when OpenSSL reports
+  a plaintext length that differs from the ciphertext length.
 
 ## 3.7.1
 

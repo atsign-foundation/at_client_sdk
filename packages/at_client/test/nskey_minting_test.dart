@@ -219,6 +219,20 @@ void main() {
         .put(any(), any(), putRequestOptions: any(named: 'putRequestOptions')));
   });
 
+  test(
+      "Every envelope at_client signs names its signer's Atsign: its nskey "
+      'advertisement through PublishedNskeyKeyRing.mintAndPublish', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace);
+
+    final envelope = SignedEnvelope.fromJson(
+        jsonDecode(c.values['__nskey']!) as Map<String, dynamic>);
+    expect(envelope.signatures.map((s) => s.iss).toSet(), {atSign});
+    expect(envelope.signerAtSign, atSign);
+  });
+
   test('a mint files what it published locally, without queueing a push',
       () async {
     final c = client();

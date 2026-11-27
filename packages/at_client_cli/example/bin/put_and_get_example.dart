@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
 
     print('Fetching $id');
 
-    // Fetch it via atProtocol llookup command
+    // Fetch it via Atsign Protocol llookup command
     var asStored =
         (await atClient.getRemoteSecondary()!.executeCommand('llookup:$id\n'))!
             .replaceFirst(RegExp(r'^data:'), '');

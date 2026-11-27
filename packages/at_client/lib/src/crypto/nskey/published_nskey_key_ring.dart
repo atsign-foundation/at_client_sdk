@@ -677,8 +677,10 @@ class PublishedNskeyKeyRing
   /// and the generation keeps its `createdAt` and its record stamp, so an add
   /// after a revocation cannot read as a generation minted after it.
   ///
-  /// ⚠️ **The conveyance excludes nobody** — a child an enrollment self-spawned
-  /// before being revoked receives what this add conveys.
+  /// ⚠️ **The conveyance excludes nobody** — a successor an enrollment
+  /// self-enrolled before being revoked receives what this add conveys, since
+  /// a revocation cascades by approval and never reaches a self-enrolled
+  /// successor.
   ///
   /// [conveyFirst] is handed only the kids this add mints; [lockTtl] is as for
   /// [mintAndPublish].
@@ -1249,8 +1251,9 @@ class PublishedNskeyKeyRing
   /// Reads [atKey], or null when the atServer says there is none; any other
   /// failure throws.
   ///
-  /// For this client's own atSign, local storage first: [currentPublic] sits on
-  /// the write path, so a round trip by default would break offline writes. The
+  /// For this client's own atSign, first where the client's preference routes
+  /// a read, which is local storage by default: [currentPublic] sits on the
+  /// write path, so a round trip by default would break offline writes. The
   /// fallback to the atServer is what keeps a client that has just minted — or
   /// whose sibling enrollment minted a moment ago — from reading its own
   /// published namespace as a cold start until sync pulls the record down, and

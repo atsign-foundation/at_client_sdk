@@ -63,8 +63,9 @@ void main() {
 
     /// An atServer as the registrar leaves it, unless [activated], in which
     /// case an activation has already published an encryption public key.
+    /// [onPublicKeyLookup] runs before it answers a public key lookup.
     ({MockAtLookupImpl lookUp, List<String> sent}) atServer(
-        {bool activated = false}) {
+        {bool activated = false, void Function()? onPublicKeyLookup}) {
       final lookUp = MockAtLookupImpl();
       final sent = <String>[];
       when(() => lookUp.pkamAuthenticate()).thenAnswer((_) async => true);
@@ -73,6 +74,7 @@ void main() {
         final command = i.positionalArguments.first as String;
         sent.add(command);
         if (command.startsWith('lookup:publickey')) {
+          onPublicKeyLookup?.call();
           return activated
               ? 'data:${demo.encryptionPublicKeyMap['@alice🛠']}'
               : 'data:null';
@@ -158,6 +160,37 @@ void main() {
           reason: 'refused before the atServer was asked anything');
     });
 
+    group(
+        'Given a keyfile that appears at the path after the check that the '
+        'path is free', () {
+      test(
+          'when a program calls onboard, then it throws '
+          'AtKeysUnusableException naming the keyfile', () async {
+        final keysPath = '${dir.path}/${atSign}_key.atKeys';
+        final server = atServer(
+            onPublicKeyLookup: () =>
+                File(keysPath).writeAsStringSync('{"keys":['));
+        final args = AuthCliArgs().createOnboardCommandParser().parse([
+          '-a', atSign, //
+          '-k', keysPath,
+          '-c', cramSecret,
+          '-r', '127.0.0.1:${await refusedPort()}',
+          '--posture', 'legacy',
+        ]);
+
+        await expectLater(
+            onboard(args,
+                program: 'at_activate',
+                programVersion: null,
+                atLookUp: server.lookUp),
+            throwsA(isA<AtKeysUnusableException>()
+                .having((e) => e.cause, 'cause', AtKeysUnusableCause.unreadable)
+                .having((e) => e.source, 'source', keysPath)));
+        expect(server.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'nothing is enrolled with keys that cannot be read');
+      });
+    });
+
     /// Catalogue: features/at_client_cli/registrar_api_key.feature
     test('at_activate onboard with a CRAM secret needs no registrar API key',
         () async {
@@ -190,13 +223,14 @@ void main() {
             required List<String> wrapped}) =>
         approvingAtServer(decide: decide, wrapped: wrapped);
 
-    Future<AtClient> enrol(AtClientPreference pref, String keysPath,
-            MockAtLookupImpl lookUp) =>
+    Future<AtClient> enrol(
+            AtClientPreference pref, String keysPath, MockAtLookupImpl lookUp,
+            {String app = 'wavi', String device = 'phone'}) =>
         enrolDevice(
             atSign: atSign,
             settings: settingsFor(pref, keysPath),
-            app: 'wavi',
-            device: 'phone',
+            app: app,
+            device: device,
             otp: 'ABC123',
             namespaces: {'wavi': 'rw'},
             signingAlgo: SigningAlgoType.rsa2048,
@@ -228,8 +262,9 @@ void main() {
       final pref = await preference();
       // Submitted earlier and never approved: the keyfile holds it pending.
       final first = atServer(
-          decide: (_) async => throw UnAuthenticatedException(
-              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed'),
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
           wrapped: wrapped);
       await Atsign(atSign).enroll(
           otp: 'ABC123',
@@ -248,10 +283,17 @@ void main() {
           [enrollmentId]);
 
       final second = atServer(decide: (_) async => true, wrapped: wrapped);
-      final client = await enrol(pref, keysPath, second.lookUp);
+      final err = _Captured();
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp),
+          stderr: () => err);
 
       expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
           reason: 'the wait resumed from the keyfile; no second request');
+      expect(
+          err.text,
+          contains('Resuming enrollment $enrollmentId, submitted earlier from '
+              'this keyfile'));
       expect(client.enrollmentId, enrollmentId);
       expect(
           (await FileAtKeysIo(filePath: (_) => keysPath).read(atSign))
@@ -259,5 +301,186 @@ void main() {
           enrollmentId);
       await client.stop();
     });
+
+    for (final (app, device) in const [('wavi', 'phone'), ('buzz', 'tablet')]) {
+      test(
+          'enroll adopts the request its keyfile holds under another app or '
+          'device name', () async {
+        final wrapped = <String>[];
+        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+        final pref = await preference();
+        final filing = atServer(
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026'),
+            wrapped: wrapped);
+        await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'buzz',
+            device: 'phone',
+            namespaces: {'buzz': 'rw'},
+            keys: FileAtKeysIo(filePath: (_) => keysPath),
+            preference: pref,
+            atLookUp: filing.lookUp,
+            lookUps: settingsFor(pref, keysPath).lookUps,
+            secondaryAddressFinder:
+                settingsFor(pref, keysPath).secondaryAddressFinder);
+        final second = atServer(decide: (_) async => true, wrapped: wrapped);
+        final err = _Captured();
+
+        final client = await IOOverrides.runZoned(
+            () =>
+                enrol(pref, keysPath, second.lookUp, app: app, device: device),
+            stderr: () => err);
+
+        expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'run as $app on $device: the wait resumed from the '
+                'keyfile; no second request');
+        expect(
+            err.text,
+            contains(
+                'Resuming enrollment $enrollmentId, filed as buzz on phone'),
+            reason: 'run as $app on $device');
+        expect(client.enrollmentId, enrollmentId,
+            reason: 'run as $app on $device: the approval of the request it '
+                'waited on opens the client');
+        await client.stop();
+      });
+    }
+
+    group(
+        'Given a keyfile whose pending enrollment records no app and no '
+        'device', () {
+      test(
+          'when at_activate enroll runs, then it resumes that enrollment '
+          'saying nothing of names', () async {
+        final wrapped = <String>[];
+        final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+        final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+        final pref = await preference();
+        final filing = atServer(
+            decide: (_) async => throw AtAuthErrorReplyException(
+                'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+                errorCode: 'AT0026'),
+            wrapped: wrapped);
+        await Atsign(atSign).enroll(
+            otp: 'ABC123',
+            app: 'buzz',
+            device: 'phone',
+            namespaces: {'buzz': 'rw'},
+            keys: keyfile,
+            preference: pref,
+            atLookUp: filing.lookUp,
+            lookUps: settingsFor(pref, keysPath).lookUps,
+            secondaryAddressFinder:
+                settingsFor(pref, keysPath).secondaryAddressFinder);
+        final json = (await keyfile.read(atSign)).toJson();
+        for (final entry in json['enrollments'] as List) {
+          (entry as Map)
+            ..remove('appName')
+            ..remove('deviceName');
+        }
+        File(keysPath).deleteSync();
+        await keyfile.write(atSign, AtKeys.fromJson(json));
+        final info = (await keyfile.read(atSign)).enrollmentInfo(enrollmentId);
+        expect((info?.appName, info?.deviceName), (null, null),
+            reason: 'the control: the keyfile records neither name');
+        final second = atServer(decide: (_) async => true, wrapped: wrapped);
+        final err = _Captured();
+
+        final client = await IOOverrides.runZoned(
+            () => enrol(pref, keysPath, second.lookUp),
+            stderr: () => err);
+
+        expect(second.sent.where((c) => c.startsWith('enroll:')), isEmpty,
+            reason: 'the wait resumed from the keyfile; no second request');
+        expect(
+            err.text,
+            allOf(contains('Resuming enrollment $enrollmentId\n'),
+                isNot(contains('filed')), isNot(contains('submitted'))));
+        expect(client.enrollmentId, enrollmentId);
+        await client.stop();
+      });
+    });
+
+    test(
+        'enroll shows a recorded app or device name with its control '
+        'characters escaped', () async {
+      final wrapped = <String>[];
+      final keysPath = '${dir.path}/${atSign}_wavi_key.atKeys';
+      final keyfile = FileAtKeysIo(filePath: (_) => keysPath);
+      final pref = await preference();
+      final filing = atServer(
+          decide: (_) async => throw AtAuthErrorReplyException(
+              'Failed connecting to $atSign. error:AT0026:Apkam Auth Failed',
+              errorCode: 'AT0026'),
+          wrapped: wrapped);
+      await Atsign(atSign).enroll(
+          otp: 'ABC123',
+          app: 'wavi',
+          device: 'phone',
+          namespaces: {'wavi': 'rw'},
+          keys: keyfile,
+          preference: pref,
+          atLookUp: filing.lookUp,
+          lookUps: settingsFor(pref, keysPath).lookUps,
+          secondaryAddressFinder:
+              settingsFor(pref, keysPath).secondaryAddressFinder);
+      final json = (await keyfile.read(atSign)).toJson();
+      final entry = (json['enrollments'] as List).single as Map;
+      entry['appName'] = 'wa\u001bvi';
+      entry['deviceName'] = 'pho\rne';
+      File(keysPath).deleteSync();
+      await keyfile.write(atSign, AtKeys.fromJson(json));
+      final info = (await keyfile.read(atSign)).enrollmentInfo(enrollmentId);
+      expect((info?.appName, info?.deviceName), ('wa\u001bvi', 'pho\rne'),
+          reason: 'the control: the keyfile records both names as written');
+      final second = atServer(decide: (_) async => true, wrapped: wrapped);
+      final out = _Captured();
+      final err = _Captured();
+
+      final client = await IOOverrides.runZoned(
+          () => enrol(pref, keysPath, second.lookUp,
+              app: 'buzz', device: 'tablet'),
+          stdout: () => out,
+          stderr: () => err);
+
+      expect(
+          err.text,
+          contains('Resuming enrollment $enrollmentId, filed as wa\\u001bvi '
+              'on pho\\u000dne'));
+      for (final (name, printed) in [
+        ('stdout', out.text),
+        ('stderr', err.text)
+      ]) {
+        expect(
+            printed
+                .replaceAll('\r\u001b[K', '')
+                .replaceAll(RegExp(r'\u001b\[[0-9;]*m'), ''),
+            allOf(isNot(contains('\u001b')), isNot(contains('\r'))),
+            reason: 'on $name, once the colour codes and the line redraw the '
+                'command writes itself are taken out');
+      }
+      await client.stop();
+    });
   });
+}
+
+/// Stands in for stderr, keeping what is written to it.
+class _Captured implements Stdout {
+  final List<String> written = [];
+
+  String get text => written.join();
+
+  @override
+  void write(Object? object) => written.add('$object');
+
+  @override
+  void writeln([Object? object = '']) => written.add('$object\n');
+
+  @override
+  bool get hasTerminal => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }

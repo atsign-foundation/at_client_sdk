@@ -1,0 +1,58 @@
+{
+  "collectionErrorCodes": [
+    "COLLECTION_FAILED",
+    "COLLECTION_INVALID_ARGUMENT",
+    "COLLECTION_ITEM_ALREADY_EXISTS",
+    "COLLECTION_ITEM_HAS_SUB_ITEMS",
+    "COLLECTION_ITEM_NOT_FOUND",
+    "COLLECTION_ITEM_NOT_OWNER",
+    "COLLECTION_ITEM_TOO_DEEP",
+    "COLLECTION_ITEM_UNREADABLE",
+    "COLLECTION_ITEM_WRONG_TYPE",
+    "COLLECTION_PARTIAL_FAILURE",
+    "COLLECTION_TYPE_MISMATCH"
+  ],
+  "errorCodes": [
+    "bad_key",
+    "closed",
+    "enrollment_conveyance_failed",
+    "enrollment_denied",
+    "enrollment_in_flight",
+    "internal",
+    "invalid_argument",
+    "notify_failed",
+    "offline",
+    "onboarding_incomplete",
+    "pkam_refused",
+    "timeout",
+    "unsupported"
+  ],
+  "schemaVersion": 1,
+  "surface": {
+    "BridgeCollection": [
+      "create",
+      "get",
+      "list",
+      "query",
+      "remove",
+      "share",
+      "update",
+      "watch"
+    ],
+    "BridgeEntry": [
+      "create"
+    ],
+    "BridgeSession": [
+      "approve",
+      "close",
+      "collection",
+      "deny",
+      "notify",
+      "onStatus",
+      "otp",
+      "pendingEnrollments",
+      "status",
+      "subscribe"
+    ]
+  }
+}

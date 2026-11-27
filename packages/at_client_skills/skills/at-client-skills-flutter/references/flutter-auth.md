@@ -292,6 +292,9 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
+- When the keys hold a request awaiting approval in a store it can write,
+  `PkamDialog` waits for the approval instead. Leaving the dialog keeps the
+  request.
 
 See at-client-skills-core's lifecycle reference for the full state model,
 the services and the shutdown checklist.

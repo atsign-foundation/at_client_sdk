@@ -36,7 +36,9 @@ final owner = await Atsign('@alice').activate(
     lookUps: lookUps, secondaryAddressFinder: finder);
 
 // Enroll this app with an atSign whose keys another device holds. The
-// request is filed in `keys` as pending, so a restart resumes it.
+// request is filed in `keys` as pending, so a restart resumes it. enroll
+// throws AtEnrollmentException when `keys` already holds live keys, or a
+// pending request for the same app and device: resume that one instead.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
@@ -80,7 +82,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
-<!-- pyml disable-num-lines 12 md013-->
+<!-- pyml disable-num-lines 14 md013-->
 | Thrown                          | When                                                                                                     | Do                                                            |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
@@ -89,7 +91,9 @@ connect attempt waits before the client comes back offline, 5 s by default).
 | `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
 | `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
 | `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired                                                | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired; its pending keys are removed                  | Tell the user; a new `enroll` is a new request                |
+| `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet"; the request is kept | Show the message; wait again with `resumeEnrollment`, or `cancel()` |
+| Any other error                 | `pending.client(...)`: the request was approved, but its keys could not be collected; the request is kept | Wait again with `resumeEnrollment` before a person considers `cancel()` |
 | `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
 | `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
 | `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys                                                    | Show the cause                                                |

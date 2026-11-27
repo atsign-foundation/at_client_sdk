@@ -27,7 +27,8 @@ keys, logging). You do not add `at_client` beside it.
 
 `at_client` itself is the platform-neutral **core**: public, but for building
 a platform package, or for a program that passes every dependency explicitly.
-A browser platform package, `at_client_web`, does not exist yet.
+The browser platform package, `at_client_web`, is still being built and is not
+published, so a browser app has no SDK package to depend on yet.
 
 ---
 
@@ -55,7 +56,10 @@ both platform packages, and the approving side is `client.enrollments`; see
 calls those; a Flutter app uses the dialogs, a CLI program `CLIBase`. **Do not
 add `at_auth`**: it is the protocol layer under `at_client`, and its 4.0
 removed the request and response types apps used to hold. What an app needs
-for onboarding comes through its platform package.
+for onboarding comes through its platform package. at_auth's
+`RegistrarAdminService` (super-API-key registration and deletion) is
+admin/backend tooling, never a client app: the super key must never ship in a
+mobile or web bundle.
 
 `AtRootDomain` comes from `at_commons`, surfaced via `at_client`.
 

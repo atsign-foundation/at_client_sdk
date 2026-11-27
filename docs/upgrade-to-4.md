@@ -159,6 +159,8 @@ Future<void> openAlice(AtClientPreference preference) async {
     print('@alice is ${client.connection.current}');
   } on AtEnrollmentPendingException catch (e) {
     print('awaiting approval of ${e.pendingEnrollmentIds}');
+  } on AtKeysUnusableException catch (e) {
+    print(e.message);
   } on AtOpenRefusedException catch (e) {
     print('refused: ${e.state}');
   }
@@ -171,11 +173,14 @@ atSign again as an enrollment whose client is still live throws a
 `StateError`; another enrollment of the atSign opens beside it.
 `AtClientImpl.liveClientsFor(atSign)` lists every live client of an atSign.
 
-On the first open of an atSign on a device, `Atsign.open` throws
-`AtEnrollmentPendingException` when the keys hold only an enrollment request
-that has not been approved, `AtNoCredentialException` at once when they hold
-no credential and no request, as a denial, a cancel or an expiry leaves them,
-and
+`Atsign.open` reads the keys first and throws `AtKeysUnusableException`
+before connecting, on any device, when they cannot be used: when they are
+absent, cannot be read, hold no authentication keypair this device can use
+or record another atSign, and, as its subclasses,
+`AtEnrollmentPendingException` when they hold only an enrollment request
+that has not been approved and `AtNoCredentialException` when they hold no
+credential and no request, as a denial, a cancel or an expiry leaves them.
+Its `cause` says which. On the first open of an atSign on a device it throws
 `AtOpenRefusedException` when the atServer refuses the keys or the atDirectory
 knows no atServer for the atSign; its `state` says which. Otherwise
 `Atsign.open` returns once its one attempt to reach the atServer has ended,
@@ -211,9 +216,11 @@ flows still read it when an app passes no storage, until 5.0.
 Every client, enrollment and lookup is handed its transport and the atDirectory
 it asks: `secureSocketLookUps()` and
 `CacheableSecondaryAddressFinder(preference.rootDomain, preference.rootPort)`,
-as above. A command-line program takes its transport from at_client_cli's
-`lookUpsFor(preference.rootDomain)`, as `CLIBase` does: `proxyLookUps()` for a
-root domain beginning `proxy:`, and `secureSocketLookUps()` otherwise.
+as above. A command-line program takes its transport from `secureSocketLookUps()`, as
+`CLIBase` does. at_lookup 4.1.0 sends `from:<atSign>` itself on every
+connection for a root domain beginning `proxy:`, so at_client_cli's
+`lookUpsFor(rootDomain)` returns `secureSocketLookUps()` for every root and is
+deprecated, as is `proxyLookUps()`.
 
 ### `Undefined name 'FileAtKeysIo'`, `'CacheableSecondaryAddressFinder'`, `'HiveAtClientStorage'`
 
@@ -389,6 +396,12 @@ and `withTransport` take no `clientConfig:` either.
 `package:at_lookup/at_lookup_io.dart`, and a failed write throws
 `AtIOException` rather than `SocketException`.
 
+From at_lookup 4.1.0, `notificationRefusals` carries an
+`UnAuthenticatedException` for each notification reconnect the atServer
+turns away, answering without letting the client in, while reconnecting goes
+on. `notifications` carries no refusals, as in 4.0. An implementation of
+`AtLookupMuxable` adds the `notificationRefusals` getter.
+
 ### A test double for the atServer
 
 A double that extended `AtLookupSecureSocketFactory`, or wrapped a fake
@@ -524,17 +537,22 @@ Future<void> approveWhatIsPending(AtClient client) async {
 `AtKeysFormatException`, a `FormatException`, so a `catch` for one still
 catches it. Its `reason` is the JSON parser's own wording and its `position`
 the 1-based character where the parser stopped; its `source` is always null.
-A keyfile holding JSON that is not an object throws it too, with a null
-`position`, where it used to fail as a `TypeError`. A passphrase-protected
-keyfile whose decrypted content does not parse still fails as
-`AtDecryptionException`. An app that built its message from the old
-exception's `source` or `offset` reads `reason` and `position` instead:
+A keyfile holding JSON that is not an object throws it too, where it used to
+fail as a `TypeError`, with `isJson` true and a null `position`. So does a
+keychain entry whose header is a JSON object of the wrong shape, such as one
+with no usable segment count, or a legacy header whose count is not a whole
+number from 0 to 2560; `reason` says what was found. A
+passphrase-protected
+keyfile whose decrypted content does not parse fails as
+`AtKeysPassphraseException`, an `AtDecryptionException`. An app that built its message from the old
+exception's `source` or `offset` reads `isJson`, `reason` and `position`
+instead:
 
 ```dart after
-String unreadableKeyfile(AtKeysFormatException e) => e.position == null
-    ? 'The atKeys file is not a JSON object'
-    : 'The atKeys file is not valid JSON: ${e.reason} '
-        'at character ${e.position}';
+String unreadableKeyfile(AtKeysFormatException e) => e.isJson
+    ? 'The atKeys file is ${e.reason}'
+    : 'The atKeys file is not valid JSON: ${e.reason}'
+        '${e.position == null ? '' : ' at character ${e.position}'}';
 ```
 
 ### `Undefined class 'AtOnboardingPreference'`, or `'AtOnboardingService'`
@@ -561,7 +579,8 @@ null passes a default in its place, such as
 add the members to any class implementing either. A `SyncService` of your own
 drops `setOnDone` and `sync`'s `onDone` and `onError`, and an `AtServiceFactory` of your own
 drops `atClient` and takes only the client in `notificationService` and
-`syncService`.
+`syncService`. A class that implements `WrittenAtKeysIo`, rather than
+extending it, adds `describeSource` and `checkWritable`.
 
 ### Changes the analyzer won't show
 
@@ -569,6 +588,8 @@ These compile and then fail when the code runs, usually first in a test:
 
 - A keyfile that is not valid JSON throws `AtKeysFormatException`, as
   [above](#a-keyfile-that-is-not-valid-json-throws-atkeysformatexception).
+- `CLIBase` throws `AtKeysUnusableException`, not `ArgumentError`, for a
+  missing keyfile, so a `catch` for `ArgumentError` no longer catches it.
 - `storage` cannot be null, so a mocktail stub that matches it with `any()`
   needs `registerFallbackValue` for `AtClientStorage` first, for instance an
   `InMemoryAtClientStorage`.
@@ -626,7 +647,7 @@ Future<AtClient> openFromKeyfile() {
       preference: preference,
       storage: CliKeys.storageFor('@alice',
           program: 'my_app', path: 'storage/hive'),
-      lookUps: lookUpsFor(preference.rootDomain),
+      lookUps: secureSocketLookUps(),
       secondaryAddressFinder: CacheableSecondaryAddressFinder(
           preference.rootDomain, preference.rootPort));
 }
@@ -661,7 +682,7 @@ Future<AtClient?> openIfOnline(Future<AtClient> Function() open) async {
 
 **From a 4.0 release candidate.** at_onboarding_cli 2.0.0's release
 candidates gave `AtOnboardingPreference` a `storageFor` and a `lookUps`.
-`CliKeys.storageFor` and `lookUpsFor(preference.rootDomain)` replace them,
+`CliKeys.storageFor` and `secureSocketLookUps()` replace them,
 and an `AtClientPreference` replaces the preference itself. A program on a
 release candidate also meets three changes section 2 covers by error:
 `open`, `activate`, `enroll` and `resumeEnrollment` require
@@ -673,11 +694,13 @@ release candidate also meets three changes section 2 covers by error:
 `AtCredentialRefusedException` when the atServer refuses the keys, saying when
 an enrollment awaits approval or was denied; `SecondaryNotFoundException` when
 the atDirectory has no atServer for the atSign; and
-`SecondaryServerConnectivityException` only when the atServer is not reached
-in time. A retry loop catches the last alone. A keyfile still holding only its
-enrollment request is resumed: the program says it is waiting for that
-enrollment, waits for its approval as at_activate does, then runs, and a
-denial or expiry ends it with `AtEnrollmentException`.
+`SecondaryServerConnectivityException` only when no atServer accepted or
+refused the keys in time: an outage, or, with at_client 4.1.0, a server error
+such as AT0011. A retry loop catches the last alone. A keyfile still holding
+only its enrollment request is resumed: the program says it is waiting for
+that enrollment, waits for its approval as at_activate does, then runs, and a
+denial or expiry ends it with `AtEnrollmentException`; with at_client 4.1.0
+that is `AtEnrollmentDeniedException` or `AtEnrollmentExpiredException`.
 
 ```dart after-cli
 Future<AtClient> openWhenReachable(List<String> args) async {
@@ -794,9 +817,9 @@ Future<AtClient> enrollWith(String otp, AtClientPreference preference) async {
 }
 ```
 
-After a restart, `AtsignFlows().resumeEnrollment('@alice', app:, device:,
-keys:, preference:)` hands back the request already filed in the keys and
-awaiting approval, or null when there is none, rather than filing another.
+After a restart, `AtsignFlows().resumeEnrollment('@alice', keys:,
+preference:)` hands back the request already filed in the keys and awaiting
+approval, or null when there is none, rather than filing another.
 
 When an app passes no `storage:`, the dialogs and flows use
 `hiveStoragePath` while the app still sets it, and otherwise the app support

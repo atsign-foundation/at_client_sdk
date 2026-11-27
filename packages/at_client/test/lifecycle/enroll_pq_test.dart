@@ -110,7 +110,7 @@ void main() {
               ..hiveStoragePath = dir.path
               ..namespace = 'lifecycle',
             signingAlgo: SigningAlgoType.rsa2048,
-            lookUps: secureSocketLookUps(),
+            lookUps: loopbackLookUps(),
             secondaryAddressFinder: await refusingAtDirectory(),
             atLookUp: lookUp),
         throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
@@ -157,12 +157,68 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
 
     expectKeyPackageFiledUnder(await store.read(atSign), enrollmentId,
         kid: advertisedKid(requests.single));
+  });
+
+  test(
+      "Given a store left holding another request's symmetric key, when a pq "
+      'request is filed into it, then it resumes as a pq request', () async {
+    final lookUp = MockAtLookupImpl();
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((invocation) async {
+      final command = invocation.positionalArguments.first as String;
+      if (command.startsWith('enroll:request:')) {
+        return 'data:${jsonEncode({
+              'enrollmentId': enrollmentId,
+              'status': 'pending'
+            })}';
+      }
+      throw StateError('the mocked atServer has no answer for: $command');
+    });
+    when(() => lookUp.executeVerb(any())).thenAnswer((invocation) async {
+      final builder = invocation.positionalArguments.first;
+      if (builder is LookupVerbBuilder && builder.atKey.key == 'publicKey') {
+        return 'data:$encryptionPublicKey';
+      }
+      throw StateError('the mocked atServer has no answer for: '
+          '${(builder as VerbBuilder).buildCommand()}');
+    });
+    when(() => lookUp.close()).thenAnswer((_) async {});
+    when(() => lookUp.isConnectionAvailable()).thenReturn(false);
+    final store = InMemoryAtKeysIo();
+    await store.write(
+        atSign,
+        AtKeys(atsign: Atsign(atSign))
+          ..fileLegacyMaterial(apkamSymmetricKey: AESKey.generate(32).key));
+    final preference = AtClientPreference(posture: PqPosture.pqReady)
+      ..rootDomain = InternetAddress.loopbackIPv4.address
+      ..rootPort = await refusedPort()
+      ..hiveStoragePath = dir.path
+      ..namespace = 'lifecycle';
+
+    await Atsign(atSign).enroll(
+        otp: 'ABC123',
+        app: 'wavi',
+        device: 'phone',
+        namespaces: {'wavi': 'rw'},
+        keys: store,
+        preference: preference,
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: await refusingAtDirectory(),
+        atLookUp: lookUp);
+    final resumed = await Atsign(atSign).resumeEnrollment(
+        keys: store,
+        preference: preference,
+        lookUps: loopbackLookUps(),
+        secondaryAddressFinder: atDirectoryOf(preference));
+
+    expect(resumed?.enrollmentId, enrollmentId);
+    expect(resumed?.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
   });
 
   test(
@@ -235,7 +291,7 @@ void main() {
           ..rootPort = await refusedPort()
           ..hiveStoragePath = dir.path
           ..namespace = 'lifecycle',
-        lookUps: secureSocketLookUps(),
+        lookUps: loopbackLookUps(),
         secondaryAddressFinder: await refusingAtDirectory(),
         atLookUp: lookUp);
     expect(pending.keyExchangeMode, EnrollmentKeyExchangeMode.pq);

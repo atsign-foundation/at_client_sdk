@@ -27,7 +27,8 @@ void main() {
         fail('libcrypto not available on this host');
       }
       if (!mlKemSupported) {
-        fail('libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5)');
+        fail(
+            'libcrypto does not support ML-KEM-768 (requires OpenSSL >= 3.5.1)');
       }
     });
 
