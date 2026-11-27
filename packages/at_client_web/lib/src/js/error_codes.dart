@@ -1,4 +1,7 @@
+import 'package:at_auth/passkey.dart' show PrfUnavailableException;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/passkey.dart'
+    show PasskeyLostException, PkamRefusedException;
 
 import '../collections/js_collections_adapter.dart' show maxItemDataDepth;
 import '../exceptions.dart';
@@ -24,6 +27,17 @@ String errorCodeOf(Object error) => switch (error) {
           NotifyFailure.timeout => 'timeout',
         },
       AtOpenRefusedException() => 'pkam_refused',
+      // A lost passkey is split on the runtime type of its cause alone. An
+      // atServer refusal of the key this passkey derives is terminal, so it
+      // takes the refusal code; anything else, a cancelled prompt included,
+      // is a passkey this browser cannot use right now.
+      PasskeyLostException(cause: PkamRefusedException()) => 'pkam_refused',
+      PasskeyLostException() => 'passkey_lost',
+      // A refusal thrown directly has the same meaning as one wrapped as a
+      // lost passkey's cause; it is not an AtOpenRefusedException.
+      PkamRefusedException() => 'pkam_refused',
+      PrfUnavailableException() => 'unsupported',
+      SetupLockTimeoutException() => 'timeout',
       PortalSessionOfflineException() => 'offline',
       AtEnrollmentPendingException() => 'onboarding_incomplete',
       EnrollmentConveyanceException() => 'enrollment_conveyance_failed',
@@ -74,6 +88,7 @@ const atErrorCodes = <String>[
   'notify_failed',
   'offline',
   'onboarding_incomplete',
+  'passkey_lost',
   'pkam_refused',
   'timeout',
   'unsupported',
@@ -110,6 +125,12 @@ String atErrorMessage(Object error) => switch (error) {
         },
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
+      PasskeyLostException(cause: PkamRefusedException()) =>
+        _pkamRefusedMessage,
+      PasskeyLostException() => _passkeyLostMessage,
+      PkamRefusedException() => _pkamRefusedMessage,
+      PrfUnavailableException() => _prfUnavailableMessage,
+      SetupLockTimeoutException() => _setupLockTimeoutMessage,
       PortalSessionOfflineException(:final state) =>
         'the session could not reach the atServer (${state.cause?.name ?? 'offline'})',
       AtEnrollmentPendingException() =>
@@ -135,6 +156,16 @@ String atErrorMessage(Object error) => switch (error) {
       InvalidAtSignException() => 'atSign is not valid',
       _ => 'internal error',
     };
+
+// The fixed messages the passkey arms word. None reads a field of the
+// exception it came from: not the atSign, the reason, the lock name, the
+// enrollment id or the browser's error text.
+const _pkamRefusedMessage = 'the atServer refused this passkey enrollment';
+const _passkeyLostMessage =
+    'the passkey sign-in did not complete; try again or reset this browser';
+const _prfUnavailableMessage =
+    'this browser or authenticator has no passkey PRF';
+const _setupLockTimeoutMessage = 'another tab is setting up this atSign';
 
 /// [value] on one line and at most [maxErrorMessageLength] long: the one bound
 /// every message and every echoed rejection field shares, so a peer-chosen id

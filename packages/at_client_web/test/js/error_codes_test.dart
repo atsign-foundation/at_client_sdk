@@ -1,8 +1,22 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
+import 'package:at_auth/passkey.dart'
+    show
+        PasskeyCeremonyException,
+        PrfUnavailableException,
+        UnsupportedPasskeyRecordException;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show KeyPackageStatus;
+import 'package:at_client/passkey.dart'
+    show
+        AtServerAtKeysLockedException,
+        AtServerAtKeysWriteException,
+        MissingAtKeysDocumentException,
+        PasskeyLostException,
+        PasskeyOnboardingIncompleteException,
+        PkamRefusedException,
+        PublicKeyMismatchException;
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:test/test.dart';
@@ -121,6 +135,16 @@ void main() {
       JsCollectionsError(CollectionFailure.tooDeep),
       'COLLECTION_ITEM_TOO_DEEP'
     ),
+    'PasskeyLostException': (
+      PasskeyLostException('@alice', 'no passkey matched'),
+      'passkey_lost'
+    ),
+    'PasskeyLostException caused by a PKAM refusal': (
+      PasskeyLostException('@alice', 'refused',
+          cause: PkamRefusedException('eid-1')),
+      'pkam_refused'
+    ),
+    'PkamRefusedException': (PkamRefusedException('eid-1'), 'pkam_refused'),
     'an unknown Exception': (Exception('x'), 'internal'),
     'an unknown Error': (StateError('x'), 'internal'),
     'a non-exception value': ('text', 'internal'),
@@ -144,6 +168,7 @@ void main() {
       'unsupported',
       'bad_key',
       'notify_failed',
+      'passkey_lost',
       'internal',
     };
     final produced = cases.values.map((c) => c.$2).toSet();
@@ -160,6 +185,144 @@ void main() {
     expect(collectionErrorCodes.toSet(), collection);
     expect(
         produced.where((c) => c.startsWith('COLLECTION_')).toSet(), collection);
+  });
+
+  test(
+      'a passkey prompt that failed, was cancelled or found no passkey rejects passkey_lost',
+      () {
+    const message =
+        'the passkey sign-in did not complete; try again or reset this browser';
+    for (final error in [
+      PasskeyLostException('@alice', 'the prompt failed',
+          cause: PasskeyCeremonyException('cancelled')),
+      PasskeyLostException('@alice', 'the prompt timed out',
+          cause: PasskeyCeremonyException('timed out')),
+      PasskeyLostException('@alice', 'no passkey matched'),
+      PasskeyLostException('@alice', 'the record did not open',
+          cause: FormatException('bad record')),
+    ]) {
+      expect(errorCodeOf(error), 'passkey_lost');
+      expect(atErrorMessage(error), message);
+    }
+  });
+
+  test(
+      'a passkey enrollment the atServer refused rejects pkam_refused, chosen by the cause type',
+      () {
+    final error = PasskeyLostException('@alice', 'the atServer refused PKAM',
+        cause: PkamRefusedException('e-1'));
+    expect(errorCodeOf(error), 'pkam_refused');
+    expect(
+        atErrorMessage(error), 'the atServer refused this passkey enrollment');
+    expect(atErrorMessage(error), isNot(contains('e-1')));
+    expect(atErrorMessage(error), isNot(contains('@alice')));
+  });
+
+  test('a passkey code is chosen by the cause type, never by the reason text',
+      () {
+    for (final reason in [
+      'PKAM refused',
+      'pkam_refused',
+      'unsupported',
+      'the atServer refused this passkey enrollment',
+    ]) {
+      final error = PasskeyLostException('@alice', reason);
+      expect(errorCodeOf(error), 'passkey_lost', reason: reason);
+      expect(
+          atErrorMessage(error),
+          'the passkey sign-in did not complete; '
+          'try again or reset this browser');
+    }
+    final caused = PasskeyLostException('@alice', 'PKAM refused',
+        cause: PasskeyCeremonyException('PKAM refused'));
+    expect(errorCodeOf(caused), 'passkey_lost');
+  });
+
+  test('a browser or authenticator without passkey PRF rejects unsupported',
+      () {
+    final error = PrfUnavailableException(
+        'This platform or authenticator does not support passkey PRF.');
+    expect(errorCodeOf(error), 'unsupported');
+    expect(atErrorMessage(error),
+        'this browser or authenticator has no passkey PRF');
+  });
+
+  test('a setup lock held by another tab rejects timeout', () {
+    final error = SetupLockTimeoutException('setup-@alice');
+    expect(errorCodeOf(error), 'timeout');
+    expect(atErrorMessage(error), 'another tab is setting up this atSign');
+  });
+
+  test(
+      'key mismatch, a missing atKeys document and passkey storage failures stay internal',
+      () {
+    final errors = <Object>[
+      PublicKeyMismatchException(),
+      MissingAtKeysDocumentException('eid-1'),
+      IndexedDbException('QuotaExceededError'),
+      UnsupportedPasskeyRecordException('record version 9'),
+      AtServerAtKeysWriteException('the write was refused'),
+      AtServerAtKeysLockedException('the lock was lost'),
+      PasskeyOnboardingIncompleteException(Atsign('@alice'),
+          cause: Exception('stopped')),
+    ];
+    expect(errors, hasLength(7));
+    for (final error in errors) {
+      expect(errorCodeOf(error), 'internal', reason: '${error.runtimeType}');
+      expect(atErrorMessage(error), 'internal error',
+          reason: '${error.runtimeType}');
+    }
+  });
+
+  test(
+      'a direct PKAM refusal on the passkey path rejects pkam_refused with a fixed message',
+      () {
+    final error = PkamRefusedException('e-123');
+    expect(errorCodeOf(error), 'pkam_refused');
+    expect(
+        atErrorMessage(error), 'the atServer refused this passkey enrollment');
+    expect(atErrorMessage(error), isNot(contains('e-123')));
+  });
+
+  test(
+      'a passkey failure message names no atSign, lock, reason, enrollment id or browser error',
+      () {
+    const fixed = {
+      'the atServer refused this passkey enrollment',
+      'the passkey sign-in did not complete; try again or reset this browser',
+      'this browser or authenticator has no passkey PRF',
+      'another tab is setting up this atSign',
+      'internal error',
+    };
+    final tail = '${'x\u202e' * 400}\n${'y' * 1000000}';
+    final atSign = '@sentinel-atSign$tail';
+    final reason = 'sentinel-reason$tail';
+    final enrollmentId = 'sentinel-enrollment$tail';
+    final browserError = 'sentinel-browser$tail';
+    final lockName = 'sentinel-lock$tail';
+    final inputs = [atSign, reason, enrollmentId, browserError, lockName];
+    final errors = <Object>[
+      PasskeyLostException(atSign, reason),
+      PasskeyLostException(atSign, reason,
+          cause: PasskeyCeremonyException(reason)),
+      PasskeyLostException(atSign, reason,
+          cause: PkamRefusedException(enrollmentId)),
+      PkamRefusedException(enrollmentId),
+      PrfUnavailableException(browserError),
+      SetupLockTimeoutException(lockName),
+      IndexedDbException(browserError),
+    ];
+    for (final error in errors) {
+      final message = atErrorMessage(error);
+      expect(fixed, contains(message), reason: '${error.runtimeType}');
+      expect(message.length, lessThanOrEqualTo(maxErrorMessageLength));
+      expect(message, isNot(contains('\n')));
+      expect(message, isNot(contains('\u202e')));
+      expect(message, isNot(contains('sentinel')));
+      for (final input in inputs) {
+        expect(message, isNot(contains(input)));
+      }
+    }
   });
 
   test('every closed rejection carries the same fixed message', () {

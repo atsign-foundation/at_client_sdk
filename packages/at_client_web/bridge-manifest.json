@@ -23,6 +23,7 @@
     "notify_failed",
     "offline",
     "onboarding_incomplete",
+    "passkey_lost",
     "pkam_refused",
     "timeout",
     "unsupported"

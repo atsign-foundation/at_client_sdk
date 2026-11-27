@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Passkey sign-in failures report `passkey_lost`, `pkam_refused`, `unsupported` or `timeout` instead of `internal`.
 - `tool/build.sh` builds `dart2js` (default) or `dart2wasm` for one target and accepts an optional bridge entry (proposed decision D-38, pending review).
 - The release workflow builds one target per dispatch, resolves the workspace's dependencies at dispatch time (no lock is committed), records the Dart SDK version and the resolved `pubspec.lock`'s sha256 in the release notes, and publishes its files under a target-specific tag with build provenance and an SLSA provenance file.
 - `bridge-manifest.json` publishes the exported bridge surface and error codes, generated from the Dart constants.

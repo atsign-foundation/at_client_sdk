@@ -20,10 +20,12 @@ Feature: Every failure carries a code the caller branches on
   #   message reveals no reusable material.
   # DoS: error messages omit raw values and truncate untrusted tokens ("an
   #   unmapped exception rejects internal with a fixed message", "session calls
-  #   name the parameter without its value").
+  #   name the parameter without its value", "a passkey failure message names
+  #   no atSign, lock, reason, enrollment id or browser error").
   # Forgery: rejections are constructed as plain objects carrying only fixed
   #   codes and parameter-only or sanitized messages ("a rejection is a plain
-  #   object with only code and message").
+  #   object with only code and message", "a passkey failure message names no
+  #   atSign, lock, reason, enrollment id or browser error").
   # Impersonation: errors carry no unverified peer-supplied identity claims ("a
   #   mapped exception keeps its message").
 
@@ -111,9 +113,58 @@ Feature: Every failure carries a code the caller branches on
     Then both reject with code closed and the message 'the session is closed'
     And the message names no Dart class
 
+  # Passkey sign-in failures are split by exception type and, for a lost
+  # passkey, by the runtime type of its cause. No arm reads a reason or a
+  # message: a code is chosen by type alone, and every message is fixed.
+
+  Scenario: a passkey prompt that failed, was cancelled or found no passkey rejects passkey_lost
+    Given a PasskeyLostException caused by a PasskeyCeremonyException, or with no cause, or with a cause that is not a PKAM refusal
+    When the failure is mapped
+    Then it rejects with code passkey_lost and the message 'the passkey sign-in did not complete; try again or reset this browser'
+    And a cancelled or timed-out prompt lands here too
+
+  Scenario: a passkey enrollment the atServer refused rejects pkam_refused, chosen by the cause type
+    Given a PasskeyLostException whose cause is a PkamRefusedException carrying an enrollment id
+    When the failure is mapped
+    Then it rejects with code pkam_refused and the message 'the atServer refused this passkey enrollment'
+    And the message holds neither the enrollment id nor the atSign
+
+  Scenario: a passkey code is chosen by the cause type, never by the reason text
+    Given a PasskeyLostException whose reason reads like a code, such as PKAM refused, and which has no cause
+    When the failure is mapped
+    Then it rejects with code passkey_lost, not pkam_refused
+
+  Scenario: a browser or authenticator without passkey PRF rejects unsupported
+    Given a PrfUnavailableException with any text
+    When the failure is mapped
+    Then it rejects with code unsupported and the message 'this browser or authenticator has no passkey PRF'
+
+  Scenario: a setup lock held by another tab rejects timeout
+    Given a SetupLockTimeoutException naming the lock
+    When the failure is mapped
+    Then it rejects with code timeout and the message 'another tab is setting up this atSign'
+
+  Scenario: key mismatch, a missing atKeys document and passkey storage failures stay internal
+    Given a PublicKeyMismatchException, a MissingAtKeysDocumentException, an IndexedDbException, an UnsupportedPasskeyRecordException, an AtServerAtKeysWriteException, an AtServerAtKeysLockedException or a PasskeyOnboardingIncompleteException
+    When the failure is mapped
+    Then it rejects with code internal and the message 'internal error'
+
+  Scenario: a direct PKAM refusal on the passkey path rejects pkam_refused with a fixed message
+    Given a PkamRefusedException carrying an enrollment id
+    When the failure is mapped
+    Then it rejects with code pkam_refused and the message 'the atServer refused this passkey enrollment'
+    And the message holds no part of the enrollment id
+
+  @forgery @dos
+  Scenario: a passkey failure message names no atSign, lock, reason, enrollment id or browser error
+    Given a passkey failure whose atSign, lock name, reason, enrollment id and browser error text are one megabyte long and hold direction characters and line breaks
+    When each reaches the new arms of the mapping
+    Then each message is exactly one of the fixed constants, at most 128 characters and one line
+    And it holds no part of those inputs
+
   Scenario: every code the bridge can reject with is produced by one mapping
     Given the bridge's list of error codes
-    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, notify_failed, internal and the eleven COLLECTION_ codes, and no other
+    Then it holds invalid_argument, enrollment_in_flight, pkam_refused, offline, timeout, onboarding_incomplete, enrollment_conveyance_failed, enrollment_denied, closed, unsupported, bad_key, notify_failed, passkey_lost, internal and the eleven COLLECTION_ codes, and no other
     And each code is produced by at least one exception the mapping test names
 
   Scenario: a transport failure outside notify keeps the code and message it had
