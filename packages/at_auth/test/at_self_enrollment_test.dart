@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
@@ -790,6 +792,398 @@ void main() {
       expect(sent.single, startsWith('enroll:request:'));
     });
   });
+
+  /// @alice's keyfile on disk, holding legacy keys only, in a directory
+  /// removed after the test.
+  Future<String> keyfileOnDisk() async {
+    final dir = Directory.systemTemp.createTempSync('self_enrollment_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/${atSign}_key.atKeys';
+    await FileAtKeysIo(filePath: (_) => path).write(
+        atSign,
+        AtKeys.legacy(
+            apkamPublicKey: legacyApkamPub,
+            apkamPrivateKey: legacyApkamPriv,
+            encryptionPublicKey: b64('enc-public'),
+            encryptionPrivateKey: b64('enc-private'),
+            selfEncryptionKey: AESKey.generate(32).key,
+            enrollmentId: 'legacy-1'));
+    return path;
+  }
+
+  FileAtKeysIo keysAt(String keyfile) => FileAtKeysIo(filePath: (_) => keyfile);
+
+  AtSelfEnrollmentRequest requestOn(String keyfile) => requestFor(AtAuthSession(
+      atSign: atSign,
+      rootDomain: const AtRootDomain('127.0.0.1', 1),
+      atKeysIo: keysAt(keyfile),
+      enrollmentId: 'legacy-1'));
+
+  /// An atServer that runs [meanwhile] before it approves the
+  /// self-enrollment's request, confirms a revoke, and records every command
+  /// in [sent].
+  MockAtLookUp answeringAfter(
+      Future<void> Function() meanwhile, List<String> sent) {
+    final mock = MockAtLookUp();
+    when(() => mock.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((invocation) async {
+      final command = invocation.positionalArguments.first as String;
+      sent.add(command);
+      if (command.startsWith('enroll:request:')) {
+        await meanwhile();
+        return approvedResponse;
+      }
+      if (command.startsWith('enroll:revoke:')) {
+        return 'data:{"enrollmentId":"new-123","status":"revoked"}';
+      }
+      throw StateError('the mocked atServer has no answer for: $command');
+    });
+    return mock;
+  }
+
+  const namespaceKeyId = 'nskey.app_1.kid1';
+
+  /// An active namespace key private, atSign-scope, as at_client files one.
+  CryptographicMaterial namespaceKey() => CryptographicMaterial(
+      keyId: namespaceKeyId,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
+      bytes: AtBytes(Uint8List.fromList(List.filled(32, 7))),
+      createdAt: DateTime.utc(2026, 1, 1));
+
+  /// Another writer's update filing [namespaceKey].
+  Future<void> addNamespaceKey(String keyfile) =>
+      keysAt(keyfile).update(atSign.toAtsign(), (keys) {
+        keys.addKey(namespaceKey());
+        return true;
+      });
+
+  List<String> revokesIn(List<String> sent) =>
+      sent.where((c) => c.startsWith('enroll:revoke:')).toList();
+
+  /// Catalogue: features/at_auth/self_enrollment_files_through_update.feature
+  group('A self-enrollment files its keys through update', () {
+    test(
+        'A key another writer adds while a self-enrollment waits on the '
+        'atServer is kept', () async {
+      final keyfile = await keyfileOnDisk();
+
+      final response = await AtEnrollmentImpl().submit(requestOn(keyfile),
+          answeringAfter(() => addNamespaceKey(keyfile), []));
+
+      expect(response.enrollmentId, 'new-123');
+      final after = await keysAt(keyfile).read(atSign);
+      expect(
+          after.getAtSignKey(
+              namespaceKeyId, CryptographicMaterialRole.privateDecapsulation),
+          isNotNull,
+          reason: 'the key the other writer added is kept');
+      expect(
+          after.getKey('new-123', 'auth:mldsa65:1',
+              CryptographicMaterialRole.privateAuthentication),
+          isNotNull);
+      expect(
+          after.getKey('new-123', 'auth:mldsa65:1',
+              CryptographicMaterialRole.publicAuthentication),
+          isNotNull);
+    });
+
+    test(
+        'A keyfile removed while a self-enrollment waits on the atServer is '
+        'not written again', () async {
+      final keyfile = await keyfileOnDisk();
+      final sent = <String>[];
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestOn(keyfile),
+            answeringAfter(() async {
+              await File(keyfile).delete();
+            }, sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(File(keyfile).existsSync(), isFalse,
+          reason: 'a keyfile removed meanwhile stays removed');
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('could not be written'),
+                  contains('new-123 it created was revoked'))));
+    });
+
+    test(
+        'A second live enrollment filed while a self-enrollment waits is '
+        'refused and revoked', () async {
+      final keyfile = await keyfileOnDisk();
+      final sent = <String>[];
+      expect(
+          (await keysAt(keyfile).read(atSign)).keys.where(
+              (m) => m.role == CryptographicMaterialRole.privateAuthentication),
+          isEmpty);
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestOn(keyfile),
+            answeringAfter(
+                () => keysAt(keyfile).update(atSign.toAtsign(), (keys) {
+                      keys.fileApkamMaterial(
+                          enrollmentId: 'other-9',
+                          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
+                          publicKey: b64('other-public'),
+                          privateKey: b64('other-private'));
+                      return true;
+                    }),
+                sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      final after = await keysAt(keyfile).read(atSign);
+      expect(
+          after.getKey('other-9', 'auth:mldsa65:1',
+              CryptographicMaterialRole.privateAuthentication),
+          isNotNull);
+      expect(after.keysForEnrollment('new-123'), isEmpty);
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('could not be written'),
+                  contains('no longer hold the authentication keypair they '
+                      'held before the request'))));
+    });
+
+    test(
+        'A keyfile replaced by one holding a different credential while a '
+        'self-enrollment waits on the atServer is not filed into', () async {
+      final keyfile = await keyfileOnDisk();
+      final replacement = '$keyfile.replacement';
+      final replacementPrivate = b64('replacement-rsa-private');
+      final sent = <String>[];
+      final originalAs =
+          (await keysAt(keyfile).read(atSign)).enrollmentToAuthenticateAs();
+      String? replacementAs;
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestOn(keyfile),
+            answeringAfter(() async {
+              await keysAt(replacement).write(
+                  atSign,
+                  AtKeys.legacy(
+                      apkamPublicKey: b64('replacement-rsa-public'),
+                      apkamPrivateKey: replacementPrivate,
+                      encryptionPublicKey: b64('enc-public'),
+                      encryptionPrivateKey: b64('enc-private'),
+                      selfEncryptionKey: AESKey.generate(32).key,
+                      enrollmentId: 'legacy-1'));
+              await File(replacement).rename(keyfile);
+              replacementAs = (await keysAt(keyfile).read(atSign))
+                  .enrollmentToAuthenticateAs();
+            }, sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(replacementAs, originalAs,
+          reason: 'the replacement authenticates as the same enrollment id '
+              'as the original, with a different keypair');
+      final after = await keysAt(keyfile).read(atSign);
+      expect(after.keysForEnrollment('new-123'), isEmpty,
+          reason: 'the replacement is not filed into');
+      expect(
+          after
+              .authenticationKeyPairFor(after.enrollmentToAuthenticateAs())
+              ?.privateKey,
+          replacementPrivate,
+          reason: "the keyfile holds the replacement's credential");
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('could not be written'),
+                  contains('no longer hold the authentication keypair they '
+                      'held before the request'),
+                  contains('new-123 it created was revoked'))));
+    });
+  });
+
+  group(
+      'Given a store whose update runs the change twice, each on a fresh copy',
+      () {
+    test(
+        'when a self-enrollment files its keys, then the keyfile holds one '
+        'copy of each key', () async {
+      final keysIo = _TwiceRunningKeysIo(
+          anotherWriter: (stored) => stored.addKey(namespaceKey()));
+      await keysIo.write(atSign, legacyKeys());
+      final mock = approvingLookUp();
+
+      final response = await AtEnrollmentImpl().submit(
+          AtSelfEnrollmentRequest(
+              session: AtAuthSession(
+                  atSign: atSign,
+                  rootDomain: const AtRootDomain('127.0.0.1', 1),
+                  atKeysIo: keysIo,
+                  enrollmentId: 'legacy-1'),
+              appName: 'selfapp',
+              deviceName: 'selfdevice',
+              namespaces: {'app_1': 'rw'},
+              advertisedSigningKey: (
+                algorithm: SigningAlgoType.rsa2048,
+                publicKey: b64('signing-public'),
+                privateKey: b64('signing-private')
+              ),
+              metadataBuilder: (metadataKeysIo) async {
+                (await metadataKeysIo.read(atSign)).addKey(
+                    CryptographicMaterial(
+                        keyId: 'kp-abc123',
+                        role: CryptographicMaterialRole.privateDecapsulation,
+                        algorithm: CryptographicMaterialAlgorithm.xWing,
+                        bytes: AtBytes(Uint8List.fromList([1, 2, 3])),
+                        createdAt: DateTime.utc(2026, 1, 1)));
+                return null;
+              }),
+          mock);
+
+      expect(keysIo.anotherWriterRan, isTrue,
+          reason: 'the store changed between the two runs of the filing');
+      final stored = await keysIo.read(atSign);
+      expect(
+          stored.getAtSignKey(
+              namespaceKeyId, CryptographicMaterialRole.privateDecapsulation),
+          isNotNull,
+          reason: 'the key another writer added between the runs is kept');
+      final filed = [
+        for (final m in stored.keysForEnrollment('new-123'))
+          '${m.keyId} ${m.role.value}'
+      ]..sort();
+      expect(filed, [
+        'auth:mldsa65:1 privateAuthentication',
+        'auth:mldsa65:1 publicAuthentication',
+        'kp-abc123 privateDecapsulation',
+        'sign:rsa2048:1 privateSigning',
+        'sign:rsa2048:1 publicVerification',
+      ]);
+      // ignore: deprecated_member_use_from_same_package
+      expect(response.atAuthKeys, same(stored),
+          reason: 'the response carries the keys the last run of the change '
+              'was handed, which are the keys the store wrote');
+      verify(() => mock.executeCommand(any(that: startsWith('enroll:request:')),
+          auth: any(named: 'auth'))).called(1);
+    });
+  });
+
+  group(
+      'Given another writer added a key to the keyfile while the '
+      'self-enrollment waited', () {
+    test(
+        'when the self-enrollment succeeds, then response.atAuthKeys holds '
+        'the added key and the new enrollment\'s keys', () async {
+      final keyfile = await keyfileOnDisk();
+
+      final response = await AtEnrollmentImpl().submit(requestOn(keyfile),
+          answeringAfter(() => addNamespaceKey(keyfile), []));
+
+      // ignore: deprecated_member_use_from_same_package
+      final keys = response.atAuthKeys!;
+      expect(
+          keys.getAtSignKey(
+              namespaceKeyId, CryptographicMaterialRole.privateDecapsulation),
+          isNotNull);
+      expect(
+          keys.getKey('new-123', 'auth:mldsa65:1',
+              CryptographicMaterialRole.privateAuthentication),
+          isNotNull);
+    });
+  });
+
+  group('Given a store whose update returns without running the change', () {
+    test(
+        'when a self-enrollment files its keys, then it revokes the '
+        'enrollment it created and throws AtEnrollmentException', () async {
+      final keysIo = _NeverRunsTheChangeKeysIo();
+      await keysIo.write(atSign, legacyKeys());
+      final sent = <String>[];
+
+      Object? thrown;
+      try {
+        await AtEnrollmentImpl().submit(
+            requestFor(AtAuthSession(
+                atSign: atSign,
+                rootDomain: const AtRootDomain('127.0.0.1', 1),
+                atKeysIo: keysIo,
+                enrollmentId: 'legacy-1')),
+            answeringAfter(() async {}, sent));
+      } catch (e) {
+        thrown = e;
+      }
+
+      expect(revokesIn(sent), ['enroll:revoke:{"enrollmentId":"new-123"}\n']);
+      expect(
+          thrown,
+          isA<AtEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('could not be written'),
+                  contains('new-123 it created was revoked'))));
+    });
+  });
+}
+
+/// An in-memory keyfile whose [update] returns without running the change.
+class _NeverRunsTheChangeKeysIo extends InMemoryAtKeysIo {
+  // ignore: invalid_use_of_visible_for_testing_member
+  _NeverRunsTheChangeKeysIo();
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {}
+}
+
+/// An in-memory keyfile whose [update] runs the change twice, each time on a
+/// fresh copy of what it holds, and stores what the second run left.
+///
+/// Between the two runs of the first update whose change adds material,
+/// [anotherWriter] changes the stored keys, as a concurrent writer would.
+class _TwiceRunningKeysIo extends InMemoryAtKeysIo {
+  final void Function(AtKeys stored) anotherWriter;
+  bool anotherWriterRan = false;
+
+  // ignore: invalid_use_of_visible_for_testing_member
+  _TwiceRunningKeysIo({required this.anotherWriter});
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    late AtKeys copy;
+    for (var run = 0; run < 2; run++) {
+      final stored = (await read(atsign.toString()))..atsign ??= atsign;
+      copy = AtKeys.fromJson(stored.toJson());
+      if (await mutate(copy) == false) return;
+      if (run == 0 &&
+          !anotherWriterRan &&
+          copy.keys.length > stored.keys.length) {
+        anotherWriterRan = true;
+        anotherWriter(stored);
+      }
+    }
+    await flush(atsign, copy);
+  }
 }
 
 /// An in-memory keyfile whose writes are refused from the [refusingFrom]th
