@@ -37,9 +37,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   parsed ("a notification key longer than 255 characters is dropped with a
   #   warning"), the envelope's peer-chosen id and key are bounded, so
   #   neither can carry unbounded text into JS ("a peer-chosen notification id
-  #   and key are bounded in the envelope"), and a send that throws after it
-  #   was remembered forgets its id, so repeated failures cannot grow the sent
-  #   set ("a notify that throws after its send forgets its id"), and a
+  #   and key are bounded in the envelope"), and the prune bounds the sent
+  #   set even when every poll throws ("a notify whose final-status poll
+  #   throws after its send keeps its id within the bound"), and a
   #   subscribe or collection watch callback that throws is logged instead of
   #   escaping, so one bad callback cannot stop delivery ("a subscribe callback
   #   that throws is logged and delivery continues", "a collection watch
@@ -154,10 +154,20 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then the id is dropped during the send and delivered after the result
 
   @dos
-  Scenario: a notify that throws after its send forgets its id
-    Given a session whose notification service throws a timeout after every send
-    When notify sends 1100 notifications and a notification from another sender arrives
-    Then the thrown sends leave no ids behind, so the other sender's notification is delivered
+  Scenario: a notify whose final-status poll throws after its send keeps its id within the bound
+    Given a session whose notification service throws a timeout while it reads the final status of every send
+    When notify sends 1100 notifications and their echoes and a notification from another sender arrive
+    Then the latest send's echo is dropped, the oldest send's id has been pruned, and the other sender's notification is delivered
+
+  Scenario: a notify that never reached the atServer forgets its id when its poll throws
+    Given a session whose notification service fails the send and then throws while it reads the final status
+    When notify sends a valid key
+    Then it rejects and a later echo of that id is delivered
+
+  Scenario: a send that failed is a send failure even when its status wait ran out
+    Given a session whose notification service fails the send and whose status wait runs out queued
+    When notify sends a valid key
+    Then it rejects with send_failed and the id is forgotten
 
   Scenario: a connection lost during the final-status poll rejects offline
     Given a session whose notification service throws a lost-connection failure while it reads the final status

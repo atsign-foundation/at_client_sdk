@@ -494,7 +494,9 @@ void main() {
       await expectLater(future, throwsA(isA<SessionClosedException>()));
     });
 
-    test('a notify that throws after its send forgets its id', () async {
+    test(
+        'a notify whose final-status poll throws after its send keeps its id within the bound',
+        () async {
       final received = <ReceivedNotification>[];
       session.subscribe('.*', received.add, onError: (_) {});
       service.pollFailure = AtTimeoutException('no answer');
@@ -513,7 +515,51 @@ void main() {
         ..add(_event('fresh', key: '@alice:attalk.wavi@bob', from: '@bob'));
       await pumpEventQueue();
 
-      expect(received.map((n) => n.id), [ids.first, ids.last, 'fresh']);
+      expect(received.map((n) => n.id), [ids.first, 'fresh']);
+    });
+
+    test(
+        'a notify that never reached the atServer forgets its id when its poll throws',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service
+        ..reportsSent = false
+        ..status = NotificationStatusEnum.undelivered
+        ..exception = AtClientException('AT0001', 'failed')
+        ..pollFailure = AtTimeoutException('no answer');
+
+      await expectLater(
+          session.notify('@alice:k.wavi@alice', 'v'),
+          throwsA(isA<NotifyFailedException>()
+              .having((e) => e.kind, 'kind', NotifyFailure.timeout)));
+
+      service.events.add(_echo(service.params.single.id));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), [service.params.single.id]);
+    });
+
+    test(
+        'a send that failed is a send failure even when its status wait ran out',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+      service
+        ..reportsSent = false
+        ..status = NotificationStatusEnum.undelivered
+        ..exception = AtClientException('AT0001', 'failed')
+        ..unconfirmed = true;
+
+      await expectLater(
+          session.notify('@alice:k.wavi@alice', 'v'),
+          throwsA(isA<NotifyFailedException>()
+              .having((e) => e.kind, 'kind', NotifyFailure.sendFailed)));
+
+      service.events.add(_echo(service.params.single.id));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), [service.params.single.id]);
     });
 
     test('failed notify does not evict sent echo ids', () async {

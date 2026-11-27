@@ -361,18 +361,29 @@ class AtClientSession implements Session {
     // reports the send, and only this client knows the id it minted.
     final rememberedId = params.id;
     _remember(rememberedId);
+    var sent = false;
     final NotificationResult result;
     try {
       result = await _client.notificationService.notify(params,
-          finalStatusBudget: AtNetworkTimeouts.effectiveDefault);
+          finalStatusBudget: AtNetworkTimeouts.effectiveDefault,
+          onSentToSecondary: (_) => sent = true);
     } on AtException catch (e) {
-      // A send that threw has no echo coming, and repeated failures must not
-      // grow the set past its bound.
-      _forget(rememberedId);
+      if (!sent) _forget(rememberedId);
+      // Only the final-status poll throws here: at_client files a failed send
+      // in the result. A send that reached the atServer may still be echoed,
+      // so its id stays; the prune keeps the set within its bound either way.
       _pruneSent();
       final kind = _unreached(e);
       if (kind == null) rethrow;
       throw NotifyFailedException(kind);
+    }
+    // A send the atServer never took has no echo coming, whatever the status
+    // wait then read, and it is a send failure.
+    if (!sent && result.atClientException != null) {
+      _forget(rememberedId);
+      _pruneSent();
+      _open();
+      throw NotifyFailedException(NotifyFailure.sendFailed);
     }
     // A budget that ran out leaves the status queued but unknown: an echo may
     // still arrive, so the id stays. This must come before the undelivered
