@@ -146,6 +146,9 @@ class AtConnection {
   /// Once the client has stopped this answers offline with
   /// [AtConnectionCause.stopped] at once, and so does an attempt the stop
   /// lands in the middle of.
+  ///
+  /// An attempt whose callback throws a local fault, such as an unreadable
+  /// signing key, throws it to the caller and records no state.
   Future<AtConnectionState> attempt({Duration budget = defaultBudget}) async {
     if (_closed) return _stoppedState;
     final state = await _attempt(budget);
@@ -308,7 +311,9 @@ final List<Pattern> _unreachableText = [
 /// `UnAuthenticatedException` raised by the authenticator is wrapped as
 /// `AT0401` and read as its cause, whose
 /// [AtAuthErrorReplyException.errorCode] is the atServer's own code.
-/// No code is read out of a message's text.
+/// No code is read out of a message's text; an error that arrives untyped, as
+/// a transport's own exception does when the client was handed its own
+/// [AtLookUp], is read from its text, for want of a type.
 AtConnectionState? classifyConnectionFailure(Object error) {
   if (error is AtLookUpException) {
     final cause = error.cause;
@@ -318,7 +323,13 @@ AtConnectionState? classifyConnectionFailure(Object error) {
     return _classifyCode(error.errorCode, error.errorMessage, error);
   }
   if (error is UnAuthenticatedException) {
-    return _classifyAuthentication(error.message, _replyCode(error), error);
+    return _classifyAuthentication(error.message, _replyCode(error), error) ??
+        // NOTE: the atServer answered the authentication with a code that is
+        // not a refusal, so it was reached and the connection did not stand:
+        // offline, carrying the error, rather than a silence that would read
+        // as a local fault. A wrapped one keeps the classifier's silence,
+        // which is what leaves a verb's state where it was.
+        AtConnectionState.offline(AtConnectionCause.unreachable, error: error);
   }
   if (error is AtInvalidEnrollmentException) {
     return AtConnectionState.refused(AtConnectionCause.invalidEnrollment,
@@ -340,6 +351,13 @@ AtConnectionState? classifyConnectionFailure(Object error) {
         error: error);
   }
   if (error is AtException && _readsUnreachable(error.message)) {
+    return AtConnectionState.offline(AtConnectionCause.unreachable,
+        error: error);
+  }
+  // NOTE: an error that arrives untyped, as a transport's own exception does
+  // when the client was handed its own [AtLookUp], is read from its text the
+  // way a wrapped one is: it names a connection that was not made.
+  if (error is! AtException && _readsUnreachable('$error')) {
     return AtConnectionState.offline(AtConnectionCause.unreachable,
         error: error);
   }

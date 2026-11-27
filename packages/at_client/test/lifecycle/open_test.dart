@@ -136,6 +136,28 @@ void main() {
   });
 
   test(
+      'a failure that is not about the connection is thrown as itself, not '
+      'reported as an unreachable atServer, and leaves nothing behind',
+      () async {
+    const atSign = '@localfault';
+    final fault = AtSigningException('the signing key is unreadable');
+
+    await expectLater(
+        () async => Atsign(atSign).open(
+            keys: await typedKeyfile(atSign, enrollmentId: 'primary'),
+            preference: await preference(),
+            lookUps: loopbackLookUps(),
+            secondaryAddressFinder: await refusingAtDirectory(),
+            atLookUp: lookUpAnswering(() async => throw fault),
+            storage: hiveStoreFor(Atsign(atSign), await preference())),
+        throwsA(same(fault)),
+        reason: 'the atServer was reached and said nothing wrong; reporting '
+            'it unreachable sends the caller to the network for a local fault');
+    expect(AtClientImpl.holdsLiveClient(atSign), isFalse,
+        reason: 'the part-built client was stopped and unfiled');
+  });
+
+  test(
       'an atSign the atDirectory has no atServer for counts as a refusal on '
       'first open', () async {
     const atSign = '@noserver';

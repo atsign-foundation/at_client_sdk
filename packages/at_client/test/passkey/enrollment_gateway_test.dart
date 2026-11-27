@@ -287,7 +287,10 @@ void main() {
     test('a connection failure is not a refusal', () async {
       wire.connectFails = true;
 
-      await expectLater(authenticate(), throwsStateError);
+      await expectLater(
+          authenticate(),
+          throwsA(allOf(isA<SecondaryConnectException>(),
+              isNot(isA<UnAuthenticatedException>()))));
     });
 
     test('an authenticated session holds no @keys to hand back', () async {

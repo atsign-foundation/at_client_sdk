@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show SocketException;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -271,6 +272,36 @@ void main() {
       expect(message, isNot(contains('awaits approval')));
       expect(message, isNot(contains('was denied')));
       expect(message, contains('@alice'));
+    });
+  });
+
+  group('Given an error the authenticator or a transport raises', () {
+    test(
+        'when an authentication failure carries a code that is not a '
+        'refusal, then the atServer was reached and the connection did not '
+        'stand: offline, unreachable', () {
+      expectClassified(
+          AtAuthErrorReplyException('Failed connecting to @alice. error:AT0012',
+              errorCode: 'AT0012'),
+          AtConnectionOutcome.offline,
+          AtConnectionCause.unreachable,
+          'an authentication reply that refuses nothing');
+    });
+
+    test(
+        'when a transport raises its own untyped exception naming a refused '
+        'connection, then it is unreachable', () {
+      expectClassified(
+          const SocketException('Connection refused'),
+          AtConnectionOutcome.offline,
+          AtConnectionCause.unreachable,
+          'an untyped transport failure');
+    });
+
+    test(
+        'when an untyped error says nothing of a connection, then it is not '
+        'classified, so the caller sees it as itself', () {
+      expect(classifyConnectionFailure(StateError('boom')), isNull);
     });
   });
 }

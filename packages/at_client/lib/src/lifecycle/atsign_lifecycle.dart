@@ -169,6 +169,9 @@ extension AtsignLifecycle on Atsign {
   /// a device, a refusal comes back as a client in the `refused` state and
   /// the application decides.
   ///
+  /// A failure that is not about the connection, such as an unreadable signing
+  /// key, is thrown as itself after the client is stopped.
+  ///
   /// [namespace] defaults to the preference's. [storage] is the client's
   /// local storage, borrowed unless it was built with `closedByClient: true`.
   /// [lookUps] builds every connection the client opens - its own, its
@@ -218,7 +221,20 @@ extension AtsignLifecycle on Atsign {
       enrollmentServiceBuilder: serviceFactory?.enrollmentService,
     ) as AtClientImpl;
 
-    final state = await client.connection.attempt(budget: connectBudget);
+    final AtConnectionState state;
+    try {
+      state = await client.connection.attempt(budget: connectBudget);
+    } catch (e) {
+      // NOTE: the attempt threw a fault of its own rather than reporting on
+      // the atServer, so it goes to the caller as itself — but only once the
+      // part-built client is stopped, since nothing is handed back to stop it.
+      try {
+        await client.stop();
+      } catch (_) {
+        // The attempt's own failure is what the caller needs to see.
+      }
+      rethrow;
+    }
     final refusesFirstOpen =
         state.isRefused || state.cause == AtConnectionCause.noAtServer;
     if (refusesFirstOpen && !await client.hasBeenOnline()) {

@@ -90,7 +90,8 @@ class WireLookUp implements AtLookupMuxable {
   @override
   Future<bool> pkamAuthenticate() async {
     _wire.pkams++;
-    if (_wire.connectFails) throw StateError('connection refused');
+    if (_wire.connectFails)
+      throw SecondaryConnectException('connection refused');
     final run = authenticator;
     if (_wire.runsAuthenticator && run != null) {
       return run(_WireExecutor(_wire));

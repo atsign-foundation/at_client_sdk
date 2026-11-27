@@ -889,6 +889,10 @@ class AtClientImpl implements AtClient {
   /// A connection that is already authenticated answers at once. An attempt
   /// that outlives [budget] is reported offline and left to finish on its own,
   /// so a slow network that eventually answers still moves the state.
+  ///
+  /// An error that says nothing about the connection — a local fault, such as
+  /// an unreadable signing key — is thrown, not reported: it is not a
+  /// statement about the atServer, so it must not be dressed as one.
   Future<AtConnectionState> _attemptConnection(Duration budget) async {
     final remote = _remoteSecondary;
     if (remote == null) {
@@ -903,8 +907,9 @@ class AtClientImpl implements AtClient {
     } on TimeoutException catch (e) {
       return AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
     } catch (e) {
-      return classifyConnectionFailure(e) ??
-          AtConnectionState.offline(AtConnectionCause.unreachable, error: e);
+      final state = classifyConnectionFailure(e);
+      if (state == null) rethrow;
+      return state;
     }
   }
 
