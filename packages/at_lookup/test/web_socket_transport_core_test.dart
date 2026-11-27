@@ -10,6 +10,8 @@ import 'package:test/test.dart';
 /// [WebSocketTransport] over a fake [WebSocketPort], on the VM: the bounded
 /// inbound buffer, the `bufferedAmount` flush and the closed-socket `add`
 /// depend on browser timing that a live socket cannot pin down.
+///
+/// Catalogue: features/at_lookup/web_socket_open_retry.feature
 void main() {
   late FakeWebSocketPort port;
   late RecordingHandler logs;
@@ -190,6 +192,13 @@ void main() {
   group('flush', () {
     test('completes at once when nothing is buffered', () async {
       await transport().flush();
+    });
+
+    test('flush on a closed transport throws even with an empty buffer',
+        () async {
+      final t = transport()..destroy();
+      expect(port.bufferedAmount, 0);
+      await expectLater(t.flush(), throwsA(isA<AtIOException>()));
     });
 
     test('completes at once while 64 KiB or less is queued', () async {

@@ -1,4 +1,11 @@
 ## 4.1.0-rc.1
+- fix: a browser WebSocket connect that fails to open is retried on a fresh
+  socket, three attempts in all, after one second and then two; an `error`, a
+  `close` before open and an attempt not opening within five seconds are
+  retried, a URL the browser refuses fails at once, and closing the lookup
+  ends the ladder at once with no further socket. `WebSocketTransport.flush`
+  on a destroyed or peer-closed transport throws `AtIOException` even with
+  nothing buffered.
 - feat: `errorResponseCode` reads the code an atServer's `error:` reply
   names, in any form, and `errorResponseException` the exception a lookup
   throws for that reply.

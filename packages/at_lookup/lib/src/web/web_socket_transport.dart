@@ -87,10 +87,15 @@ class WebSocketTransport implements AtTransport {
   /// Completes once the socket's `bufferedAmount` is at most `highWaterMark`,
   /// at once when it already is, polling for it otherwise.
   ///
-  /// Throws [AtTimeoutException] if it is not within `flushTimeout`, and
-  /// [AtIOException] if the socket closes first.
+  /// Throws [AtIOException] at once if the transport is already closed or its
+  /// socket not `OPEN`, even with nothing buffered; while it is open, throws
+  /// [AtTimeoutException] if the buffer is not within `highWaterMark` by
+  /// `flushTimeout`, and [AtIOException] if the socket closes first.
   @override
   Future<void> flush() async {
+    if (_closed || !_port.isOpen) {
+      throw AtIOException('WebSocket to $description is closed');
+    }
     final elapsed = Stopwatch()..start();
     while (_port.bufferedAmount > _highWaterMark) {
       if (_closed || !_port.isOpen) {

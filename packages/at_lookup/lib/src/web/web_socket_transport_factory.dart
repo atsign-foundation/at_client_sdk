@@ -24,22 +24,28 @@ class WebSocketTransportFactory implements AtTransportFactory {
       this.flushTimeout = const Duration(seconds: 30)});
 
   /// A URL the WebSocket constructor refuses, an `error` or `close` before
-  /// `open`, [timeout] elapsing (the network default with none), and a close
-  /// of the lookup it opens for, surface as [SecondaryConnectException]; the
-  /// cause is kept in the message.
+  /// `open`, an attempt not opening within five seconds, [timeout] elapsing
+  /// (the ladder's own 18-second bound with none), and a close of the lookup
+  /// it opens for, surface as [SecondaryConnectException]; the cause is kept
+  /// in the message.
+  ///
+  /// A failed attempt is retried on a fresh socket, after a one-second pause
+  /// and then a two-second one: three attempts in all, unless [timeout] runs
+  /// out first or the lookup is closed.
   @override
   Future<AtTransport> connect(String host, String port,
       {Duration? timeout}) async {
     final url = '$scheme://$host:$port$path';
-    final WebSocket webSocket;
-    try {
-      webSocket = WebSocket(url);
-    } catch (e) {
-      throw SecondaryConnectException(
-          'unable to connect to atServer on $host:$port - $e');
-    }
-    final socket = _BrowserWebSocketPort(webSocket..binaryType = 'arraybuffer');
-    await awaitOpen(socket, host, port, timeout: timeout);
+    final socket = await openWithRetry(() {
+      final WebSocket webSocket;
+      try {
+        webSocket = WebSocket(url);
+      } catch (e) {
+        throw SecondaryConnectException(
+            'unable to connect to atServer on $host:$port - $e');
+      }
+      return _BrowserWebSocketPort(webSocket..binaryType = 'arraybuffer');
+    }, host, port, timeout: timeout);
     return WebSocketTransport(socket, url, flushTimeout: flushTimeout);
   }
 }
