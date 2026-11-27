@@ -48,6 +48,9 @@ void main() {
         if (cmd.startsWith('stats:')) {
           return 'data:[{"id":"3","name":"lastCommitID","value":"-1"}]';
         }
+        if (cmd.startsWith('llookup:meta:')) {
+          return 'error:AT0015-key not found : $cmd';
+        }
         if (cmd.startsWith('sync:')) {
           return 'data:[]';
         }
