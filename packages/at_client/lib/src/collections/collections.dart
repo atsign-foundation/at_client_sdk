@@ -14,6 +14,8 @@ import 'dart:typed_data';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/lifecycle/at_connection.dart'
+    show isTransportFailure;
 import 'package:at_client/src/preference/at_client_preference.dart'
     show RemoteLocalPref;
 import 'package:at_client/src/response/at_notification.dart';
@@ -1485,7 +1487,9 @@ interface class AtCollection<T> {
   /// **Decode-error policy:** one record this device cannot read, such as
   /// one sealed to a key it does not hold yet, fails the list with a
   /// [CItemReadException] naming it. To list the rest, use
-  /// [getItemsAsStream] with an `onError` handler.
+  /// [getItemsAsStream] with an `onError` handler. A read that fails in
+  /// transit — a timeout, or an atServer that cannot be reached — is not a
+  /// decode failure and fails the list with that error itself.
   ///
   /// Items with the same `owner+id` across self and shared copies are
   /// deduplicated and their `sharedWith` sets are unioned.
@@ -1514,6 +1518,10 @@ interface class AtCollection<T> {
   ///     without stopping.
   ///   - `.handleError(...)` chained before consumption → restore a
   ///     silent-skip posture.
+  ///
+  /// A read that fails in transit — a timeout, or an atServer that cannot
+  /// be reached — says nothing about the record, so it is not wrapped: the
+  /// stream fails with that error itself.
   ///
   /// All higher-level read methods ([get], [getOrNull], [getItems]) are
   /// thin wrappers over this stream.
@@ -1682,6 +1690,12 @@ interface class AtCollection<T> {
         continue;
       } catch (e, st) {
         if (e is StoppedException) rethrow;
+        // A read that failed in transit — a timeout, or an atServer that
+        // could not be reached — says nothing about the record, so it is
+        // yielded raw: the listing fails with the transport error instead
+        // of calling a record unreadable that may only have been slow to
+        // arrive.
+        if (isTransportFailure(e)) rethrow;
         // Per-key decode failures are yielded as stream errors rather
         // than logged-and-skipped. The stream continues after an error
         // — subsequent iterations of this for-loop produce further
@@ -5474,7 +5488,9 @@ final class CollectionOpException<T> implements Exception {
 
 /// A record a collection could not read, such as one sealed to a key this
 /// device does not hold yet: yielded as an error by
-/// [AtCollection.getItemsAsStream], with the stack its read failed on.
+/// [AtCollection.getItemsAsStream], with the stack its read failed on. A
+/// read that failed in transit is not one of these: it is yielded raw,
+/// because the record may be perfectly readable.
 final class CItemReadException implements Exception {
   /// The record that could not be read.
   final AtKey key;

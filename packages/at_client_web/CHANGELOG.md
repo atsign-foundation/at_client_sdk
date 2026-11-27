@@ -1,5 +1,7 @@
 ## Unreleased
 
+- A collection listing or get whose read fails in transit rejects `COLLECTION_FAILED` instead of reporting the record unreadable, so a timeout or an unreachable atServer never becomes a `COLLECTION_ITEM_UNREADABLE` entry.
+
 - `notify` remembers the notification id it mints before sending, so an echo that arrives before the send reports the id is still dropped; its final-status wait is bounded by the network default (30 s), and a send still queued when that runs out resolves false while keeping its id, so a late echo is dropped too. An undelivered send, and a send that throws, forget the id and prune, and a connection lost while reading the final status rejects `offline`, while a refusal from an atServer that answered reaches the caller unchanged.
 - Session opens pass the network default (30 s) as the budget of their first connect, so authentication that finishes after five seconds still opens the session and a dead atServer ends the open in thirty seconds; `AtConnection.defaultBudget` stays five seconds for every other caller.
 - `subscribe` delivers each notification's whole key, up to 255 UTF-16 units, instead of cutting it to the message bound, and adds `keyParts` (`name`, `namespace`, `sharedWith`, `sharedBy`, `isPublic`, `isCached`) parsed once from that key; a key longer than 255 units or holding control or bidirectional formatting characters is dropped with a warning that names the key, not the sender. `bridge-manifest.json` publishes the `keyParts` envelope and `maxNotificationKeyLength`.

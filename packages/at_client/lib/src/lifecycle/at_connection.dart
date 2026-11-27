@@ -346,6 +346,26 @@ AtConnectionState? classifyConnectionFailure(Object error) {
   return null;
 }
 
+/// Whether [error] says the atServer could not be reached, rather than that
+/// it answered: a timeout, or no answer from anybody.
+///
+/// True for an [AtTimeoutException] or a [TimeoutException], and for anything
+/// [classifyConnectionFailure] reads as a state whose cause is
+/// [AtConnectionCause.unreachable] or [AtConnectionCause.noAtServer]. A
+/// classification with no cause, such as [UnAuthorizedException] read as
+/// [AtConnectionOutcome.online], is not a transport failure, and neither is a
+/// refusal: the atServer answered those.
+///
+/// A record a collection failed to read with a transport failure is not known
+/// to be unreadable, so the error is reported as itself rather than wrapped.
+bool isTransportFailure(Object error) {
+  if (error is AtTimeoutException || error is TimeoutException) return true;
+  final state = classifyConnectionFailure(error);
+  return state != null &&
+      (state.cause == AtConnectionCause.unreachable ||
+          state.cause == AtConnectionCause.noAtServer);
+}
+
 AtConnectionState? _classifyCode(String code, String message, Object error) {
   if (code == _authenticationFailedCode) {
     return _classifyAuthentication(message, null, error);

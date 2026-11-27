@@ -657,6 +657,18 @@ void main() {
       );
     });
 
+    test('a listing whose read fails in transit rejects COLLECTION_FAILED',
+        () async {
+      await bobShares('a1', {'title': 'bob'});
+      final todos = await open();
+      when(() => alice.mock.get(any()))
+          .thenThrow(AtTimeoutException('no answer'));
+
+      await expectLater(todos.list(), _rejectsWith(CollectionFailure.failed));
+      await expectLater(
+          todos.get(bobs('a1')), _rejectsWith(CollectionFailure.failed));
+    });
+
     test(
         'A list reports an item nested deeper than 64 levels as unreadable with COLLECTION_ITEM_TOO_DEEP',
         () async {

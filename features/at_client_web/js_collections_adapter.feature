@@ -25,9 +25,15 @@ Feature: The JS collections adapter translates onto AtCollection
   #   create with an id of 65 characters rejects with
   #   COLLECTION_INVALID_ARGUMENT"), and an unreadable record is reported
   #   beside the readable items instead of failing the listing ("A list
-  #   returns readable items and reports unreadable ones").
+  #   returns readable items and reports unreadable ones"), while a read that
+  #   fails in transit fails the listing instead of being reported as an
+  #   unreadable record: "a listing whose read fails in transit rejects
+  #   COLLECTION_FAILED".
   # Forgery: an item's owner is the sharedBy of its key and never a field of its
   #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
+  #   A peer cannot make a transient failure look like corrupt data, because a
+  #   transport failure fails the listing: "a listing whose read fails in transit rejects
+  #   COLLECTION_FAILED".
   # Impersonation: a write to an item another atSign owns is refused before any
   #   key is written: "An update, share or remove of another owner's item rejects
   #   with COLLECTION_ITEM_NOT_OWNER".
@@ -111,6 +117,12 @@ Feature: The JS collections adapter translates onto AtCollection
     When the adapter lists the collection
     Then the list resolves with the readable item in items
     And unreadable holds one entry with id "b1", owner "@bob" and code COLLECTION_ITEM_UNREADABLE
+
+  Scenario: a listing whose read fails in transit rejects COLLECTION_FAILED
+    Given @bob shares an item with @alice and @alice's read of it times out
+    When @alice lists the collection
+    Then the list rejects with COLLECTION_FAILED and returns no unreadable entry
+    And a get of that item rejects with COLLECTION_FAILED
 
   Scenario: A list leaves out a stored record whose key names no Atsign, and logs a warning naming the key
     Given a readable item and a stored record in the collection whose key names no Atsign
