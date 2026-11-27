@@ -48,7 +48,7 @@ Feature: at_lookup 4.0.0 runs over a transport the caller chooses, and builds fo
   Scenario: A WebSocket connect that never opens gives up
     Given an atServer address whose WebSocket never opens
     When a browser lookup runs a command
-    Then the command fails with SecondaryConnectException once the connect timeout passes
+    Then the command fails with SecondaryConnectException after three attempts that each time out
 
   Scenario: An oversized atDirectory answer is refused
     Given an atDirectory that answers with more than the bound

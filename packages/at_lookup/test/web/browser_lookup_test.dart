@@ -43,8 +43,8 @@ void main() {
         rootDomain: AtRootDomain('127.0.0.1', port),
         authenticator: null,
         transport: webSocketTransport(scheme: 'ws'),
-        secondaryAddressFinder:
-            HttpsSecondaryAddressFinder('127.0.0.1', port: port, scheme: 'http'));
+        secondaryAddressFinder: HttpsSecondaryAddressFinder('127.0.0.1',
+            port: port, scheme: 'http'));
 
     test(
         'A browser lookup finds its atServer through the atDirectory\'s '
@@ -72,9 +72,6 @@ void main() {
   test('A WebSocket connect that never opens gives up', () async {
     final (channel, port) = await spawn('silent_server.dart');
     addTearDown(() => channel.sink.close());
-    final previous = AtNetworkTimeouts.defaultTimeout;
-    AtNetworkTimeouts.defaultTimeout = const Duration(milliseconds: 300);
-    addTearDown(() => AtNetworkTimeouts.defaultTimeout = previous);
     final lookUp = AtLookUp.withTransport(
         atSign: '@alice',
         rootDomain: const AtRootDomain('127.0.0.1', 64),
@@ -86,6 +83,9 @@ void main() {
     await expectLater(
         lookUp.executeCommand('scan\n'),
         throwsA(isA<SecondaryConnectException>().having(
-            (e) => e.message, 'message', contains('no answer within'))));
-  }, timeout: const Timeout(Duration(seconds: 10)));
+            (e) => e.message,
+            'message',
+            allOf(
+                contains('no answer within'), contains('after 3 attempts')))));
+  }, timeout: const Timeout(Duration(seconds: 40)));
 }
