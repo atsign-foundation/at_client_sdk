@@ -6,6 +6,7 @@
 broadcast-style streams. There are two sources of events (controlled by
 `EventSource` at collection creation):
 
+<!-- pyml disable-num-lines 5 md013-->
 | `EventSource`        | What fires events                                                                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
@@ -98,7 +99,8 @@ final class CSubItemUpdated extends CEvent {
   String get subName => ancestry.last.subName;  // convenience accessor
 }
 
-// CAncestor carries an ancestor's id, the sub-collection name below it, and its owner
+// CAncestor carries an ancestor's id, the sub-collection name below it,
+// and its owner
 final class CAncestor {
   final String id;        // ancestor item id
   final String subName;   // sub-collection name one level below this ancestor
@@ -149,6 +151,7 @@ All events. Useful for debugging or aggregate reacting.
 
 ### Typed streams (prefer these in production code)
 
+<!-- pyml disable-num-lines 9 md013-->
 | Getter / Method                 | Stream type                 | Fires when                                   |
 | ------------------------------- | --------------------------- | -------------------------------------------- |
 | `updates`                       | `Stream<CItemUpdated>`      | Any L0 item created or updated               |

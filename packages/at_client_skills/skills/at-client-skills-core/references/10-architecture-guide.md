@@ -9,6 +9,7 @@ Both patterns are valid and complementary — a single app can use both at once.
 
 ## Decision Table
 
+<!-- pyml disable-num-lines 9 md013-->
 | Criterion            | Use `AtCollection<T>`                            | Use Notifications + SQLite                   |
 | -------------------- | ------------------------------------------------ | -------------------------------------------- |
 | **Data shape**       | Discrete typed records                           | High-frequency telemetry / event streams     |

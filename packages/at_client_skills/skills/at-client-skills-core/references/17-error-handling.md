@@ -4,6 +4,7 @@ Three different families of thing get thrown, and they call for different
 treatment. Working out which family you are looking at is the first step — most
 bad error handling here comes from catching the wrong one.
 
+<!-- pyml disable-num-lines 5 md013-->
 | Family | Examples | Means | Do |
 | ------ | -------- | ----- | -- |
 | Dart core errors | `ArgumentError`, `StateError`, `LateInitializationError` | **Your bug** — the call was invalid | Fix the call; don't catch |
@@ -34,6 +35,7 @@ need to do.
 `AtCollection` signals misuse with Dart's core errors, and each one means the
 code is wrong rather than the environment:
 
+<!-- pyml disable-num-lines 4 md013-->
 | Thrown | Cause |
 | ------ | ----- |
 | `ArgumentError` | namespace without a `.`; `update`/`delete` on an item you don't own |

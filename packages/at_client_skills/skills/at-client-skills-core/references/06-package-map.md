@@ -12,6 +12,7 @@ All packages are published on pub.dev under the `atsign.org` publisher:
 An app depends on **one platform package** and imports only from it (its
 barrel, and any helper library its platform skill names):
 
+<!-- pyml disable-num-lines 4 md013-->
 | App                                     | Add                 | Import                                             |
 | --------------------------------------- | ------------------- | -------------------------------------------------- |
 | Dart CLI, daemon, server, Dart on IoT   | `at_client_cli`     | `package:at_client_cli/at_client_cli.dart`         |
@@ -245,12 +246,14 @@ dart pub add at_client_flutter
 ### Full imports for a CLI program
 
 ```dart
-import 'package:at_client_cli/at_client_cli.dart';  // all of at_client, CLIBase, CliKeys
+// all of at_client, CLIBase, CliKeys
+import 'package:at_client_cli/at_client_cli.dart';
 ```
 
 ### Full imports for a Flutter app
 
 ```dart
 import 'package:at_client_flutter/at_client_flutter.dart';  // includes all of at_client
-import 'package:at_client_flutter/extensions.dart';          // FileAtKeysIo.getAtsign(), etc.
+// FileAtKeysIo.getAtsign(), etc.
+import 'package:at_client_flutter/extensions.dart';
 ```

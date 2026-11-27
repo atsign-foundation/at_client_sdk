@@ -15,7 +15,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "2.0.0"
-  last_modified: "Mon, 09 Nov 2026 00:00:00 GMT"
+  last_modified: "Fri, 27 Nov 2026 12:38:51 GMT"
 ---
 
 # Atsign Platform: CLI, daemons and headless agents
@@ -69,6 +69,7 @@ directory, verbose, `--never-sync`, and more.
 `CLIBase` waits for the client to come online, and otherwise stops it and
 throws:
 
+<!-- pyml disable-num-lines 6 md013-->
 | Exception                              | Means                                       | Retry?        |
 | -------------------------------------- | ------------------------------------------- | ------------- |
 | `AtCredentialRefusedException`         | the atServer refused the keys               | no — a person |
@@ -160,6 +161,7 @@ agent.
 
 ## 7. Several instances of one agent
 
+<!-- pyml disable-num-lines 5 md013-->
 | Instances…                         | Pattern                                                                 |
 | ---------------------------------- | ----------------------------------------------------------------------- |
 | Keep state / use collections       | A server mutex per task: `atClient.tryAcquireServerMutex(key, ttl: …)` |

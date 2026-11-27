@@ -20,7 +20,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "2.0.0"
-  last_modified: "Mon, 09 Nov 2026 00:00:00 GMT"
+  last_modified: "Fri, 27 Nov 2026 12:38:51 GMT"
 ---
 
 # Atsign Platform: core
@@ -94,6 +94,7 @@ re-exports at_client's API and supplies a working default for
 everything that differs by platform (storage, transport, keys, logging).
 Install with `dart pub add` — it resolves the latest compatible version:
 
+<!-- pyml disable-num-lines 4 md013-->
 | App                              | Add and import                                                  |
 | -------------------------------- | --------------------------------------------------------------- |
 | Dart CLI / daemon / server / IoT | `at_client_cli` — `package:at_client_cli/at_client_cli.dart`         |
@@ -135,7 +136,8 @@ Obtain via `AtClient.collection(...)` — never construct `AtCollection` directl
 final todos = await atClient.collection<Todo>(
   'todos.my_app',                    // namespace: MUST contain '.' (fully qualified)
   const Duration(days: 7),           // defaultExpiration for new items
-  fromJson: Todo.fromJson,           // auto-registers factory; typeTag required with this
+  // auto-registers the factory; typeTag is required with this
+  fromJson: Todo.fromJson,
   typeTag: 'Todo',                   // pin as a string literal — NOT T.toString()
   cleanupOrphansOnCreation: true,    // recommended when using sub-collections
   eventSource: EventSource.both,     // default: data + notifs; may fire twice
@@ -246,7 +248,8 @@ final leaf = await todos.getDescendant<Reply>(
   leafExpiration: const Duration(days: 7),
 );  // returns null if any ancestor expired
 // ⚠️ THROWS ArgumentError if any CAncestor.owner in ancestry is null.
-//    CAncestor.owner IS null on CSubItemDeleted events — never call getDescendant from a delete handler.
+//    CAncestor.owner IS null on CSubItemDeleted events — never call
+//    getDescendant from a delete handler.
 //    Cache the ancestry from the preceding CSubItemUpdated if you need it on delete.
 ```
 
@@ -263,8 +266,10 @@ when working with deep hierarchies.
 collection.updates           // Stream<CItemUpdated>
 collection.deletes           // Stream<CItemDeleted>    (item.wasExpired flag)
 collection.readReceipts      // Stream<CReadReceipt>    (r.from, r.readAt)
-collection.subUpdates        // Stream<CSubItemUpdated> (ancestry chain; ancestry.last = direct parent)
-collection.subDeletes        // Stream<CSubItemDeleted> (ancestry[n].owner is null — cache from subUpdates)
+// Stream<CSubItemUpdated>: the ancestry chain; ancestry.last = direct parent
+collection.subUpdates
+// Stream<CSubItemDeleted>: ancestry[n].owner is null — cache from subUpdates
+collection.subDeletes
 collection.availableEvents   // Stream<CItemAvailable>  (e.availableAt fired)
 collection.expiringSoonEvents(leadTime: const Duration(hours: 1))
 
@@ -322,7 +327,8 @@ final preference = AtClientPreference(posture: PqPosture.pqActive)
 final client = await Atsign('@alice').open(
   keys: FileAtKeysIo(filePath: (_) => '/keys/@alice_key.atKeys'),
   preference: preference,
-  storage: HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: true),
+  storage: HiveAtClientStorage(
+      atSign: '@alice', storagePath: dir.path, closedByClient: true),
   lookUps: secureSocketLookUps(),   // how every connection is built
   secondaryAddressFinder: CacheableSecondaryAddressFinder(
       preference.rootDomain, preference.rootPort),   // where the atServer is
@@ -356,7 +362,8 @@ can't be recovered.
 **Connection state — the client comes back whatever the network did:**
 
 ```dart
-client.connection.current;        // AtConnectionState: online | offline | refused, plus cause
+// AtConnectionState: online | offline | refused, plus cause
+client.connection.current;
 client.connection.changes.listen((s) => ...);       // every change, in order
 await client.connection.awaitOnline(budget: const Duration(seconds: 30));
 ```
@@ -402,6 +409,7 @@ service lifecycles, enrollment approval and the shutdown checklist.
 
 ## 10. Architecture: AtCollection vs Notifications+SQLite
 
+<!-- pyml disable-num-lines 6 md013-->
 |                 | `AtCollection<T>`               | Notifications + SQLite            |
 | --------------- | ------------------------------- | --------------------------------- |
 | **Data shape**  | Typed records, discrete items   | High-frequency events / telemetry |
@@ -502,7 +510,8 @@ an operation must see server-side truth immediately, or to publish data.
 try {
   await atClient.get(key);
 } on AtException catch (e) {
-  _log.warning(e.getTraceMessage());   // NOT '$e' — that shows only the innermost message
+  // NOT '$e' — that shows only the innermost message
+  _log.warning(e.getTraceMessage());
 }
 ```
 
@@ -545,6 +554,7 @@ before debugging data that does not appear, does not sync, or decodes wrong.
 Removed in at_client 4.0 — code using these no longer compiles. To move a
 whole app off at_client 3.x, follow the [upgrade guide][upgrade-guide].
 
+<!-- pyml disable-num-lines 11 md013-->
 | Avoid                                                              | Use instead                                                 |
 | ------------------------------------------------------------------ | ----------------------------------------------------------- |
 | `AtCollectionModel` / `AtJsonCollectionModel`                      | `AtCollection<T>` via `atClient.collection(...)`            |

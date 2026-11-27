@@ -80,6 +80,7 @@ connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
+<!-- pyml disable-num-lines 12 md013-->
 | Thrown                          | When                                                                                                     | Do                                                            |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
@@ -178,10 +179,12 @@ s.isOnline; s.isOffline; s.isRefused;
 
 client.connection.changes.listen((s) => ...);   // every change, in order, no replay
 await client.connection.attempt();              // one attempt now
+// until online, refused, or budget spent
 await client.connection.awaitOnline(budget: const Duration(seconds: 30),
-    retryInterval: const Duration(seconds: 3)); // until online, refused, or budget spent
+    retryInterval: const Duration(seconds: 3));
 ```
 
+<!-- pyml disable-num-lines 8 md013-->
 | Outcome   | Cause                                                             | Meaning                                                                                |
 | --------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `online`  | —                                                                 | Connected and the atServer accepted the keys                                           |
@@ -354,6 +357,7 @@ other client the app builds.
 its id, and an approval screen that does not display the rest is asking someone
 to consent to nothing in particular:
 
+<!-- pyml disable-num-lines 7 md013-->
 | Field        | Type                   | What it tells the approver              |
 | ------------ | ---------------------- | ---------------------------------------- |
 | `enrollmentId` | `String?`            | The handle for `approve` / `deny`        |

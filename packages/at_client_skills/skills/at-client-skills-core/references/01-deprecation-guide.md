@@ -27,6 +27,7 @@ with `AtCollection<T>`, and move old code with the table below.
 
 ## Migration Table: Old → New
 
+<!-- pyml disable-num-lines 12 md013-->
 | Old API                                                  | New API                                                                          |
 | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `class MyModel extends AtCollectionModel<MyModel>`       | Implement `toJson`/`fromJson` + register factory                                 |
@@ -92,7 +93,8 @@ class Todo {
 AtCollection.registerFactory<Todo>(Todo.fromJson, typeTag: 'Todo');
 
 // Usage
-final collection = await atClient.collection<Todo>('todos.my_app', const Duration(days: 7));
+final collection = await atClient.collection<Todo>(
+    'todos.my_app', const Duration(days: 7));
 final item = await collection.create(obj: Todo('buy milk'), sharedWith: {'@bob'.toAtsign()});
 final all  = await collection.getItems();
 await collection.delete(item);
@@ -107,6 +109,7 @@ each, is in [06-package-map.md](06-package-map.md).
 
 ## Retired auth API (at_client_flutter 2.0, at_auth 4.0)
 
+<!-- pyml disable-num-lines 7 md013-->
 | Was                                                                     | Now                                                                                           |
 | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `AuthService().authenticate(AtAuthRequest(...))` → `AuthResponse`       | `PkamDialog.show(context, atSign:, keys:, preference:)` → `AtClient`, or `const AtsignFlows().open(a, ...)` |
@@ -125,6 +128,7 @@ See the at-client-skills-flutter skill and
 Code using these no longer compiles. Every one has a replacement, or nothing
 replaces it because nothing read it.
 
+<!-- pyml disable-num-lines 28 md013-->
 | Was                                                                                          | Now                                                                                     |
 | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `AtClientManager.getInstance().setCurrentAtSign(...)`, `AtClientManager.fromAuthSession(...)` | `Atsign(a).open(...)` (see [15-client-lifecycle.md](15-client-lifecycle.md)), then `use(client)` for code that reads the manager |
@@ -165,6 +169,7 @@ it, as [15-client-lifecycle.md](15-client-lifecycle.md) shows.
 Both packages' code lives in `at_client_cli`. A program depends on
 `at_client_cli` alone and imports `package:at_client_cli/at_client_cli.dart`.
 
+<!-- pyml disable-num-lines 9 md013-->
 | Was (at_onboarding_cli 1.x, at_cli_commons 3.x)                    | Now (at_client_cli)                                                                      |
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `AtOnboardingServiceImpl(atSign, pref).authenticate()`, `.atClient` | `CLIBase.fromCommandLineArgs(...)`, or `Atsign(atSign).open(...)` with `CliKeys`        |
@@ -179,6 +184,7 @@ Both packages' code lives in `at_client_cli`. A program depends on
 
 These still compile, with a deprecation warning. Avoid them in new code.
 
+<!-- pyml disable-num-lines 3 md013-->
 | Deprecated                                                   | Instead                                                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | `AtClientPreference.hiveStoragePath`                         | `HiveAtClientStorage(atSign:, storagePath:, closedByClient: true)` as `storage:`; at_client ignores the field, and at_client_flutter's dialogs read it only when given no storage |

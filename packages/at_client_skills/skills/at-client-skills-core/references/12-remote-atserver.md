@@ -116,6 +116,7 @@ that object's `useRemoteAtServer` value — which defaults to `false`. So on a
 
 ## When to reach for remote operations
 
+<!-- pyml disable-num-lines 7 md013-->
 | Situation                                             | Use                                                                                     |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Ordinary app data (todos, notes, shares)              | **Default** — local write, background sync                                              |

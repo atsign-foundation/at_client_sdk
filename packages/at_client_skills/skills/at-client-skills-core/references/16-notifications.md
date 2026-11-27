@@ -15,6 +15,7 @@ now passes the same value as `idAndNamespace:`.
 
 **Which call answers which question:**
 
+<!-- pyml disable-num-lines 5 md013-->
 | You need to know…                    | Call             | Returns              |
 | ------------------------------------ | ---------------- | -------------------- |
 | "Did it arrive?"                     | `getStatus(id)`  | `NotificationResult` |

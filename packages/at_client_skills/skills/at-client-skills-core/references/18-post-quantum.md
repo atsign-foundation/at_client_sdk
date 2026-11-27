@@ -14,6 +14,7 @@ deployed on legacy.
 
 ## The postures
 
+<!-- pyml disable-num-lines 5 md013-->
 | Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
 | -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
 | `PqPosture.legacy` (the default) | legacy encryption                       | no                      | nothing new                                                                 |

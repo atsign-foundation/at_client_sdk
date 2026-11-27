@@ -16,7 +16,7 @@ compatibility: Claude Code and any agentskills.io-compatible agent.
 user-invocable: true
 metadata:
   version: "2.0.0"
-  last_modified: "Mon, 09 Nov 2026 00:00:00 GMT"
+  last_modified: "Fri, 27 Nov 2026 12:38:51 GMT"
 ---
 
 # Atsign Platform: Flutter
@@ -50,6 +50,7 @@ it: `dart run skills get --skill at-client-skills-core`.
 
 ## 2. Signing in: four flows, four dialogs
 
+<!-- pyml disable-num-lines 6 md013-->
 | Flow | When                                        | Dialogs                                            |
 | ---- | ------------------------------------------- | -------------------------------------------------- |
 | 1    | A new atsign, first time (CRAM)             | `RegistrarCramDialog` for the secret, `CramDialog` |
@@ -76,7 +77,8 @@ final client = await PkamDialog.show(context,
   preference: AtClientPreference(posture: PqPosture.pqActive)
     ..namespace = 'my_app'
     ..syncRegex = 'my_app',
-  backupKeys: [KeychainAtKeysIo()],   // copies the keys into the keychain for next time
+  // copies the keys into the keychain for next time
+  backupKeys: [KeychainAtKeysIo()],
 );
 if (client == null) return;
 _adopt(client);

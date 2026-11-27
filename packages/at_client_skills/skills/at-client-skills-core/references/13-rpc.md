@@ -8,6 +8,7 @@ from `package:at_client/at_client.dart`, and so from both platform packages.
 
 **When to use RPC vs the alternatives:**
 
+<!-- pyml disable-num-lines 5 md013-->
 | You need…                                     | Use                                  |
 | --------------------------------------------- | ------------------------------------ |
 | Shared, persistent, typed app data            | `AtCollection<T>` (the default)      |

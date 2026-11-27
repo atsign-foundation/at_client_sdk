@@ -79,6 +79,7 @@ Draft it for the developer, and file it only if they agree.
 <https://github.com/atsign-foundation/at_client_sdk/issues/new?template=bug_report.yaml>.
 Fill in each field for the developer to paste:
 
+<!-- pyml disable-num-lines 9 md013-->
 | Field              | What goes in it                                                                                             |
 | ------------------ | ----------------------------------------------------------------------------------------------------------- |
 | Package            | One of `at_client_flutter`, `at_client_cli`, `at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup`, `at_client_skills`, `other` |

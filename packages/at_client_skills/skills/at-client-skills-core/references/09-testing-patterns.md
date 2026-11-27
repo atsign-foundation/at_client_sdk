@@ -262,6 +262,7 @@ when(() => atClient.get(any())).thenAnswer((_) async {
 
 The SDK's own test suite demonstrates every pattern in detail:
 
+<!-- pyml disable-num-lines 7 md013-->
 | File | What it covers |
 | ------ | ---------------- |
 | `packages/at_client/test/at_collections_test.dart` | Core CRUD, factory registry, draft, basic events via `EventSource.notifs` |

@@ -34,6 +34,7 @@ namespace produce separate instances.
 
 ## Factory Registration
 
+<!-- pyml disable-next-line md013-->
 ### `static void registerFactory<U>(U Function(Map<String,dynamic>) fromJson, {required String typeTag})`
 
 Registers a deserialization factory. **Process-global** — shared across all
@@ -56,6 +57,7 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 
 ## Basic Getters
 
+<!-- pyml disable-num-lines 7 md013-->
 | Getter              | Type       | Description                                  |
 | ------------------- | ---------- | -------------------------------------------- |
 | `atSign`            | `Atsign`   | The atsign this `atClient` is acting as      |
@@ -72,6 +74,7 @@ What every read hands back, and what you may change before calling `update`.
 The mutability column is the part that bites: three of these are meant to be
 edited in place, and two cannot be reassigned at all.
 
+<!-- pyml disable-num-lines 13 md013-->
 | Field           | Type                 | Mutable? | Notes                                                         |
 | --------------- | -------------------- | -------- | ------------------------------------------------------------- |
 | `id`            | `String`             | no       | Unique within the collection; prefixed to the namespace       |
@@ -100,6 +103,7 @@ and `markReadByMe()`. They are eventually consistent — see
 
 ## Drafting (No I/O)
 
+<!-- pyml disable-next-line md013-->
 ### `CItem<T> draft({required T obj, String? id, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Builds an in-memory item without persisting. Use `create` to persist.
@@ -113,6 +117,7 @@ Builds an in-memory item without persisting. Use `create` to persist.
 
 ## CRUD Methods
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<T>> create({required T obj, String? id, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Creates and persists a new item. On `EventSource.data` / `EventSource.both`,
@@ -135,6 +140,7 @@ awaits local emission so `watch()` listeners see the update before
   `NamespaceKeyUnavailableException` naming them.
   `CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<T>> upsert({required String id, required T obj, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Idempotent write. Creates if not exists, rewrites if it does.
@@ -148,6 +154,7 @@ recipient copies for atsigns removed from `item.sharedWith`.
 - Throws `ArgumentError` if `item.owner != self`
 - Throws `StateError` if self-key does not exist
 
+<!-- pyml disable-next-line md013-->
 ### `Future<void> updateSharedWith(CItem<T> item, Set<Atsign> sharedWith, {bool unshareWithOthers = true})`
 
 Changes the recipient set **without rewriting the self-key**. Delta-only: adds
@@ -233,6 +240,7 @@ Cheap presence check. Prefers the `_seenSelfIds` cache for self-owned items.
 
 ## Sub-collection Construction
 
+<!-- pyml disable-next-line md013-->
 ### `AtCollection<U> subCollection<U>({required CItem<T> parent, required String subName, required Duration defaultExpiration, U Function(Map<String,dynamic>)? fromJson, String? typeTag})`
 
 Opens a typed sub-collection scoped to `parent`. Sub-collections inherit the
@@ -245,6 +253,7 @@ parent's `eventSource`.
 - `ArgumentError` thrown if composed namespace would exceed 255-char atServer
   key limit (max ~11 levels)
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<U>?> getDescendant<U>({required List<CAncestor> ancestry, required String id, required Atsign owner, required Duration leafExpiration, Duration? intermediateExpiration, U Function(Map<String,dynamic>)? leafFromJson, String? leafTypeTag})`
 
 Walks the parent chain from `ancestry` (from a `CSubItemUpdated` event) and
@@ -279,6 +288,7 @@ Returns an immutable `Query<T>` builder. See [03-query-api.md](03-query-api.md).
 
 ## Event Streams
 
+<!-- pyml disable-num-lines 10 md013-->
 | Stream                          | Type                        | Description                           |
 | ------------------------------- | --------------------------- | ------------------------------------- |
 | `watch()`                       | `Stream<CEvent>`            | All events below                      |
