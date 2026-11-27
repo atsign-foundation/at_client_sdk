@@ -92,31 +92,11 @@ each event.
 Returns a **single-subscription** stream. Use `.asBroadcastStream()` for
 multi-listener UIs.
 
-```dart
-// Flutter pattern — create the stream ONCE and hold it in State.
-// NEVER call watch() inside build(): each rebuild mints a new stream and tears
-// down the live subscription, so live updates silently stop arriving.
-class _TodoListState extends State<TodoList> {
-  late final Stream<List<CItem<Todo>>> _todos =
-      todos.query().where((t) => !t.obj.done).watch();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<CItem<Todo>>>(
-      stream: _todos,                        // held stream, not a fresh watch()
-      builder: (ctx, snap) {
-        if (!snap.hasData) return const CircularProgressIndicator();
-        return ListView(children: snap.data!.map((t) => TodoTile(t)).toList());
-      },
-    );
-  }
-}
-```
-
-If the query depends on a runtime input (a filter, a parent id), recreate the
-held stream when that input changes — inside the `setState` that changes it —
-not on every build. Streams with fixed inputs are created once (`initState` or
-a `late final` field).
+Each `watch()` call starts a new stream. Create it once and hold it for as
+long as you listen; if the query depends on a runtime input (a filter, a
+parent id), recreate it when that input changes, and only then. Where a UI
+framework rebuilds, the platform skill shows where to hold it — for Flutter,
+the at-client-skills-flutter skill.
 
 ### `Future<int> count()`
 
@@ -263,7 +243,7 @@ abstract class $Todo {
 ### PathField operators
 
 | Operator | Available on | Returns |
-| ---------- | ------------- | --------- |
+| --- | --- | --- |
 | `.eq(value)` | All `PathField<V>` | `Predicate` |
 | `.neq(value)` | All `PathField<V>` | `Predicate` |
 | `.lt(value)` | `PathField<V extends Comparable>` | `Predicate` |

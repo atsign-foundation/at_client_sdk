@@ -42,7 +42,7 @@ const namespace = 'my_app';
 
 AtClientPreference _preference() => AtClientPreference(posture: PqPosture.pqActive)
   ..namespace = namespace
-  ..syncRegex = namespace;   // scope sync to this app (see 11-sync.md)
+  ..syncRegex = namespace;   // scope sync to this app (see at-client-skills-core)
 
 /// Screens that read AtClientManager.getInstance().atClient need this; an app
 /// that passes the client around does not.
@@ -52,17 +52,30 @@ void _adopt(AtClient client) => AtClientManager.getInstance().use(client);
 Pass no `storage` and the dialogs open Hive in the app's support directory
 (`getApplicationSupportDirectory()`), or under `preference.hiveStoragePath`
 while the app still sets it. That field is deprecated (at_client itself
-ignores it, and it goes in 5.0), and at_client 4.0 removed `commitLogPath`: an
+ignores it), and at_client 4.0 removed `commitLogPath`: an
 app that keeps its store anywhere else, or wants another backend, passes an
 `AtClientStorage` as `storage`, such as `HiveAtClientStorage`, which comes
 through `package:at_client_flutter`.
+
+**`rootDomain` is an `AtRootDomain`, not a `String`.** Every dialog below takes
+the typed value, so passing `'root.atsign.org'` is a compile error. The flows
+read it off the selection dialog, but you do not need a dialog to get one:
+
+```dart
+AtRootDomain.atsignDomain                    // the standard root — root.atsign.org:64
+const AtRootDomain('root.atsign.org', 64)    // the same thing, written out
+AtRootDomain.parse('my.root.example:6400')   // host:port; bare host defaults to 64
+```
+
+Reach for `atsignDomain` unless your app talks to a non-standard root — then
+`parse` is what turns a configured string into the type.
 
 ---
 
 ## Flow 1: New atsign — CRAM Activation (first-time only)
 
 Use when a developer wants to activate a brand-new atsign for a user.
-Requires a `RegistrarService` (re-exported by `at_client_flutter`) configured
+Requires a `RegistrarService` (from `package:at_client_flutter`) configured
 with a registrar URL and API key. The service sends the key to the registrar
 on the calls that find a free atSign and exchange the code emailed to the
 user for that atSign's CRAM secret; it names the app to the registrar and
@@ -84,6 +97,7 @@ Future<void> activateNewAtSign(BuildContext context) async {
   // Step 1: the user picks / types an atSign and a root domain
   final selection = await AtSignSelectionDialog.show(context);   // AtsignSelection?
   if (selection == null || !context.mounted) return;
+  // selection.rootDomain is an AtRootDomain, not a String — see below.
 
   // Step 2: the registrar emails an OTP; the dialog exchanges it for the CRAM key
   final cramKey = await RegistrarCramDialog.show(context, selection.atSign,
@@ -266,12 +280,10 @@ final state = client.connection.current;   // online | offline | refused, with a
 client.connection.changes.listen((s) => setState(() => _state = s));
 ```
 
-- **offline** (`unreachable`, `noAtServer`) — no atServer accepted or refused
-  the keys, which includes a connect attempt the atServer answers with
-  neither a challenge to sign nor a decision, such as a server error
-  (AT0011). The client serves its local store and syncs when the atServer is
-  reached. A 1.x app treated this as a failed login; a 2.0 app decides, and
-  usually shows an indicator rather than blocking. Under `pqActive`, a
+- **offline** — the client serves its local store and syncs when the atServer
+  is reached. An app on at_client_flutter 1.x treated this as a failed login;
+  on 2.0 the app decides, and usually shows an indicator rather than
+  blocking. Under `pqActive`, a
   device's first write in a namespace, and a share whose recipient's key the
   client holds no current copy of, need the atServer; once a device has
   written in a namespace, it goes on writing there offline, across restarts.
@@ -280,16 +292,11 @@ client.connection.changes.listen((s) => setState(() => _state = s));
   keys. Ask the user.
 - A **first** open of these keys on a device that is refused throws
   `AtOpenRefusedException` instead, since nothing is held locally to serve.
-- Keys `open` cannot use (absent, unreadable, holding no authentication
-  keypair it can use, or for another atSign) throw
-  `AtKeysUnusableException` before it connects, on any device. `PkamDialog`
-  shows the first line of its message, or its own words when the keys hold
-  no credential, or only a request it cannot wait on.
 - When the keys hold a request awaiting approval in a store it can write,
-  `PkamDialog` waits for the approval instead, and offers Cancel, which
-  removes the request's pending keys once the user confirms.
+  `PkamDialog` waits for the approval instead. Leaving the dialog keeps the
+  request.
 
-See [15-client-lifecycle.md](15-client-lifecycle.md) for the full state model,
+See at-client-skills-core's lifecycle reference for the full state model,
 the services and the shutdown checklist.
 
 ---
@@ -310,10 +317,10 @@ hook, not a logout.
 
 ## Canonical Examples
 
-<!-- pyml disable-num-lines 2 md013-->
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
-- [packages/at_client_flutter/example/lib/apkam_example.dart](../../../../at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
-- [packages/at_client_flutter/example/todos/lib/onboarding.dart](../../../../at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
+<!-- pyml disable-num-lines 3 md013-->
+- [packages/at_client_flutter/example/lib/walkthrough.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/lib/walkthrough.dart) — all four flows, plus the `_adopt` helper
+- [packages/at_client_flutter/example/lib/apkam_example.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/lib/apkam_example.dart) — the approve/deny side of APKAM
+- [packages/at_client_flutter/example/todos/lib/onboarding.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client_flutter/example/todos/lib/onboarding.dart) — Flows 2 and 3 in a real app
 
 ---
 
@@ -324,7 +331,8 @@ import 'package:at_client_flutter/at_client_flutter.dart';
 // Exports all of at_client plus: AtSignSelectionDialog (→ AtsignSelection),
 // PkamDialog, CramDialog, RegistrarCramDialog, AtKeysFileDialog,
 // ApkamActivationDialog, EnrollmentRequestList, KeychainStorage,
-// KeychainAtKeysIo, and RegistrarService (the one at_auth type an app wants).
+// KeychainAtKeysIo, and RegistrarService (from at_auth, which the app does not
+// import).
 
 import 'package:at_client_flutter/extensions.dart';
 // Adds FileAtKeysIo.getAtsign() (used in Flow 2).

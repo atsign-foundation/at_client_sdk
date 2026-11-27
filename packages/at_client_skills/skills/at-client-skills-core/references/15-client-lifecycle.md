@@ -2,8 +2,8 @@
 
 `at_client` owns the atSign lifecycle: onboarding, login and enrollment are
 verbs on `Atsign`, each handing back an `AtClient` the **app owns and stops**.
-The Flutter dialogs ([05-flutter-auth.md](05-flutter-auth.md)) and `CLIBase`
-([14-multi-agent.md](14-multi-agent.md)) are these verbs behind UI and
+The Flutter dialogs (the at-client-skills-flutter skill) and `CLIBase`
+(the at-client-skills-cli skill) are these verbs behind UI and
 argument parsing; what follows is true of the client whichever way it was
 opened.
 
@@ -37,9 +37,8 @@ final owner = await Atsign('@alice').activate(
 
 // Enroll this app with an atSign whose keys another device holds. The
 // request is filed in `keys` as pending, so a restart resumes it. enroll
-// throws AtEnrollmentException when `keys` already holds live keys or a
-// pending request, whatever its app and device: resume that one, or cancel
-// it, first.
+// throws AtEnrollmentException when `keys` already holds live keys, or a
+// pending request for the same app and device: resume that one instead.
 final pending = await Atsign('@alice').enroll(otp: otp, app: 'my_app',
     device: 'phone', namespaces: {'my_app': 'rw'}, keys: keys,
     preference: preference, lookUps: lookUps, secondaryAddressFinder: finder);
@@ -49,9 +48,7 @@ final enrolled = await pending.client(preference,
 // pending keys are gone from `keys`, as a denial's are, so resumeEnrollment
 // finds nothing. It throws when `keys` cannot remove them; call it again.
 // Call it when the user confirms they give up on the request (a Cancel
-// button). From a terminal, `at_activate cancel -a @alice -k <keyfile>` does
-// it for the keyfile `at_activate enroll` filed the request in, and refuses
-// one holding live keys.
+// button).
 // pending.stop() ends the wait and keeps the request: call it from a
 // dispose() that only leaves the screen, and resumeEnrollment picks the
 // request up later. The request stays on the atServer until its manager
@@ -61,12 +58,12 @@ final enrolled = await pending.client(preference,
 // would then revoke. Both return once any client the wait opened has
 // stopped: when pending.approved says the approval landed first, open the
 // atSign on `keys` at once.
-final resumed = await Atsign('@alice').resumeEnrollment(keys: keys,
-    preference: preference, lookUps: lookUps,
-    secondaryAddressFinder: finder);                  // null: none pending
-// It resumes the one pending enrollment `keys` holds, whatever app and
-// device it was filed under.
+final resumed = await Atsign('@alice').resumeEnrollment(
+    app: 'my_app', device: 'phone', keys: keys, preference: preference,
+    lookUps: lookUps, secondaryAddressFinder: finder);   // null: none pending
+// With no app or device, it resumes the one pending enrollment `keys` holds.
 
+// (Where `otp` comes from, and who approves: section 8.)
 // Which enrollment a keys store authenticates as, without building a client.
 final principal = await Atsign('@alice').authenticatesAs(keys: keys,
     rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
@@ -76,46 +73,30 @@ final principal = await Atsign('@alice').authenticatesAs(keys: keys,
 In at_client 4.0 every verb is handed what it builds a client from, and the
 compiler insists: `storage:` on `open`, `activate` and `pending.client`, and
 `lookUps:` ([section 3](#3-connections)) with `secondaryAddressFinder:` on
-`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`. A CLI program takes its
-keys and store from `CliKeys.fileFor(atSign)` and
-`CliKeys.storageFor(atSign, program: ...)`. `open` also takes
-`serviceFactory:` (a process that must not sync hands in
-`ServiceFactoryWithNoOpSyncService` from `at_client_cli`), `atLookUp:` (a
+`open`, `activate`, `enroll`, `resumeEnrollment` and `authenticatesAs`; each
+platform package supplies them. `open` also takes
+`serviceFactory:` (a process that must not sync hands in a no-op sync
+service; see the at-client-skills-cli skill), `atLookUp:` (a
 connection the caller already holds) and `connectBudget:` (how long the one
 connect attempt waits before the client comes back offline, 5 s by default).
 
 **What can refuse:**
 
-| Thrown                           | When                                                                                                                                                         | Do                                                                                                              |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| `AtKeysUnusableException`        | The keys are absent, cannot be read, hold no keypair it can use, or record another atSign; thrown before connecting, on any device                           | Show its message; `cause` says which                                                                            |
-| `AtOpenRefusedException`         | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none)                                                     | Show the cause; nothing local to serve                                                                          |
-| `AtEnrollmentPendingException`   | The keys hold only an enrollment awaiting approval (an `AtKeysUnusableException`)                                                                            | `resumeEnrollment`                                                                                              |
-| `AtNoCredentialException`        | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                                                                     | Enroll again                                                                                                    |
-| `AtStorageInUseException`        | Another process holds the Hive store at this location open                                                                                                   | Give each process a location of its own                                                                         |
-| `StateError` "already live"      | A client for this atSign as the same enrollment, or on the same storage, is live in this process                                                             | `stop()` it first; another enrollment opens beside it                                                           |
-| `AtEnrollmentExpiredException` (at_client 4.1.0) | `pending.client(...)`: the request expired, or the atServer no longer holds it; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
-| `AtEnrollmentDeniedException` (at_client 4.1.0) | `pending.client(...)`: the request was denied; its pending keys are removed, or the message says they stay when the AtKeys store cannot be written | Tell the user; once its pending keys are gone, a new `enroll` is a new request                                  |
-| `AtEnrollmentException`          | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet", a server error included; its pending keys stay            | Show the message; a person decides whether to wait again (`resumeEnrollment` returns the request) or `cancel()` |
-| Any other error, `AtEnrollmentException` included | `pending.client(...)`: the request was approved but its keys could not be fetched or decrypted: an `AtException` such as `AtLookUpException` for an error reply or none, errors such as `FormatException` or `ArgumentError` for a reply that does not parse or decrypt, and a plain `AtEnrollmentException` only when no conveyed key decrypts them; its pending keys stay | Show the message; the request may already be approved, so wait again (`resumeEnrollment` returns the request) before a person considers `cancel()` |
-| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`, or another wait for the same request cancelled it before its approval was filed | Nothing after a cancel of its own; otherwise show the message, since an approval may have landed                |
-| `StoppedException`               | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                                                                    | `resumeEnrollment` later; the request is kept                                                                   |
-| `AtCredentialRefusedException`   | `authenticatesAs(...)`: the atServer refused the keys; `CLIBase` throws it for every refusal                                                                 | Show the cause                                                                                                  |
-
-`AtEnrollmentExpiredException`, `AtEnrollmentDeniedException` and
-`AtEnrollmentCancelledException` are also `AtEnrollmentException`s, so their
-`catch` goes first. An answer that waiting cannot resolve is a plain
-`AtEnrollmentException`. An approval whose keys cannot be collected throws
-whatever collecting them threw, mostly not an `AtEnrollmentException`, so a
-final `catch` of any other error goes after these and waits again rather than
-cancelling. `resumeEnrollment` returns the request after either of these,
-and null after a denial or expiry whose pending keys were removed.
-at_client 4.0 throws a plain `AtEnrollmentException` for a denial and an
-expiry too.
-
-`resumeEnrollment` reads the keys as `open` does: keys it cannot read, or that
-record another Atsign, throw `AtKeysUnusableException` before it connects, and
-an AtKeys store holding nothing for the Atsign gives null.
+<!-- pyml disable-num-lines 14 md013-->
+| Thrown | When | Do |
+| --- | --- | --- |
+| `AtOpenRefusedException` | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve |
+| `AtEnrollmentPendingException` | The keys hold only an enrollment awaiting approval | `resumeEnrollment` |
+| `AtEnrollmentPendingException` | `resumeEnrollment` found several pending enrollments matching what it was given | Name both `app` and `device` |
+| `AtNoCredentialException` | The keys hold no credential and no request: a denial, a cancel or an expiry left them so | Enroll again |
+| `AtStorageInUseException` | Another process holds the Hive store at this location open | Give each process a location of its own |
+| `StateError` "already live" | A client for this atSign as the same enrollment, or on the same storage, is live in this process | `stop()` it first; another enrollment opens beside it |
+| `AtEnrollmentException` | `pending.client(...)`: the request was denied, or expired; its pending keys are removed | Tell the user; a new `enroll` is a new request |
+| `AtEnrollmentException` | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet"; the request is kept | Show the message; wait again with `resumeEnrollment`, or `cancel()` |
+| Any other error | `pending.client(...)`: the request was approved, but its keys could not be collected; the request is kept | Wait again with `resumeEnrollment` before a person considers `cancel()` |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()` | Nothing; the pending keys are gone |
+| `StoppedException` | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()` | `resumeEnrollment` later; the request is kept |
+| `AtCredentialRefusedException` | `authenticatesAs(...)`: the atServer refused the keys | Show the cause |
 
 ---
 
@@ -123,8 +104,7 @@ an AtKeys store holding nothing for the Atsign gives null.
 
 A client holds one `AtClientStorage`, and one store is held by one live client.
 Both platform packages re-export `HiveAtClientStorage`, the durable store
-native apps use; `CliKeys.storageFor(atSign, program:)` is one at the path
-`CLIBase` uses. Both also re-export the other backends,
+native apps use. Both also re-export the other backends,
 `SqliteAtClientStorage` and `InMemoryAtClientStorage`.
 
 ```dart
@@ -136,11 +116,9 @@ HiveAtClientStorage(atSign: '@alice', storagePath: dir.path, closedByClient: tru
 - Omit it and the store is **borrowed**: `stop()` detaches from it and the
   caller closes it. Use this only when something else shares the store.
 - `storage:` is required, so a verb without one does not compile. at_client
-  ignores the deprecated `preference.hiveStoragePath`: to keep the store a 3.x
-  app used, pass that folder as `storagePath`. The Flutter dialogs, given no
-  storage, still open Hive under `hiveStoragePath` while the app sets it, and
-  otherwise in the app support directory. at_client 4.0 removed
-  `commitLogPath`; the client is commit-log-free.
+  ignores the deprecated `preference.hiveStoragePath`: to keep the store an
+  app used on at_client 3.x, pass that folder as `storagePath`. at_client 4.0
+  removed `commitLogPath`; the client is commit-log-free.
 - **Every process, and every client, needs its own store.** Two clients on one
   Hive location is refused, and a second process on a Hive store another
   holds is refused with `AtStorageInUseException` naming the location.
@@ -162,11 +140,8 @@ is.
 // TLS on TCP; the config is where TLS settings now live.
 lookUps: secureSocketLookUps(config: SecureSocketConfig()..pathToCerts = '/certs')
 
-// Behind a proxy that routes on the atSign: make it the root domain, as
-// preference..rootDomain = 'proxy:proxy.example.com' and ..rootPort = 443, and
-// give the finder the same two. at_lookup then sends `from:<atSign>` first on
-// every connection itself; an onConnect must not send it too.
-lookUps: secureSocketLookUps()
+// Behind a proxy that routes on the atSign: send `from:` first on every connection.
+lookUps: secureSocketLookUps(onConnect: (c) => c.sendSync('from:@alice\n'))
 
 // A factory of your own: any AtLookUp implementation, another transport.
 AtLookupMuxable mine({required atSign, required rootDomain, required authenticator,
@@ -178,12 +153,8 @@ AtLookupMuxable mine({required atSign, required rootDomain, required authenticat
   optional address finder. The factory captures how bytes travel; what a
   connection announces about the client travels in its authenticator's
   `from:`.
-- The Flutter dialogs (`PkamDialog.show(..., lookUps: ...)` and the others)
-  and `CLIBase.fromCommandLineArgs(args, lookUps: ...)` pass it through. With
-  none, the dialogs use `secureSocketLookUps()`, and `CLIBase` uses
-  `secureSocketLookUps()` (at_client_cli's `lookUpsFor` is deprecated); at_lookup 4.1.0
-  sends `from:<atSign>` itself for a proxy root (`proxy:host:port`), and
-  `proxyLookUps()` is deprecated.
+- Each platform package supplies a default and takes yours in its place; the
+  platform skills name both.
 - at_client 4.0 removed `AtClientPreference.decryptPackets`, `pathToCerts` and
   `tlsKeysSavePath`: the transport is the factory's to configure, through the
   `SecureSocketConfig` given to `secureSocketLookUps(config:)`.
@@ -212,30 +183,25 @@ s.isOnline; s.isOffline; s.isRefused;
 
 client.connection.changes.listen((s) => ...);   // every change, in order, no replay
 await client.connection.attempt();              // one attempt now
+// until online, refused, or budget spent
 await client.connection.awaitOnline(budget: const Duration(seconds: 30),
-    retryInterval: const Duration(seconds: 3)); // until online, refused, or budget spent
+    retryInterval: const Duration(seconds: 3));
 ```
 
-| Outcome   | Cause                                                             | Meaning                                                                                |
-| --------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `online`  | —                                                                 | Connected and the atServer accepted the keys                                           |
-| `offline` | `unattempted`                                                     | Nothing has tried yet                                                                  |
-| `offline` | `unreachable`                                                     | No network, the atDirectory or atServer not reached, or a connect attempt the atServer answered with neither a challenge to sign nor a decision on the keys, such as a server error (AT0011), which `error` holds; local store served |
-| `offline` | `noAtServer`                                                      | The atDirectory answered: this atSign has no atServer (not activated, or reset)        |
-| `offline` | `stopped`                                                         | `stop()` ran; the last change emitted                                                  |
+<!-- pyml disable-num-lines 8 md013-->
+| Outcome | Cause | Meaning |
+| --- | --- | --- |
+| `online` | — | Connected and the atServer accepted the keys |
+| `offline` | `unattempted` | Nothing has tried yet |
+| `offline` | `unreachable` | No network, or the atDirectory / atServer did not answer; local store served |
+| `offline` | `noAtServer` | The atDirectory answered: this atSign has no atServer (not activated, or reset) |
+| `offline` | `stopped` | `stop()` ran; the last change emitted |
 | `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `enrollmentDenied`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
-
-When the atServer answers a connection's `from:`, `pkam:` or `cram:` with an
-`error:` reply, at_auth's authenticators raise `AtAuthErrorReplyException`
-(exported by at_client 4.1.0), whose `errorCode` is the reply's code, or null
-when it names none. A refusal code gives its `refused` cause and a reply
-naming no code gives `unauthenticated`; any other code is not a refusal. A
-verb sent through `getRemoteSecondary()` that meets such a reply throws it.
 
 Every verb the client runs on its own connection keeps the state current, so
 an app rarely needs `attempt()`; it subscribes to `changes` and renders.
-**Flutter:** subscribe once (in `initState`), cancel in `dispose`, and follow
-the client the app switches to via `AtClientManager.listenToAtSignChange`.
+Subscribe once, cancel when the listener goes away, and follow the client the
+app switches to via `AtClientManager.listenToAtSignChange`.
 
 ---
 
@@ -325,7 +291,10 @@ await client.stop();
 - **Does not drain.** A sync round in flight is abandoned at its next step;
   what it had not pushed stays queued on the store for the next client that
   opens on it. If the writes must reach the atServer before the process ends,
-  wait until `isInSync()` answers true first.
+  first `await client.syncService.waitUntilCaughtUp(timeout: ...)`: it returns
+  once the push queue is empty, and the timeout bounds a sync that cannot
+  reach the atServer. Polling `isInSync()` instead is a race
+  ([11-sync.md](11-sync.md)).
 - **A push the atServer accepted just before the stop is pushed again.** The
   stop can land after the atServer commits a batch and before the client takes
   it off the queue, so the next client on that store pushes it again. A
@@ -338,15 +307,91 @@ await client.stop();
 
 **Shutdown checklist for a process:**
 
-1. Wait for `client.syncService.isInSync()` if pending writes matter.
+1. If pending writes matter,
+   `await client.syncService.waitUntilCaughtUp(timeout: ...)`.
 2. `await client.stop()` for every client the process opened.
 3. Close any storage you built without `closedByClient: true`.
 
 ---
 
+## 8. Enrolling a device: the passcode and the approver
+
+`enroll` needs an `otp`, and nothing enrols itself. Both halves of that come
+from an atSign that is **already** enrolled, through a client authenticating
+as an enrollment that holds `__manage`.
+
+**Where the passcode comes from.** The enrolling device cannot mint its own —
+that would defeat the mechanism. An already-enrolled client issues one:
+
+```dart
+// One-time: a single request may quote it until it expires.
+final Passcode otp = await client.enrollments.otp();
+
+// Semi-permanent: any number of requests may quote it. Six to sixteen
+// alphanumeric characters; with no expiry it stands until replaced.
+final Passcode spp = await client.enrollments.spp('AB12CD');
+```
+
+A `Passcode` carries its `value` and an `expiry` (null when the atServer's own
+default decides), with `isExpired` to test it. Prefer `otp()` for a single
+device. Reach for `spp()` when provisioning a fleet, and treat it as a shared
+secret with real blast radius — anything holding it can request enrolment
+until you replace it.
+
+**Who approves.** A request stays `pending` until a `__manage` holder decides
+it, so a headless device is only half the flow — plan for who approves and how
+they receive the passcode:
+
+```dart
+for (final e in await client.enrollments.pending()) {
+  // Show the approver what is asking before they decide.
+  print('${e.appName} on ${e.deviceName} wants ${e.namespace}');
+  await client.enrollments.approve(e.enrollmentId!);   // or deny(id)
+}
+```
+
+**The approver runs post-quantum too.** A device enrolling with the
+post-quantum key exchange needs its approver to mint and seal a key, which a
+client opened under `PqPosture.legacy` cannot do: `approve` throws
+`AtClientException` before the approval reaches the atServer, and the request
+stays pending. Open the approving client with `PqPosture.pqActive`, like every
+other client the app builds.
+
+**Show the request before approving it.** Each `Enrollment` carries more than
+its id, and an approval screen that does not display the rest is asking someone
+to consent to nothing in particular:
+
+<!-- pyml disable-num-lines 7 md013-->
+| Field | Type | What it tells the approver |
+| --- | --- | --- |
+| `enrollmentId` | `String?` | The handle for `approve` / `deny` |
+| `appName` | `String?` | Which app is asking |
+| `deviceName` | `String?` | Which device it is running on |
+| `namespace` | `Map<String, dynamic>?` | The access requested, `{namespace: 'rw'}` — despite the singular name |
+| `status` | `String?` | The approval state the atServer holds |
+
+`namespace` is the one to read closely: it is what the device will be able to
+reach, and it is the whole point of the decision. An enrolment asking for
+`__manage` is asking to approve *other* enrolments.
+
+`revoke(id)` retires an approved enrollment (`force: true` to insist),
+`unrevoke(id)` puts it back, `delete(id)` removes the record, and `fetch(id)`
+or `list(...)` reads the roster.
+
+**Ask for the least you need.** `namespaces` is where the new device's reach
+is decided — `rw` lets it create and update in that namespace, `r` only read:
+
+```dart
+namespaces: {'my_app': 'rw', 'contacts': 'r'},
+```
+
+That scoping is the whole point of enrolling a device rather than copying the
+atSign's root keys onto it.
+
+---
+
 ## Canonical examples
 
-<!-- pyml disable-num-lines 3 md013-->
-- [packages/at_client/README.md](../../../../at_client/README.md) — "atSign lifecycle (short version)" and "In code: four verbs"
-- [packages/at_client_flutter/example/lib/walkthrough.dart](../../../../at_client_flutter/example/lib/walkthrough.dart) — the four flows, `_adopt`
-- [packages/at_client/example/bin/](../../../../at_client/example/bin/) — CLI programs opened through `CLIBase`
+<!-- pyml disable-num-lines 2 md013-->
+- [at_client README](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/README.md) — "atSign lifecycle (short version)" and "In code: four verbs"
+- [at_client examples](https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client/example/bin) — programs opened through the verbs

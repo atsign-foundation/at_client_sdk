@@ -1,0 +1,42 @@
+{
+  "skill_name": "at-client-skills-cli",
+  "evals": [
+    {
+      "id": 22,
+      "prompt": "I run three instances of the same agent under one atsign for redundancy, and every task gets processed three times. How do I make exactly one instance handle each task?",
+      "expected_output": "Shows the server mutex: atClient.tryAcquireServerMutex(key, ttl: ...) on a self key of the client's own atSign, which returns a lease to the one instance that takes the lock and null when its record already exists (another instance's, or its own within the ttl), and throws any other failure; it needs an atServer from p3.13.0. Mentions that the ttl (at most 15 minutes) is the only release, that AtRpc.server(enableRequestMutex: true) packages this for RPC responders, the stateless alternative (ServiceFactoryWithNoOpSyncService from at_client_cli, NOT at_client), and that each instance needs its own storage (a HiveAtClientStorage or CliKeys.storageFor per process, or CLIBase's -s; at_client ignores the deprecated hiveStoragePath, and 4.0 removed commitLogPath) and stops its client when done. Naming at_cli_commons as the package to add does NOT pass.",
+      "expectations": [
+        "Shows atClient.tryAcquireServerMutex(key, ttl:) on a self key, which returns a lease to one instance and null when the lock's record already exists",
+        "States any other failure is thrown, and that the ttl (at most 15 minutes) is the only release",
+        "Mentions that AtRpc.server(enableRequestMutex: true) packages this for RPC responders",
+        "Attributes ServiceFactoryWithNoOpSyncService to at_client_cli, not at_client or at_cli_commons",
+        "States each instance needs its own storage",
+        "Notes each instance stops its client when done"
+      ]
+    },
+    {
+      "id": 23,
+      "prompt": "I'm writing a headless Dart daemon (no Flutter, no UI) that authenticates with a .atKeys file and then uses collections and notifications. What's the simplest way to set up the AtClient?",
+      "expected_output": "Recommends CLIBase.fromCommandLineArgs(args) from at_client_cli — one line that handles arg parsing, .atKeys loading, and PKAM auth, returning a ready AtClient. Shows adding at_client_cli as the single SDK dependency and importing package:at_client_cli/at_client_cli.dart. May mention CliKeys with Atsign(atSign).open(...) for a program that names its own keyfile and store, and that CLIBase throws SecondaryServerConnectivityException only for an outage. May cite the collections_todos.dart example (packages/at_client/example/bin/). Does NOT add at_cli_commons or at_onboarding_cli (deprecated re-exports of at_client_cli), does NOT use AtOnboardingService (gone), does NOT hand-roll keyfile parsing, and does NOT use Flutter dialog classes.",
+      "expectations": [
+        "Recommends CLIBase.fromCommandLineArgs(args) from at_client_cli as the one-line setup",
+        "Adds at_client_cli as the single SDK dependency",
+        "Does not add at_cli_commons or at_onboarding_cli, does not use AtOnboardingService, and does not hand-roll keyfile parsing or use Flutter dialog classes"
+      ]
+    },
+    {
+      "id": 29,
+      "prompt": "I have a Dart daemon running on a headless Linux box that needs to act as my atsign. There's no screen, so I can't show any activation UI. My atsign is already activated on my phone. How does the daemon get its own keys, and can it just do that on its own at first boot?",
+      "expected_output": "Says no — nothing enrols itself: the request stays pending until it is approved by a client authenticating as an enrollment that holds __manage, so the headless side is only half the flow and the answer must cover who approves. For the daemon, uses Atsign('@alice').enroll(otp:, app:, device:, namespaces:, keys:, preference:), noting it returns a PendingEnrollment at once and that awaiting pending.client(preference) is what waits for the decision. Notes the keys store must hold nothing live for that atsign, and that after a restart resumeEnrollment finds the same request rather than filing a second one. Explains the otp cannot be minted locally and comes from the already-enrolled phone via client.enrollments.otp(), or client.enrollments.spp(...) — six to sixteen alphanumeric characters — for provisioning several devices, and that a Passcode carries an expiry. Scopes namespaces to least privilege with r versus rw. On the approving side uses client.enrollments.approve(id) (or deny / revoke). May mention that AtEnrollmentPendingException means resume rather than re-enrol, or that AtEnrollmentException from pending.client means the request was denied and a new enroll is a new request. Does NOT import at_auth or take a dependency on at_onboarding_cli, does NOT claim the daemon can self-approve or self-issue a passcode, does NOT send it to the Flutter ApkamActivationDialog, and does NOT tell it to copy the root .atKeys file across.",
+      "expectations": [
+        "Says nothing enrols itself: the request stays pending until approved by a client holding __manage",
+        "Uses Atsign(...).enroll(otp:, app:, device:, namespaces:, keys:, preference:) returning a PendingEnrollment",
+        "States that awaiting pending.client(preference) is what waits for the decision",
+        "Notes resumeEnrollment finds the same request after a restart rather than filing a second",
+        "Explains the otp comes from an already-enrolled device via client.enrollments.otp() (or spp for several devices)",
+        "Uses client.enrollments.approve(id) on the approving side",
+        "Does not import at_auth or depend on at_onboarding_cli, and does not copy the root .atKeys across"
+      ]
+    }
+  ]
+}

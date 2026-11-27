@@ -6,11 +6,12 @@
 broadcast-style streams. There are two sources of events (controlled by
 `EventSource` at collection creation):
 
-| `EventSource`        | What fires events                                                                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
-| `EventSource.notifs` | Cross-atsign writes received via `NotificationService` — locally-driven writes are NOT visible                                               |
-| `EventSource.both`   | Both sources; the same cross-atsign write can fire **twice** (no dedup); default                                                             |
+<!-- pyml disable-num-lines 5 md013-->
+| `EventSource` | What fires events |
+| --- | --- |
+| `EventSource.data` | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
+| `EventSource.notifs` | Cross-atsign writes received via `NotificationService` — locally-driven writes are NOT visible |
+| `EventSource.both` | Both sources; the same cross-atsign write can fire **twice** (no dedup); default |
 
 ---
 
@@ -98,7 +99,8 @@ final class CSubItemUpdated extends CEvent {
   String get subName => ancestry.last.subName;  // convenience accessor
 }
 
-// CAncestor carries an ancestor's id, the sub-collection name below it, and its owner
+// CAncestor carries an ancestor's id, the sub-collection name below it,
+// and its owner
 final class CAncestor {
   final String id;        // ancestor item id
   final String subName;   // sub-collection name one level below this ancestor
@@ -149,15 +151,16 @@ All events. Useful for debugging or aggregate reacting.
 
 ### Typed streams (prefer these in production code)
 
-| Getter / Method                 | Stream type                 | Fires when                                   |
-| ------------------------------- | --------------------------- | -------------------------------------------- |
-| `updates`                       | `Stream<CItemUpdated>`      | Any L0 item created or updated               |
-| `deletes`                       | `Stream<CItemDeleted>`      | Any L0 item deleted (TTL or explicit)        |
-| `readReceipts`                  | `Stream<CReadReceipt>`      | A recipient marks my item as read            |
-| `subUpdates`                    | `Stream<CSubItemUpdated>`   | Any descendant item created or updated       |
-| `subDeletes`                    | `Stream<CSubItemDeleted>`   | Any descendant item deleted                  |
-| `availableEvents`               | `Stream<CItemAvailable>`    | Lazy-started scheduler; `availableAt` passed |
-| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime`              |
+<!-- pyml disable-num-lines 9 md013-->
+| Getter / Method | Stream type | Fires when |
+| --- | --- | --- |
+| `updates` | `Stream<CItemUpdated>` | Any L0 item created or updated |
+| `deletes` | `Stream<CItemDeleted>` | Any L0 item deleted (TTL or explicit) |
+| `readReceipts` | `Stream<CReadReceipt>` | A recipient marks my item as read |
+| `subUpdates` | `Stream<CSubItemUpdated>` | Any descendant item created or updated |
+| `subDeletes` | `Stream<CSubItemDeleted>` | Any descendant item deleted |
+| `availableEvents` | `Stream<CItemAvailable>` | Lazy-started scheduler; `availableAt` passed |
+| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime` |
 
 **Getters vs methods:**  
 Parameterless event surfaces are **getters** (`updates`, `deletes`, etc.).  
@@ -177,32 +180,11 @@ different `leadTime`.
 
 ---
 
-## Flutter Subscribe/Dispose Pattern
+## Subscribing and cancelling
 
-```dart
-late StreamSubscription<CItemUpdated> _sub;
-
-@override
-void initState() {
-  super.initState();
-  _sub = collection.updates.listen((_) => setState(() {}));
-}
-
-@override
-void dispose() {
-  _sub.cancel();
-  super.dispose();
-}
-```
-
-For `watch()` in `StreamBuilder`, hold the stream in `State` — never create it
-in `build()` (see [03-query-api.md](03-query-api.md)):
-
-```dart
-late final _todos = todos.query().where((t) => !t.obj.done).watch();
-// ...
-StreamBuilder<List<CItem<Todo>>>(stream: _todos, builder: (ctx, snap) { ... })
-```
+Subscribe once, and cancel the `StreamSubscription` when whatever listens goes
+away, or its handler keeps running. Where that is in a widget's lifecycle is
+in the at-client-skills-flutter skill.
 
 ---
 

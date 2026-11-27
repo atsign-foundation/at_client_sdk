@@ -1,0 +1,85 @@
+# The at_client_skills skills draft issues against this form: they write
+# a body whose "### <label>" headings match the labels below. Renaming a
+# label, or a dropdown option, means updating those skills too.
+name: 🐛 SDK bug report
+description: Report a bug in a package from the Atsign Dart SDK
+labels: ["bug"]
+
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: The package the bug is in. An app built on at_client_cli or at_client_flutter can still hit a bug in a package underneath it.
+      options:
+        - at_client_flutter
+        - at_client_cli
+        - at_client
+        - at_auth
+        - at_commons
+        - at_chops
+        - at_lookup
+        - at_client_skills
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: The version your app resolved, from pubspec.lock or `dart pub deps`.
+      placeholder: e.g. 4.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - Flutter iOS
+        - Flutter Android
+        - Flutter macOS
+        - Flutter Windows
+        - Flutter Linux
+        - Dart CLI / server
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the SDK did, including any exception and its message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest code or steps that show the bug.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log output. Remove keys, secrets and personal data first.
+      render: console
+    validations:
+      required: false

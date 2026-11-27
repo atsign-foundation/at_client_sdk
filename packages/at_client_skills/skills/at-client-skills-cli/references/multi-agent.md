@@ -31,25 +31,16 @@ void main(List<String> args) async {
 Standard flags are provided by `CLIBase.argsParser` (`-a` atsign, `-k` path to
 `.atKeys`, `-n` namespace if not fixed in code, `-s` storage directory,
 verbose, etc.). This is the same pattern the canonical TUI example uses
-(`packages/at_client/example/bin/collections_todos.dart`).
+([collections_todos.dart](https://github.com/atsign-foundation/at_client_sdk/blob/trunk/packages/at_client/example/bin/collections_todos.dart)).
 
 `CLIBase` waits for the client to come online, and otherwise stops it and
 throws: `AtCredentialRefusedException` when the atServer refuses the keys,
 `SecondaryNotFoundException` when the atDirectory has no atServer for the
-Atsign, and `SecondaryServerConnectivityException` only when no atServer
-accepted or refused the keys in time: an atServer not reached, or one that
-answers with a server error such as AT0011 or no challenge to sign. A retry
-loop around opening catches that last one alone; the others need a person.
-A keyfile holding only an enrollment request is resumed: `CLIBase` waits for
-its approval, as at_activate does, saying that `at_activate cancel` gives the
-request up, and throws `AtEnrollmentDeniedException` when it is denied and
-`AtEnrollmentExpiredException` when it expires (both at_client 4.1.0; 4.0
-throws a plain `AtEnrollmentException` for each), each an
-`AtEnrollmentException`; both remove the request, unless the message says its
-pending keys stay because the AtKeys store could not remove them. A wait the
-atServer keeps answering with anything else, a server error included, also
-ends in `AtEnrollmentException` and keeps the request, and an atServer not
-reached ends it with the connection's own failure.
+atSign, and `SecondaryServerConnectivityException` only when the atServer is
+not reached in time. A retry loop catches that last one alone; the others
+need a person. A keyfile holding only an enrollment request is resumed:
+`CLIBase` waits for its approval, as at_activate does, and throws
+`AtEnrollmentException` when it is denied or expires.
 
 ## One process, one storage path
 
@@ -67,7 +58,7 @@ final client = await Atsign(atSign).open(
     keys: CliKeys.fileFor(atSign, path: keysPath),
     preference: prefs,
     storage: CliKeys.storageFor(atSign, program: 'my_app', path: dir),
-    lookUps: secureSocketLookUps(),
+    lookUps: lookUpsFor(prefs.rootDomain),
     secondaryAddressFinder:
         CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort));
 ```
@@ -139,7 +130,13 @@ if (lease != null && !lease.isSpent) {
   and p3.16.5; before that it blocks for up to about ten and a half minutes.
 - If the coordination is specifically "N instances of one RPC responder", you
   don't need to write this yourself — `AtRpc.server(enableRequestMutex: true)`
-  is this pattern, packaged (see [13-rpc.md](13-rpc.md)).
+  is this pattern, packaged (see the RPC reference in at-client-skills-core).
+- The mutex coordinates *work*, not *storage*. Each instance is still a
+  separate client and needs its **own** storage path — see
+  [One process, one storage path](#one-process-one-storage-path) above.
+- **Each instance must `await client.stop()` when it exits.** A store is held by
+  one live client; without the stop, the next process to claim that path is
+  refused.
 
 ### Pattern 2: stateless instances with no sync
 
@@ -159,7 +156,7 @@ final client = await Atsign(atSign).open(
   keys: CliKeys.fileFor(atSign, path: keysPath),
   preference: prefs,
   storage: CliKeys.storageFor(atSign, program: 'my_app', path: tempDir.path),
-  lookUps: secureSocketLookUps(),
+  lookUps: lookUpsFor(prefs.rootDomain),
   secondaryAddressFinder:
       CacheableSecondaryAddressFinder(prefs.rootDomain, prefs.rootPort),
   serviceFactory: ServiceFactoryWithNoOpSyncService(),
@@ -173,21 +170,22 @@ final client = await Atsign(atSign).open(
 > test-only). `CLIBase`'s `--never-sync` flag opens the client with it. And it
 > must be paired with `remoteLocalPref = remoteOnly` (or
 > `useRemoteAtServer` per call — see
-> [12-remote-atserver.md](12-remote-atserver.md)): with sync disabled, a
+> the remote-atServer reference in at-client-skills-core): with sync disabled, a
 > default local write would never leave the machine.
 
-| Instances…                          | Pattern                                    |
-| ----------------------------------- | ------------------------------------------ |
-| Keep state / use collections        | 1 — a server mutex per task                |
-| Stateless request/response workers  | 2 — no-op sync + remote ops                |
-| N instances of one `AtRpc` server   | `enableRequestMutex: true` (packaged 1)    |
+| Instances… | Pattern |
+| --- | --- |
+| Keep state / use collections | 1 — a server mutex per task |
+| Stateless request/response workers | 2 — no-op sync + remote ops |
+| N instances of one `AtRpc` server | `enableRequestMutex: true` (packaged 1) |
 
 ---
 
 ## Device enrollment from an agent (APKAM)
 
 An always-on agent is a natural approver for new-device APKAM enrollment
-requests. `at_client` exposes this via `atClient.enrollments`:
+requests, provided it authenticates as an enrollment holding `__manage`.
+`at_client` exposes this via `atClient.enrollments`:
 
 ```dart
 // Approve only what this agent expects: the app and device it is waiting for,
@@ -209,10 +207,12 @@ final passcode = await atClient.enrollments.otp();  // what the new device quote
 ```
 
 From a terminal, `at_activate approve`, `deny`, `revoke` and `auto` do the
-same.
+same; pass them `--posture pqActive`.
 
 The Flutter-side enrollment flows (the requesting device) are in
-[05-flutter-auth.md](05-flutter-auth.md) (Flow 4).
+the at-client-skills-flutter skill (Flow 4); the passcode and approver
+rules, including why an approver must run post-quantum, are in
+at-client-skills-core's lifecycle reference (section 8).
 
 ## AtCollection-first boundary
 

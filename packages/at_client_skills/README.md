@@ -1,25 +1,35 @@
 # at_client_skills
 
-AI agent skill for the [Atsign](https://atsign.com) `at_client` SDK. Gives AI
-coding agents accurate, up-to-date knowledge of at_client 4.0 and the platform
-packages an app builds on, `at_client_cli` and `at_client_flutter` — covering
-`AtCollection<T>`, auth flows, querying, sub-collections, testing patterns,
-and common pitfalls.
+AI agent skills for the [Atsign](https://atsign.com) `at_client` SDK. They give
+AI coding agents accurate, up-to-date knowledge of `at_client` and the
+platform packages an app builds on, `at_client_cli` and `at_client_flutter`.
 
-Works with Claude Code, Cursor, GitHub Copilot, Cline, and any agent supporting
-the [agentskills.io](https://agentskills.io) specification.
+The package ships three skills. Install all three: an agent loads the ones a
+task needs.
+
+<!-- pyml disable-num-lines 5 md013-->
+| Skill | For |
+| --- | --- |
+| `at-client-skills-core` | Every app: data, sharing, sync, notifications, the client lifecycle |
+| `at-client-skills-cli` | Dart command-line programs, daemons and headless agents (`at_client_cli`) |
+| `at-client-skills-flutter` | Flutter apps (`at_client_flutter`) |
+
+Works with any agent that reads the
+[agentskills.io](https://agentskills.io) skill format.
 
 ## Installation
 
 Two packages work together:
 
+<!-- pyml disable-num-lines 4 md013-->
 | Package | What it does |
 | --- | --- |
-| **`at_client_skills`** (this package) | Ships the skill content — `SKILL.md` and its reference docs. There is no Dart API to import. |
+| **`at_client_skills`** (this package) | Ships the skill content — each skill's `SKILL.md` and its reference docs. There is no Dart API to import. |
 | **[`skills`](https://pub.dev/packages/skills)** | The CLI that scans your dependencies for `skills/` directories and installs what it finds into your agent's skills directory. Without it there is no `skills` command to run. |
 
-Prerequisites: Dart SDK 3.5.0 or newer (required by the `skills` CLI), a
-project with a `pubspec.yaml`, and an agent that reads a skills directory.
+Prerequisites: a Dart SDK recent enough for the `skills` CLI (`pub` says so if
+yours is too old), a project with a `pubspec.yaml`, and an agent that reads a
+skills directory.
 
 **1. Add both packages** as dev dependencies. In Flutter projects
 `flutter pub add` works identically:
@@ -28,27 +38,29 @@ project with a `pubspec.yaml`, and an agent that reads a skills directory.
 dart pub add --dev at_client_skills skills
 ```
 
-**2. Install the skill** into your agent's skills directory:
+**2. Install the skills** into your agent's skills directory:
 
 ```sh
-dart run skills get
+dart run skills get --agent claude --all
 ```
 
-The CLI runs `pub get` if needed, scans your dependencies for `skills/`
-directories, and installs what it finds — so this picks up every
-skill-providing package in your project, not just this one.
+`--agent` names your agent; `dart run skills get --help` lists the choices.
+Name it the first time: in a project with no agent directory yet, the CLI has
+nothing to detect.
 
-**3. Verify** the install:
+`--all` installs every skill without asking. Without it, the CLI asks which to
+install; choose all three. The CLI scans every skill-providing package in your
+project, not just this one.
+
+**3. Verify** that all three skills are installed:
 
 ```sh
 dart run skills list
 ```
 
-The skill lands in whichever directory your agent uses — `.claude/skills/`,
-`.cursor/skills/`, `.cline/skills/`, `.github/skills/`, `.opencode/skills/`,
-or `.agent/skills/`.
+They land in your agent's skills directory, such as `.claude/skills/`.
 
-**4. Reload your agent** so it picks up the new skill.
+**4. Reload your agent** so it picks up the new skills.
 
 ### Alternative: activate the CLI globally
 
@@ -57,48 +69,32 @@ If you would rather not add `skills` to every project:
 ```sh
 dart pub global activate skills      # once per machine
 dart pub add --dev at_client_skills  # still needed — it carries the content
-skills get                           # note: no `dart run` prefix
+skills get --agent claude --all      # note: no `dart run` prefix
 ```
 
 This requires `~/.pub-cache/bin` on your `PATH`.
 
 ## What's covered
 
-- `AtCollection<T>` — full CRUD, `CItem<T>`, `Query<T>`, sub-collections,
-  read receipts, event streams
-- `wherePath` / `PathField<T>` typed predicates
-- `watchWithTree` / `watchWithSub` for deep multi-level hierarchies
-- `at_client_flutter` auth — all 4 dialog flows (CRAM, atKeys file,
-  device keychain, APKAM)
-- The `AtClient` lifecycle — the `Atsign` verbs (`open`, `activate`,
-  `enroll`), the storage, transport and atDirectory finder every client is
-  opened with, the connection state, and stopping
-- Package selection guide — one platform package per app (`at_client_cli` or
-  `at_client_flutter`)
-- Domain-object patterns (`toJson`/`fromJson`, `registerFactory`, `typeTag`)
-- Unit testing without a live atServer (`collections_test_hooks.dart`)
-- Architecture decision guide: `AtCollection<T>` vs Notifications + SQLite
-- RPC between atsigns (`AtRpc` / `AtRpcClient` request/response)
-- Headless agents and multi-instance coordination (`CLIBase`, `CliKeys`,
-  server mutex, no-sync scaling)
-- Remote vs local atServer operations (`remoteLocalPref`, `useRemoteAtServer`,
-  `bypassCache`)
-- Removals and deprecations: what at_client 4.0 removed (`AtCollectionModel`,
-  `setCurrentAtSign`, the at_onboarding_cli and at_cli_commons APIs, ...),
-  `at_common_flutter`, `at_backupkey_flutter`
+- **Data:** `AtCollection<T>` — items, queries, sub-collections, events, read
+  receipts, sharing — and when notifications with local storage fit better
+- **The client:** opening, stopping and switching it, connection state, sync,
+  and keyfiles
+- **Sign-in and enrollment:** the Flutter dialogs, command-line activation and
+  enrollment, and approving new devices
+- **Post-quantum posture:** which to choose, and how an existing app moves
+- **Messaging:** notifications, delivery confirmation, and RPC between atsigns
+- **Headless agents:** command-line programs, and running several copies of
+  one agent
+- **Errors and testing:** what to catch, and unit tests without a live
+  atServer
+- **Upgrading:** what at_client 4.0 removed, and what replaces each
+- **Packages:** which to add, and what to do when the SDK lacks something
 
 ## Keeping it up to date
 
 ```sh
-dart pub upgrade at_client_skills && dart run skills get
+dart pub upgrade at_client_skills && dart run skills get --all
 ```
 
-Other `skills` commands: `list` shows what is installed, `prune` removes skills
-for packages no longer in your dependency tree, and `remove` uninstalls all
-managed skills.
-
-## Dart/Flutter MCP Server
-
-When the official Dart/Flutter MCP server ships resource support
-<!-- pyml disable-next-line md013-->
-([flutter.dev/go/packaged-ai-assets](https://flutter.dev/go/packaged-ai-assets)), this package will be updated to expose the skill content as MCP resources — no action needed on your end.
+`dart run skills --help` lists the CLI's other commands.

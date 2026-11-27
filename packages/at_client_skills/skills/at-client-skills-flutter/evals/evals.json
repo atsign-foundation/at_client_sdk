@@ -1,0 +1,127 @@
+{
+  "skill_name": "at-client-skills-flutter",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm building a Flutter app and want to store todos that can be shared with other users. Which packages do I need and how do I create a todo?",
+      "expected_output": "Recommends at_client_flutter as the SINGLE dependency, noting it re-exports at_client so adding both is unnecessary. Shows atClient.collection<Todo>() with fromJson/typeTag, then collection.create(obj: todo, sharedWith: {'@bob'.toAtsign()}). Does NOT suggest AtCollectionModel. Ideally also points to the canonical Flutter todos example app (packages/at_client_flutter/example/todos/).",
+      "expectations": [
+        "Recommends at_client_flutter as the single dependency and notes it re-exports at_client (does not ask for both packages)",
+        "Shows atClient.collection<Todo>() with a fromJson factory and typeTag",
+        "Creates the todo via collection.create with a sharedWith set",
+        "Does not recommend the removed AtCollectionModel"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "My Flutter app needs to let users sign in with their atsign. What's the flow for an existing user who has a .atKeys file?",
+      "expected_output": "Shows Flow 2: AtKeysFileDialog.show(context) giving a FileAtKeysIo, then PkamDialog.show(context, atSign:, keys: atKeysIo, preference:, backupKeys: [KeychainAtKeysIo()]), passing storage only to override at_client_flutter's default Hive store in the app support directory, which hands back the AtClient (null means cancelled or failed). Makes it current with AtClientManager.getInstance().use(client) if the app reads the manager. Does NOT use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does NOT import at_auth.",
+      "expectations": [
+        "Shows AtKeysFileDialog.show(context) as the entry point, yielding a FileAtKeysIo",
+        "Follows with PkamDialog.show(...) passing keys and preference (storage only to override the default store), treating a null return as cancelled or failed",
+        "Adopts the returned client with AtClientManager.getInstance().use(client)",
+        "Does not use AtAuthRequest, AuthResponse, _setupAtClient or setCurrentAtSign, and does not import at_auth"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I want to query my todos reactively in a Flutter StreamBuilder — only show items where done=false, sorted by due date.",
+      "expected_output": "Shows todos.query().where((t) => !t.obj.done).orderBy((t) => t.obj.due).watch() inside StreamBuilder. Mentions on-device execution. May mention wherePath as a typed alternative.",
+      "expectations": [
+        "Filters with query().where on done == false",
+        "Sorts with orderBy on the due date",
+        "Uses watch() to produce the stream consumed by StreamBuilder",
+        "Does not create the watch() stream inside build() (holds it in State or warns against it)"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Should I use at_common_flutter in my new Flutter app? I saw it mentioned somewhere.",
+      "expected_output": "Says no — at_common_flutter is deprecated. Recommends at_client_flutter instead.",
+      "expectations": [
+        "Says at_common_flutter is deprecated / should not be used",
+        "Recommends at_client_flutter instead"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "How do I set up APKAM enrollment so a user can add a new device to their existing atsign?",
+      "expected_output": "Shows Flow 4: AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(context, atSign:, rootDomain:, appName:, deviceName:, namespaces:, preference:), passing keys or storage only to override the defaults (the keychain, and Hive in the app support directory), which waits for the manager's approval and hands back the enrolled AtClient. No second PkamDialog and no _setupAtClient. Mentions that a request already pending in the keys store is resumed on restart, and that the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget.",
+      "expectations": [
+        "Shows AtSignSelectionDialog.show(context) giving an AtsignSelection, then ApkamActivationDialog.show(...)",
+        "Passes appName, deviceName, namespaces and preference to ApkamActivationDialog, with keys and storage only to override the defaults",
+        "States the dialog waits for the manager's approval and hands back the enrolled AtClient",
+        "Does not add a second PkamDialog or a _setupAtClient step",
+        "Mentions the manager approves via client.enrollments.approve(id) or the EnrollmentRequestList widget"
+      ]
+    },
+    {
+      "id": 14,
+      "prompt": "My Flutter app throws PlatformException(ENTITLEMENT_NOT_FOUND) on macOS when the user picks their .atKeys file to log in. How do I fix it?",
+      "expected_output": "Explains AtKeysFileDialog/file_picker is sandboxed on macOS and needs a file-access entitlement. Add com.apple.security.files.user-selected.read-only (read-write also works) to BOTH macos/Runner/DebugProfile.entitlements and macos/Runner/Release.entitlements. Notes it is macOS-only — iOS (document picker) and Android (Storage Access Framework) need no entitlement or permission.",
+      "expectations": [
+        "Identifies a missing macOS sandbox entitlement as the cause",
+        "Adds com.apple.security.files.user-selected.read-only (or read-write)",
+        "Applies the entitlement to BOTH DebugProfile.entitlements and Release.entitlements",
+        "Notes iOS and Android need no equivalent permission for the picker"
+      ]
+    },
+    {
+      "id": 16,
+      "prompt": "In my Flutter app a collaborator's change is received (the collection fires CItemUpdated) but my StreamBuilder UI doesn't refresh until I hot reload. Why?",
+      "expected_output": "Diagnoses that the watch() stream is being created inside build() (e.g. stream: collection.query().watch()), so every rebuild mints a new stream and tears down the live subscription, dropping live emissions. Fix: create the watch() stream once and hold it in State (a late final field or initState) and pass that held stream to StreamBuilder; never call watch() in build(). If the query has runtime inputs (e.g. a filter), recreate the held stream when those inputs change — in the setState that changes them — not on every build.",
+      "expectations": [
+        "Diagnoses watch() being created inside build() as the root cause",
+        "Fix: create the stream once and hold it in State (initState or late final field)",
+        "Recreates the held stream when query inputs change (in that setState), not on every build"
+      ]
+    },
+    {
+      "id": 18,
+      "prompt": "My Flutter app fails to authenticate an atsign with SecondaryNotFoundException: 'No entry in atDirectory for @alice'. What does this mean and how do I fix it?",
+      "expected_output": "Explains that the atDirectory is the atServer address registry and this atsign has no atServer registered in it, so the lookup fails before authentication is attempted. Distinguishes TWO causes with different fixes: the atsign was never activated, or the atsign string is mistyped. States that activation happens ONCE and must precede the existing-keys, keychain, and APKAM login flows, none of which can resolve an unactivated atsign. For in-app activation, uses the CRAM flow this SDK ships — AtSignSelectionDialog from at_client_flutter plus a RegistrarService (at_auth's, re-exported by at_client_flutter; the app does not import at_auth) configured with a registrar URL and API key — or defers activation to an onboarding app or the registrar. May note that at_client 4.0's open reports this as the cause noAtServer, thrown as AtOpenRefusedException on the first open of those keys on a device. Recommending the discontinued at_onboarding_flutter package does NOT pass.",
+      "expectations": [
+        "Explains the atDirectory is the atServer address registry and this atsign has no atServer registered in it",
+        "Notes the lookup fails before authentication is attempted",
+        "Distinguishes two causes with different fixes: never activated, or a mistyped atsign",
+        "States activation happens once and must precede the existing-keys, keychain, and APKAM login flows",
+        "For in-app activation uses AtSignSelectionDialog (at_client_flutter) plus RegistrarService (re-exported by at_client_flutter; the app does not import at_auth) with a registrar URL and API key, or defers to an onboarding app / the registrar",
+        "Does not recommend the discontinued at_onboarding_flutter package"
+      ]
+    },
+    {
+      "id": 24,
+      "prompt": "I'm adding atsign sign-in to my Flutter app and found at_onboarding_flutter on pub.dev. Is that the package I should be using for the onboarding screens?",
+      "expected_output": "Says no — at_onboarding_flutter is discontinued and at_client_flutter is its named replacement. Directs the developer to the at_client_flutter auth dialogs instead (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog), and notes at_client_flutter is the single dependency needed since it re-exports at_client. Does NOT present at_onboarding_flutter as usable, and does NOT hedge by suggesting either package would work.",
+      "expectations": [
+        "Says at_onboarding_flutter is discontinued and at_client_flutter is its named replacement",
+        "Directs the developer to the at_client_flutter auth dialogs (AtSignSelectionDialog, AtKeysFileDialog, ApkamActivationDialog, PkamDialog)",
+        "Notes at_client_flutter is the single dependency needed since it re-exports at_client",
+        "Does not present at_onboarding_flutter as usable and does not hedge that either package would work"
+      ]
+    },
+    {
+      "id": 25,
+      "prompt": "My Flutter app lets the user log out and sign in as a different atsign. How do I tear down the current AtClient and switch?",
+      "expected_output": "Says the app owns the client: await client.stop() stops the sync service, the notification service and its monitor, and the connection (which ends as offline with cause stopped), and closes storage built with closedByClient: true. Then run the sign-in flow for the next atsign and AtClientManager.getInstance().use(newClient). Notes that opening the same atsign and enrollment (or the same storage) while a client is live throws a StateError, so stop first; that use() does not stop the previous client; and that AtClientManager.reset() is a test hook, not a logout. Does NOT suggest setCurrentAtSign.",
+      "expectations": [
+        "Uses await client.stop() and states it stops sync, notifications and the connection and closes storage built with closedByClient: true",
+        "Runs the sign-in flow for the next atsign and adopts it with AtClientManager.getInstance().use(newClient)",
+        "Warns that opening the same atsign/enrollment or the same storage while a client is live throws StateError, so stop first",
+        "Notes use() does not stop the previous client and reset() is a test hook, not a logout",
+        "Does not suggest setCurrentAtSign"
+      ]
+    },
+    {
+      "id": 40,
+      "prompt": "I'm adding a fast re-login button to my Flutter app for atsigns already on the device. I have the atsign as a string and I know the root server address, but when I pass that address straight to the login dialog it won't compile — it says a String can't be assigned to that parameter. Do I have to make the user pick from a dialog every time just to get past this?",
+      "expected_output": "Explains that the root domain is its own type, not a String, which is why passing the address as a string does not compile — and that no, a selection dialog is not required to obtain one. Gives the direct routes: the constant for the standard root (AtRootDomain.atsignDomain, root.atsign.org on port 64), the const constructor taking host and port, and the parse factory for turning a configured 'host:port' string into the type, where a bare host defaults to port 64. Recommends the constant for an app on the standard root and parse when the root is configurable, so the re-login button can go straight to the login dialog with the atsign it already has. Does NOT tell the developer to re-show the atsign selection dialog purely to obtain a root domain, and does NOT suggest changing the parameter type or casting the string.",
+      "expectations": [
+        "Identifies the root domain as a dedicated type rather than a String, explaining the compile error",
+        "Names AtRootDomain.atsignDomain (or the const constructor) as the way to get the standard root directly",
+        "Mentions AtRootDomain.parse for turning a configured host or host:port string into the type",
+        "States a selection dialog is not required just to obtain a root domain"
+      ]
+    }
+  ]
+}

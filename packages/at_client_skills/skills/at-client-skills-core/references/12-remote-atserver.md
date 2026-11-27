@@ -38,7 +38,7 @@ await atClient.put(
 Use when a write must be on the server _now_ and you cannot wait for the next
 sync round — e.g. a coordination key another process polls, or a mutex/lock key
 (`Metadata()..immutable = true` written remotely so the first writer wins across
-instances — see [14-multi-agent.md](14-multi-agent.md)). For ordinary app data,
+instances — see the at-client-skills-cli skill). For ordinary app data,
 prefer the default local write + background sync.
 
 ## `GetRequestOptions.useRemoteAtServer` / `bypassCache`
@@ -68,17 +68,6 @@ final fresh = await atClient.get(
 The two are independent: `useRemoteAtServer` chooses _which secondary_ answers
 for keys that resolve locally; `bypassCache` chooses _whether a remote lookup
 may be served from cache_.
-
-```dart
-// The same options on getMeta: metadata only, nothing decrypted
-final meta = await atClient.getMeta(
-  key,
-  getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
-);
-```
-
-`getMeta` takes the same options as `get` and returns null for a record that
-is held but not visible now.
 
 ## `DeleteRequestOptions.useRemoteAtServer`
 
@@ -117,46 +106,101 @@ the changes down afterwards). Because `AtCollection<T>` operations are plain
 **collection** operations remote — there is no per-call option at the
 collection layer. Typical use: a stateless agent instance that pairs
 `remoteOnly` with a no-op sync service
-(see [14-multi-agent.md](14-multi-agent.md)).
+(see the at-client-skills-cli skill).
 
-A request-options object overrides the preference only when it sets
-`useRemoteAtServer`. Left unset, the operation follows `remoteLocalPref`; set
-to `false`, it runs locally even on a `remoteOnly` client. A `local:` key
-never leaves the device, whatever the preference or option says.
+One subtlety: passing a request-options object overrides the preference with
+that object's `useRemoteAtServer` value — which defaults to `false`. So on a
+`remoteOnly` client, supply options only when you actually set the flag. A
+`get` or `put` of a `local:` key never leaves the device, whatever the
+preference or option says.
 
 ---
 
 ## When to reach for remote operations
 
-| Situation                                             | Use                                                                                  |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Ordinary app data (todos, notes, shares)              | **Default** — local write, background sync                                           |
-| Cross-process coordination / mutex keys               | `put` + `useRemoteAtServer = true`                                                   |
-| Read-your-write right after a remote write            | `get` + `useRemoteAtServer = true`                                                   |
-| Cached copy of another atsign's key looks stale       | `get` + `bypassCache = true`                                                         |
-| Stateless / horizontally-scaled instance with no sync | `remoteLocalPref = remoteOnly` client-wide (see [14-multi-agent.md](14-multi-agent.md)) |
+<!-- pyml disable-num-lines 7 md013-->
+| Situation | Use |
+| --- | --- |
+| Ordinary app data (todos, notes, shares) | **Default** — local write, background sync |
+| Cross-process coordination / mutex keys | `put` + `useRemoteAtServer = true` |
+| Read-your-write right after a remote write | `get` + `useRemoteAtServer = true` |
+| Cached copy of another atsign's key looks stale | `get` + `bypassCache = true` |
+| Stateless / horizontally-scaled instance with no sync | `remoteLocalPref = remoteOnly` client-wide (see the at-client-skills-cli skill) |
 
 > Remote operations trade offline-tolerance and speed for immediacy. They open
 > a network round-trip on every call and fail when the atServer is unreachable —
 > so scope them to the few operations that genuinely need server-side truth, and
 > leave the rest on the default synced path.
 
+## Public keys
+
+Public keys are the one kind of data deliberately **not** encrypted — visible to
+anyone and returned by an unauthenticated scan. Build them with `AtKey.public`,
+which sets the public metadata for you:
+
+```dart
+final key = AtKey.public('profile', namespace: 'my_app', sharedBy: myAtsign)
+    .build();
+await atClient.put(key, jsonEncode({'displayName': 'Alice'}));
+```
+
+The value is **signed, not encrypted**: `put` skips encryption for public keys
+and signs the payload with your encryption private key instead, so a reader can
+verify it came from you while everyone can read it. **Never put anything private
+in a public key**.
+
+Reading depends on whose key it is:
+
+```dart
+// your own — resolves locally like any self key
+final mine = await atClient.get(
+  AtKey.public('profile', namespace: 'my_app', sharedBy: myAtsign).build(),
+);
+
+// another atsign's — always a remote plookup against their atServer
+final theirs = await atClient.get(
+  AtKey.public('profile', namespace: 'my_app', sharedBy: '@bob').build(),
+  getRequestOptions: GetRequestOptions()..bypassCache = true,
+);
+```
+
+Another atsign's public key is **always** remote regardless of
+`remoteLocalPref` — it resolves as a `plookup`, one of the always-remote verbs
+noted at the top of this page — so `bypassCache` is the lever that matters when
+a cached copy may be stale.
+
+Readers' atServers can keep a refreshing copy if you opt in, via the builder's
+`cache(ttr, ccd)` (time-to-refresh in seconds, cascade-delete flag):
+
+```dart
+final builder = AtKey.public('profile', namespace: 'my_app', sharedBy: myAtsign)
+  ..cache(86400, true);
+final key = builder.build();
+```
+
+> Namespace-less `public:` keys are among the few keys the atServer syncs
+> regardless of `syncRegex` — see [11-sync.md](11-sync.md).
+
 ## AtCollection-first boundary
 
 `AtCollection<T>` methods take no per-operation request-options parameters —
-collection operations follow whatever the *client* is configured to do:
+collection operations follow whatever the _client_ is configured to do:
 
 - Default (`remoteLocalPref = localOnly`): every collection op is local +
   background sync — right for app data.
 - `remoteLocalPref = remoteOnly`: every collection op (like everything else on
   that client) runs against the remote atServer.
 
-What you cannot do is flip a *single* collection call to remote. For the few
-keys that genuinely need per-operation control — cross-process coordination
-keys, read-your-write probes — drop below `AtCollection` to raw `put`/`get`
-with request options, and take a lock with `tryAcquireServerMutex`, which goes
-straight to the atServer by itself. These are *infrastructure*, not app
-data — give them a distinct key-name prefix within your app's namespace (e.g.
-`lock.` or `session_mutexes.`, as `AtRpc` does within its `__rpcs` namespace)
-so they never collide with collection keys, and keep everything else in
-collections.
+What you cannot do is flip a _single_ collection call to remote. Two kinds of
+key justify dropping below `AtCollection` to raw `put`/`get`:
+
+1. **Infrastructure keys** needing per-operation control — cross-process
+   coordination keys, read-your-write probes. Use raw `put`/`get` with request
+   options, and take a lock with `tryAcquireServerMutex`, which goes straight
+   to the atServer by itself. Give them a distinct key-name prefix within your
+   app's namespace (e.g. `lock.` or `session_mutexes.`, as `AtRpc` does within
+   its `__rpcs` namespace) so they never collide with collection keys.
+2. **Public keys** — collections cannot carry public metadata at all, since no
+   collection method accepts `Metadata`. See the section above.
+
+Everything else stays in collections.

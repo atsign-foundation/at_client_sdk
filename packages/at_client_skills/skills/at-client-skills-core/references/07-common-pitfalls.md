@@ -60,7 +60,7 @@ To read a leaf item after a `CSubItemUpdated` event, use `getDescendant()`.
 
 **Problem:** A single item this device cannot read, corrupt or sealed to a
 namespace key it does not hold yet, causes an unhandled stream error that
-terminates the stream and may crash the widget.
+terminates the stream, and with it whatever renders from it.
 
 **Fix:** Chain `.handleError()` to log-and-skip such items, or use
 `getItems()` if you want the entire list or nothing:
@@ -104,38 +104,34 @@ final todos = await atClient.collection<Todo>(
 
 ---
 
-## 6. Item ids and sub-collection names
+## 6. Dots in `subName` or `parent.id`
 
-**Problem:** An item id is the first segment of every key `AtCollection`
-writes or reads for the item. `create`, `upsert`, `draft`, `get`, `getOrNull`,
-`exists`, `getItems` and `getItemsAsStream` throw `ArgumentError`, before any
-read or write, for an id that is empty or contains `.`, `:`, `@`, whitespace
-or a control character; `create`, `upsert` and `draft` also refuse one
-starting with `_`. A new item's id must be 1 to 64 characters of `a-z`, `0-9`,
-`-` and `_`, starting with a letter or digit. Every id is folded to lower
-case, so `Todo-1` and `todo-1` name the same item. `subCollection` folds a
-`subName` to lower case and throws `ArgumentError` for one that is empty,
-contains `.`, `:`, `@`, whitespace or a control character, or holds a
-character a key's name cannot. An id that arrives in an event or a listing is
-folded to lower case, is never empty and holds no `.`, `:`, `@`, whitespace or
-control character: no event is emitted for a key whose id, ancestor id or
-subName is empty or holds one, and `getItems` leaves out an item stored under
-such an id, each with a warning.
+**Problem:** Sub-collection key composition uses `.` as a separator. A
+`subName` or item id containing `.` breaks key parsing and produces
+`ArgumentError` at runtime (or, worse, silently routes to the wrong
+namespace).
 
-**Fix:** Omit `id` to get a generated 8-character one, or build ids from
-lower-case letters, digits, `-` and `_` only:
+**Fix:** Use dot-free identifiers. Generate item ids with
+alphanumeric characters only:
 
 ```dart
 // ✓ OK
-await todos.create(obj: todo, id: 'todo-42');
 final sub = parentCollection.subCollection<Reply>(
   parent: comment, subName: 'replies', ...
 );
 
-// ✗ Wrong — ':' in an id and '.' in a subName are refused
-// await todos.create(obj: todo, id: 'user:42');
+// ✗ Wrong — 'sub.replies' has a dot
 // subName: 'sub.replies'
 ```
+
+The `AtCollection` constructor validates this and throws `ArgumentError`
+before any I/O.
+
+**Raw keys have their own rule.** A key name passed to `atClient.put` cannot
+contain `@` or a space: the write throws `AtKeyException` ("Key cannot contain
+@"). Don't swallow it: a key that embeds an atsign, such as `log-@bob`, fails
+on every write, and a caught-and-dropped error turns that into data that is
+silently never saved.
 
 ---
 
@@ -200,8 +196,7 @@ no automatic deduplication.
 
 **Fix options:**
 
-- **Accept it** if your handler is idempotent (e.g., just calls
-  `setState(() {})`)
+- **Accept it** if your handler is idempotent (e.g., it only re-renders)
 - **Debounce** with a short timer if processing is expensive
 - **Switch source** — use `EventSource.data` (requires SyncService) or
   `EventSource.notifs` if you only need one path

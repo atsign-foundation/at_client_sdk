@@ -34,6 +34,7 @@ namespace produce separate instances.
 
 ## Factory Registration
 
+<!-- pyml disable-next-line md013-->
 ### `static void registerFactory<U>(U Function(Map<String,dynamic>) fromJson, {required String typeTag})`
 
 Registers a deserialization factory. **Process-global** — shared across all
@@ -56,26 +57,58 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 
 ## Basic Getters
 
-| Getter              | Type       | Description                                  |
-| ------------------- | ---------- | -------------------------------------------- |
-| `atSign`            | `Atsign`   | The atsign this `atClient` is acting as      |
-| `self`              | `Atsign`   | Alias for `atSign` — use for ownership tests |
-| `namespace`         | `String`   | The fully-qualified namespace                |
-| `defaultExpiration` | `Duration` | Default TTL for new items                    |
-| `isSubCollection`   | `bool`     | True if created via `subCollection(parent:)` |
+| Getter | Type | Description |
+| --- | --- | --- |
+| `atSign` | `Atsign` | The atsign this `atClient` is acting as |
+| `self` | `Atsign` | Alias for `atSign` — use for ownership tests |
+| `namespace` | `String` | The fully-qualified namespace |
+| `defaultExpiration` | `Duration` | Default TTL for new items |
+| `isSubCollection` | `bool` | True if created via `subCollection(parent:)` |
+
+---
+
+## `CItem<T>` Fields
+
+What every read hands back, and what you may change before calling `update`.
+The mutability column is the part that bites: three of these are meant to be
+edited in place, and two cannot be reassigned at all.
+
+<!-- pyml disable-num-lines 13 md013-->
+| Field | Type | Mutable? | Notes |
+| --- | --- | --- | --- |
+| `id` | `String` | no | Unique within the collection; prefixed to the namespace |
+| `owner` | `Atsign` | no | Who created it — **your ownership test** for writes |
+| `obj` | `T` | no | `late final` — mutate its fields, never reassign `obj` itself |
+| `type` | `String` | no | `late final`; the type-tag that drives rehydration |
+| `sharedWith` | `Set<Atsign>` | **yes** | Non-nullable, never null. Edit the set, then `update` |
+| `createdAt` | `DateTime` | **yes** | Set on draft; read from server metadata on rehydrate |
+| `expiresAt` | `DateTime` | **yes** | Change it, then `update`, to re-schedule the item's expiry |
+| `availableAt` | `DateTime?` | **yes** | `null` = visible immediately; set it to delay recipient copies |
+| `parentOwners` | `List<Atsign>` | no | Root-to-parent owner chain; empty in a root collection |
+| `collection` | `AtCollection<T>` | no | The collection that minted it |
+| `self` | `Atsign` | no | The atsign you are acting as — compare against `owner` |
+
+`sharedWith` is a `final` **reference** to a mutable set: `item.sharedWith.add(...)`
+then `update(item)` works, `item.sharedWith = {...}` does not compile. The same
+distinction applies to `obj` — change `item.obj.done = true`, don't try to swap
+the object.
+
+Read receipts hang off the item too: `readBy` (a `Future`, queries recipients),
+`readBySnapshot` (what is already known locally, no I/O), `wasMarkedReadByMe()`
+and `markReadByMe()`. They are eventually consistent — see
+[11-sync.md](11-sync.md).
 
 ---
 
 ## Drafting (No I/O)
 
+<!-- pyml disable-next-line md013-->
 ### `CItem<T> draft({required T obj, String? id, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Builds an in-memory item without persisting. Use `create` to persist.
 
 - `id` — auto-generates 8-character `[a-z0-9]` id if omitted; **no uniqueness
-  check**. A supplied `id` is folded to lower case; `ArgumentError` if it is
-  empty, starts with `_`, or contains `.`, `:`, `@`, whitespace or a control
-  character
+  check**
 - `expiresAt` — defaults to `now + defaultExpiration`
 - `availableAt` — `null` = visible immediately
 
@@ -83,15 +116,13 @@ Builds an in-memory item without persisting. Use `create` to persist.
 
 ## CRUD Methods
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<T>> create({required T obj, String? id, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Creates and persists a new item. On `EventSource.data` / `EventSource.both`,
 awaits local emission so `watch()` listeners see the update before
 `await create(...)` returns.
 
-- A supplied `id` is folded to lower case and must then be 1 to 64
-  characters of `a-z`, `0-9`, `-` and `_`, starting with a letter or digit;
-  otherwise `ArgumentError` before any read or write
 - Throws `StateError` if `id` is supplied and already exists on the atServer
 - If `id` omitted: retries on collision (astronomically unlikely); throws
   `StateError` after 10 attempts
@@ -108,18 +139,11 @@ awaits local emission so `watch()` listeners see the update before
   `NamespaceKeyUnavailableException` naming them.
   `CryptoRuntime(atClient).isReadyFor(recipient, namespace)` asks first
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<T>> upsert({required String id, required T obj, Set<Atsign>? sharedWith, DateTime? expiresAt, DateTime? availableAt})`
 
 Idempotent write. Creates if not exists, rewrites if it does.
 Use for re-runnable publishers that may restart within the TTL window.
-
-- `id` is checked and folded as for `draft`; when neither local storage nor
-  the atServer holds an item with it, it must also meet `create`'s rule for a
-  new id; a `remoteOnly` client asks the atServer alone, so an item only
-  local storage holds does not count; whether an item is held is decided
-  from its metadata, so one this
-  client cannot decrypt counts as held, and an atServer lookup that fails
-  for any reason but the item's absence counts as holding none
 
 ### `Future<void> update(CItem<T> item, {bool unshareWithOthers = true})`
 
@@ -129,6 +153,7 @@ recipient copies for atsigns removed from `item.sharedWith`.
 - Throws `ArgumentError` if `item.owner != self`
 - Throws `StateError` if self-key does not exist
 
+<!-- pyml disable-next-line md013-->
 ### `Future<void> updateSharedWith(CItem<T> item, Set<Atsign> sharedWith, {bool unshareWithOthers = true})`
 
 Changes the recipient set **without rewriting the self-key**. Delta-only: adds
@@ -156,14 +181,33 @@ atsign. Collaboration is additive: each atsign owns what it creates, and
 contribute, they create their own item and share it back — you never mutate
 theirs in place. (`self` / `atSign` is the ownership test.)
 
+**Recipients don't see each other.** Sharing works like Bcc: a recipient's
+copy lists only that recipient in `sharedWith`, and only the owner's copy
+lists everyone. So a recipient who contributes knows only the owner, and the
+owner can't share an item it doesn't own: the contribution reaches the owner
+alone. When members should see who else is in, or each other's
+contributions, the owner keeps the member list in the item's own data and
+updates it on every share and un-share. Each member shares what it creates
+with everyone on that list, and follows the list as it changes. That shows
+every member to every other member, so leave it out where recipients
+shouldn't know of each other.
+
+**Sharing does not cascade, though deleting does.** `delete` takes
+`cascade: true` and removes self-owned descendants at any depth;
+`updateSharedWith` has no equivalent and changes that one item only. So adding
+a collaborator to a parent does **not** make its existing children visible to
+them — walk the subtree and update each item yourself.
+
+Two consequences worth planning for before you model a hierarchy this way.
+Recipients on a child are set when the child is created, so a late-joining
+collaborator sees nothing already there unless you re-share it explicitly. And
+because the walk can only touch items you own, a subtree whose children were
+created by different atsigns cannot be re-shared by any single participant —
+each owner has to update their own.
+
 ---
 
 ## Read Methods
-
-Each read that takes an `id` folds it to lower case and throws
-`ArgumentError`, before anything is read, when it is empty or contains `.`,
-`:`, `@`, whitespace or a control character. An id starting with `_` is
-accepted.
 
 ### `Future<CItem<T>> get(String id, Atsign owner)`
 
@@ -195,6 +239,7 @@ Cheap presence check. Prefers the `_seenSelfIds` cache for self-owned items.
 
 ## Sub-collection Construction
 
+<!-- pyml disable-next-line md013-->
 ### `AtCollection<U> subCollection<U>({required CItem<T> parent, required String subName, required Duration defaultExpiration, U Function(Map<String,dynamic>)? fromJson, String? typeTag})`
 
 Opens a typed sub-collection scoped to `parent`. Sub-collections inherit the
@@ -202,12 +247,12 @@ parent's `eventSource`.
 
 **Constraints:**
 
-- `subName` is folded to lower case, must be non-empty, and must NOT contain
-  `.`, `:`, `@`, whitespace, a control character or a character a key's name
-  cannot hold
+- `subName` must be non-empty and must NOT contain `.`
+- `parent.id` must NOT contain `.`
 - `ArgumentError` thrown if the composed namespace would exceed 128 chars, the
   cap that keeps keys inside the atServer key length (max ~11 levels)
 
+<!-- pyml disable-next-line md013-->
 ### `Future<CItem<U>?> getDescendant<U>({required List<CAncestor> ancestry, required String id, required Atsign owner, required Duration leafExpiration, Duration? intermediateExpiration, U Function(Map<String,dynamic>)? leafFromJson, String? leafTypeTag})`
 
 Walks the parent chain from `ancestry` (from a `CSubItemUpdated` event) and
@@ -242,16 +287,17 @@ Returns an immutable `Query<T>` builder. See [03-query-api.md](03-query-api.md).
 
 ## Event Streams
 
-| Stream                          | Type                        | Description                           |
-| ------------------------------- | --------------------------- | ------------------------------------- |
-| `watch()`                       | `Stream<CEvent>`            | All events below                      |
-| `updates`                       | `Stream<CItemUpdated>`      | Item created or updated               |
-| `deletes`                       | `Stream<CItemDeleted>`      | Item deleted (has `wasExpired` flag)  |
-| `readReceipts`                  | `Stream<CReadReceipt>`      | Someone read your item                |
-| `subUpdates`                    | `Stream<CSubItemUpdated>`   | Any sub-item changed (has `ancestry`) |
-| `subDeletes`                    | `Stream<CSubItemDeleted>`   | Any sub-item deleted (has `ancestry`) |
-| `availableEvents`               | `Stream<CItemAvailable>`    | Item's `availableAt` has passed       |
-| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime`       |
+<!-- pyml disable-num-lines 10 md013-->
+| Stream | Type | Description |
+| --- | --- | --- |
+| `watch()` | `Stream<CEvent>` | All events below |
+| `updates` | `Stream<CItemUpdated>` | Item created or updated |
+| `deletes` | `Stream<CItemDeleted>` | Item deleted (has `wasExpired` flag) |
+| `readReceipts` | `Stream<CReadReceipt>` | Someone read your item |
+| `subUpdates` | `Stream<CSubItemUpdated>` | Any sub-item changed (has `ancestry`) |
+| `subDeletes` | `Stream<CSubItemDeleted>` | Any sub-item deleted (has `ancestry`) |
+| `availableEvents` | `Stream<CItemAvailable>` | Item's `availableAt` has passed |
+| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime` |
 
 See [04-events-api.md](04-events-api.md) for full event class fields.
 
@@ -271,12 +317,12 @@ practical depth ceiling is **11 levels (root + 10 nested sub-collections)**.
 
 ## Key Naming (Internal, for debugging)
 
-| Item type            | Key format                                         |
-| -------------------- | -------------------------------------------------- |
-| Self copy            | `<id>.<namespace>@<atSign>`                        |
-| Recipient copy       | `<recipient>:<id>.<namespace>@<atSign>`            |
-| Cached incoming copy | `cached:<id>.<namespace>@<sender>`                 |
-| Read receipt         | `<receiptId>.__rr.<parentId>.<namespace>@<reader>` |
+| Item type | Key format |
+| --- | --- |
+| Self copy | `<id>.<namespace>@<atSign>` |
+| Recipient copy | `<recipient>:<id>.<namespace>@<atSign>` |
+| Cached incoming copy | `cached:<id>.<namespace>@<sender>` |
+| Read receipt | `<receiptId>.__rr.<parentId>.<namespace>@<reader>` |
 
 ---
 

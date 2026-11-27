@@ -9,14 +9,15 @@ Both patterns are valid and complementary — a single app can use both at once.
 
 ## Decision Table
 
-| Criterion            | Use `AtCollection<T>`                            | Use Notifications + SQLite                   |
-| -------------------- | ------------------------------------------------ | -------------------------------------------- |
-| **Data shape**       | Discrete typed records                           | High-frequency telemetry / event streams     |
-| **Persistence**      | Synced to atServer; available across devices     | Local only; accumulated from notifications   |
-| **Sharing model**    | Per-item, shared with named atsigns              | One publisher → many subscribers             |
-| **Query needs**      | Rich queries, reactive watches, sub-collections  | Time-window aggregates, GROUP BY, charting   |
-| **Volume**           | Low–medium (hundreds to thousands of items)      | High (per-second metrics, logs, traces)      |
-| **Sync requirement** | Yes — SyncService keeps devices consistent       | No — notifications are fire-and-forget       |
+<!-- pyml disable-num-lines 9 md013-->
+| Criterion | Use `AtCollection<T>` | Use Notifications + SQLite |
+| --- | --- | --- |
+| **Data shape** | Discrete typed records | High-frequency telemetry / event streams |
+| **Persistence** | Synced to atServer; available across devices | Local only; accumulated from notifications |
+| **Sharing model** | Per-item, shared with named atsigns | One publisher → many subscribers |
+| **Query needs** | Rich queries, reactive watches, sub-collections | Time-window aggregates, GROUP BY, charting |
+| **Volume** | Low–medium (hundreds to thousands of items) | High (per-second metrics, logs, traces) |
+| **Sync requirement** | Yes — SyncService keeps devices consistent | No — notifications are fire-and-forget |
 | **Primary examples** | Todos, contacts, notes, documents, chat messages | Docker stats dashboard, analytics, telemetry |
 
 ---
@@ -40,12 +41,8 @@ await todos.create(
   sharedWith: {'@bob'.toAtsign()},
 );
 
-// Receiver (@bob): reactive watch — hold the stream in State, never in build()
-final _todos = todos.query().where((t) => !t.obj.done).watch();
-StreamBuilder<List<CItem<Todo>>>(
-  stream: _todos,
-  builder: (ctx, snap) { ... },
-)
+// Receiver (@bob): reactive watch — create the stream once and hold it
+todos.query().where((t) => !t.obj.done).watch().listen(render);
 ```
 
 **Choose this when:**
@@ -74,6 +71,11 @@ await atClient.notificationService.send(
   expiration: const Duration(minutes: 5),  // short TTL — stale samples are useless
 );
 ```
+
+Fire-and-forget is the deliberate choice here: confirming each sample would
+cost a remote round trip per sample, and a sample that arrives late is
+worthless. Notifications carrying an *action* are the opposite case — confirm
+those, see [16-notifications.md](16-notifications.md).
 
 ### Subscriber side
 
@@ -118,8 +120,8 @@ SQLite pattern:
   Uses `atClient.notificationService.send()` in a polling loop.  
   Short `expiration` (5 min) — stale samples are silently dropped.
 
-- **Flutter subscriber**: `packages/at_client_flutter/example/dockerstats/`  
-  Receives notifications, appends to SQLite, renders charts.
+- **Subscriber**: a Flutter app that receives the notifications, appends them
+  to SQLite and renders charts; the at-client-skills-flutter skill links it.
 
 ---
 
@@ -192,8 +194,10 @@ them:
   [13-rpc.md](13-rpc.md) when implementing request/response. Durable results
   still belong in an `AtCollection`, written by the responder.
 - **Raw TCP to a remote machine** (SSH, VNC, existing socket protocols) →
-  NoPorts (`noports_core`): E2E encrypted tunnels with zero open listening
-  ports. Not a data pattern — a connectivity one.
+  NoPorts: E2E encrypted tunnels with zero open listening ports, usually run
+  as the `npt` / `sshnp` programs rather than built in (see
+  [06-package-map.md](06-package-map.md)). Not a data pattern — a
+  connectivity one.
 - **Bulk file transfer** (payloads too large for a notification or item
   value): encrypt the file client-side, upload the ciphertext to any web file
   service, then share the URL + decryption key with the recipient as a normal
