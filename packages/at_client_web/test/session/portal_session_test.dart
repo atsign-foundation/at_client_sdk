@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/at_client_web.dart';
+import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
@@ -304,8 +305,8 @@ void main() {
 
       final clients = outcomes.whereType<AtClient>().toList();
       expect(clients, hasLength(1), reason: '$outcomes');
-      expect(outcomes.whereType<StateError>(), hasLength(1),
-          reason: 'the second open fails as it would after the first');
+      expect(outcomes.whereType<SessionAlreadyOpenException>(), hasLength(1),
+          reason: 'the second open rejects while the first client is live');
       expect(AtClientImpl.liveClientsFor(_atSign), [same(clients.single)]);
     });
 
@@ -359,7 +360,7 @@ void main() {
 
       expect(outcomes.first, isA<PortalSessionOfflineException>());
       expect(outcomes.whereType<AtClient>(), hasLength(1), reason: '$outcomes');
-      expect(outcomes.whereType<StateError>(), hasLength(2));
+      expect(outcomes.whereType<SessionAlreadyOpenException>(), hasLength(2));
       expect(AtClientImpl.liveClientsFor(_atSign), hasLength(1));
     });
 

@@ -82,18 +82,19 @@ class GatedPasskeySession extends Fake implements PasskeySession {
 }
 
 /// Records the options and transport the passkey arm hands the login, and
-/// opens [session].
+/// opens [session] on [lock], the open lock the bridge hands to the session.
 class RecordingPasskeyLogin {
-  RecordingPasskeyLogin(this.session);
+  RecordingPasskeyLogin(this.session, {this.lock = 'the passkey open lock'});
 
   final GatedPasskeySession session;
+  final String lock;
   final seen = <PasskeySessionOptions>[];
   final transports = <SessionTransportOptions>[];
 
-  Future<PasskeySession> call(
+  Future<(PasskeySession, String)> call(
       PasskeySessionOptions options, SessionTransportOptions transport) async {
     seen.add(options);
     transports.add(transport);
-    return session;
+    return (session, lock);
   }
 }

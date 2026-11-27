@@ -7,6 +7,7 @@ import '../collections/item_locks.dart';
 import '../exceptions.dart';
 import '../log_text.dart';
 import 'session_namespace.dart';
+import 'session_queue.dart';
 
 /// The parts of a notification's key, parsed once from its text: [name] and
 /// its [namespace], the [sharedWith] recipient and the [sharedBy] owner, both
@@ -119,7 +120,10 @@ class AtClientSession implements Session {
   /// is the item lock map every collection handle shares; by default a new one.
   /// [subscriptions] is the set that holds each live notification subscription,
   /// so a test can see one leave when its stream completes; by default a new
-  /// one.
+  /// one. [lock], when given, is the open queue key the client was opened
+  /// under: [close] runs its teardown inside that queue, so an open queued
+  /// after it starts only once the client has left it. Null leaves the
+  /// teardown unqueued, for a session a caller builds itself.
   AtClientSession(this._client,
       {required String namespace,
       void Function(String message)? warn,
@@ -127,13 +131,15 @@ class AtClientSession implements Session {
       Stream<void>? networkChanges,
       Future<void> Function()? stop,
       ItemLocks? itemLocks,
-      Set<StreamSubscription<Object?>>? subscriptions})
+      Set<StreamSubscription<Object?>>? subscriptions,
+      String? lock})
       : _namespace = normalizeSessionNamespace(namespace),
         _itemLocks = itemLocks ?? ItemLocks(),
         _subscriptions = subscriptions ?? {},
         _warn = warn ?? _logger.warning,
         _isNavigatorOnline = isNavigatorOnline ?? (() => true),
-        _stop = stop ?? _client.stop {
+        _stop = stop ?? _client.stop,
+        _lock = lock {
     _status = _statusOf(_client.connection.current) ?? 'connecting';
     _connection =
         _client.connection.changes.listen((state) => _reportStatusOf(state));
@@ -164,6 +170,7 @@ class AtClientSession implements Session {
   final void Function(String message) _warn;
   final bool Function() _isNavigatorOnline;
   final Future<void> Function() _stop;
+  final String? _lock;
   final _statusListeners = <void Function(String)>{};
   late StreamSubscription<AtConnectionState> _connection;
   StreamSubscription<void>? _network;
@@ -701,10 +708,23 @@ class AtClientSession implements Session {
   /// client's `stop()`, whatever that takes. A passkey session's close is
   /// bounded by D-30's vault settle, the client's stop plus 10 seconds plus
   /// `AtServerAtKeysIo.lockWaitBound`.
+  ///
+  /// A session opened by the bridge runs its teardown inside the (atSign,
+  /// enrollment) open queue it was opened under, so an open started after
+  /// this close waits for it and never finds this client live. A session
+  /// built without a lock closes unqueued.
   @override
   Future<void> close() => _closing ??= _tearDown();
 
-  Future<void> _tearDown() async {
+  Future<void> _tearDown() {
+    final lock = _lock;
+    if (lock == null) return _tearDownNow();
+    // NOTE: queuedOpen registers the teardown on the lock synchronously,
+    // before _tearDownNow's first await, so a later open sees it in order.
+    return queuedOpen(lock, _tearDownNow);
+  }
+
+  Future<void> _tearDownNow() async {
     _closed = true;
     _itemLocks.clear();
     _statusListeners.clear();

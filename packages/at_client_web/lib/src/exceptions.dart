@@ -68,6 +68,23 @@ class InvalidArgumentException extends AtException {
   String toString() => 'InvalidArgumentException: $message';
 }
 
+/// What a second live session for one (atSign, enrollment) rejects with.
+const sessionAlreadyOpenMessage = 'a session for this atSign is already open';
+
+/// Thrown when a session is opened for an (atSign, enrollment) that already
+/// has a live client this process: the caller must close that session first.
+///
+/// The message names no atSign value.
+class SessionAlreadyOpenException extends AtException {
+  SessionAlreadyOpenException(this.atSign) : super(sessionAlreadyOpenMessage);
+
+  /// The atSign (in `@name` form) whose session is live.
+  final String atSign;
+
+  @override
+  String toString() => 'SessionAlreadyOpenException: $message';
+}
+
 /// Thrown by a session, or by a collection it opened, when a call arrives
 /// after the session was closed. at_client's `StoppedException` never reaches
 /// the caller of a closed session: it is this, an [AtException].

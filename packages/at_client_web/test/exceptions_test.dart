@@ -76,6 +76,7 @@ void main() {
       NotifyFailedException(NotifyFailure.sendFailed),
       EnrollmentInFlightException(),
       SessionClosedException(),
+      SessionAlreadyOpenException('@alice'),
       PortalSessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
       UnsupportedKeyMaterialException('@alice'),

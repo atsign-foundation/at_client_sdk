@@ -96,9 +96,10 @@ class SessionKeysIo extends WrittenAtKeysIo {
 ///
 /// Opens for one atSign as one enrollment run one at a time: an open started
 /// while another for the same atSign and enrollment is running waits for it
-/// to end, then fails as it would after it (a [StateError] while that client
-/// is live) or builds afresh. Opens for different enrollments of an atSign,
-/// which at_client allows side by side, do not wait on each other.
+/// to end, then fails as it would after it, with a
+/// [SessionAlreadyOpenException] while that client is live, or builds afresh.
+/// Opens for different enrollments of an atSign, which at_client allows side
+/// by side, do not wait on each other.
 ///
 /// [keysIo] is the key store the client runs on, by default a [SessionKeysIo]
 /// over [keys].
@@ -123,8 +124,9 @@ Future<AtClient> portalSession({
   }
   // `buildAtClient` checks for a live client and registers its own across
   // awaits, so two opens running together would both pass the check. It
-  // files clients by (atSign, enrollment), so that is what opens queue on.
-  return queuedOpen(openLock(normalized, enrollmentId), () async {
+  // files clients by (atSign, enrollment), so that is what opens queue on;
+  // the live check runs inside that queue, after any queued teardown.
+  return queuedSessionOpen(normalized, enrollmentId, () async {
     if (prefs != null) _checkRoot(prefs, transport.root);
     return openOnline(
         atSign: normalized,

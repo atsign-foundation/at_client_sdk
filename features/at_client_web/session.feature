@@ -16,7 +16,14 @@ Feature: create opens a session and close ends it
   #
   # Race: two concurrent close calls share one teardown so the second does not
   #   resolve before the client has stopped ("concurrent close awaits the first
-  #   stop"), and portalSession serializes opens per (atSign, enrollment).
+  #   stop"); portalSession serializes opens per (atSign, enrollment), and a
+  #   session's teardown runs inside that same queue, so a create after an
+  #   unawaited close waits for the client to leave it ("create waits for an
+  #   unawaited close of the same atSign", "close then create is queued for the
+  #   keys and the passkey session forms", "a bridge session queues its close
+  #   behind the open lock"), and a second create while a session is live
+  #   rejects before opening ("a second create while a session is live rejects
+  #   invalid_argument naming atSign").
   # Replay: no session handle or challenge is persisted or reused across close;
   #   every post-close call rejects ("close stops the session and later calls
   #   reject with closed").
@@ -110,6 +117,32 @@ Feature: create opens a session and close ends it
     When close is called twice concurrently
     Then the client stops only once
     And the second close waits until the first stop completes
+
+  @race
+  Scenario: create waits for an unawaited close of the same atSign
+    Given a session for one atSign and enrollment whose stop is held
+    When close is called without awaiting it and create opens the same pair
+    Then create stays pending until that stop completes
+    And create then resolves with a fresh session
+
+  @race
+  Scenario: a second create while a session is live rejects invalid_argument naming atSign
+    Given a live session for one atSign and enrollment
+    When create is called again for the same pair
+    Then it rejects with code invalid_argument and the message 'a session for this atSign is already open'
+    And no second client is opened
+
+  @race
+  Scenario: close then create is queued for the keys and the passkey session forms
+    Given a keys session and a passkey session, each built with the lock its open queued on, whose stops are held
+    When each is closed without awaiting it and create opens the same pair
+    Then each create stays pending until its session's stop completes
+    And each create then resolves
+
+  Scenario: a bridge session queues its close behind the open lock
+    Given a bridge session opened with the lock its open used
+    When close is called without awaiting it and an open is queued on that lock
+    Then the queued open starts only after the session's stop completes
 
   Scenario: invalid or empty atSign rejects naming atSign
     Given create options with an empty or malformed atSign

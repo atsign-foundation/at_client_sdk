@@ -7,6 +7,9 @@ import 'package:at_client_web/at_client_web.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/js/error_codes.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
+import 'package:at_client_web/src/session/session_open.dart';
+import 'package:at_client_web/src/session/session_queue.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookupMuxable;
 import 'package:test/test.dart';
 
 import 'wire_fakes.dart';
@@ -622,6 +625,134 @@ void main() {
         expect(error, isA<EnrollmentConveyanceException>());
         expect(errorCodeOf(error), 'enrollment_conveyance_failed');
       });
+    });
+  });
+
+  group('a create around a close', () {
+    SessionTransport transport() => (
+          lookUps: wire.lookUps,
+          finder: FixedSecondaryAddressFinder('atserver.test', 1),
+          root: AtRootDomain.atsignDomain
+        );
+
+    Future<AtClient> openKeys() => portalSession(
+        atSign: '@alice',
+        app: 'wavi',
+        keys: classicalAtKeys(),
+        transport: transport());
+
+    /// A session over [client] that queues its teardown on [lock] and stops
+    /// the client only once [held] completes.
+    AtClientSession heldSession(
+            AtClient client, String lock, Completer<void> held) =>
+        AtClientSession(client, namespace: 'wavi', lock: lock, stop: () async {
+          await held.future;
+          await client.stop();
+        });
+
+    test('create waits for an unawaited close of the same atSign', () async {
+      await session.close();
+      final keys = classicalAtKeys();
+      final held = Completer<void>();
+      session =
+          heldSession(await openKeys(), keysOpenLock('@alice', keys), held);
+
+      unawaited(session.close());
+      var created = false;
+      final create = openKeys().then((_) => created = true);
+      await pumpEventQueue();
+      expect(created, isFalse,
+          reason: "create waits for the close's teardown to leave the queue");
+
+      held.complete();
+      await create;
+      expect(created, isTrue);
+    });
+
+    test(
+        'a second create while a session is live rejects invalid_argument naming atSign',
+        () async {
+      late Object error;
+      try {
+        await openKeys();
+        fail('a second create opened while the session was live');
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error, isA<SessionAlreadyOpenException>());
+      expect(errorCodeOf(error), 'invalid_argument');
+      expect(
+          atErrorMessage(error), 'a session for this atSign is already open');
+      expect(atErrorMessage(error), isNot(contains('@alice')));
+    });
+
+    test(
+        'close then create is queued for the keys and the passkey session forms',
+        () async {
+      await session.close();
+
+      Future<void> expectQueued(
+          String form,
+          String lock,
+          Future<AtClient> Function() open,
+          Future<AtClient> Function() reopen) async {
+        final held = Completer<void>();
+        session = heldSession(await open(), lock, held);
+
+        unawaited(session.close());
+        var created = false;
+        final create = reopen().then((_) => created = true);
+        await pumpEventQueue();
+        expect(created, isFalse,
+            reason: '$form: create waits for the stop to complete');
+
+        held.complete();
+        await create;
+        expect(created, isTrue,
+            reason: '$form: create resolves once the stop has completed');
+      }
+
+      final keys = classicalAtKeys();
+      await expectQueued(
+          'keys form',
+          keysOpenLock('@alice', keys),
+          () => portalSession(
+              atSign: '@alice',
+              app: 'wavi',
+              keys: keys,
+              transport: transport()),
+          () => portalSession(
+              atSign: '@alice',
+              app: 'wavi',
+              keys: classicalAtKeys(),
+              transport: transport()));
+
+      AtLookupMuxable lookUp() => wire.lookUps(
+          atSign: '@alice',
+          rootDomain: AtRootDomain.atsignDomain,
+          authenticator: null,
+          secondaryAddressFinder:
+              FixedSecondaryAddressFinder('atserver.test', 1));
+      await expectQueued(
+          'passkey form',
+          openLock('@alice', 'eid1'),
+          () => openSession(
+              lookUp: lookUp(),
+              atSign: '@alice',
+              enrollmentId: 'eid1',
+              keysIo: SessionKeysIo(
+                  '@alice', classicalAtKeys(enrollmentId: 'eid1')),
+              app: 'wavi',
+              transport: transport()),
+          () => openSession(
+              lookUp: lookUp(),
+              atSign: '@alice',
+              enrollmentId: 'eid1',
+              keysIo: SessionKeysIo(
+                  '@alice', classicalAtKeys(enrollmentId: 'eid1')),
+              app: 'wavi',
+              transport: transport()));
     });
   });
 }

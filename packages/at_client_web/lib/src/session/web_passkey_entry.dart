@@ -128,7 +128,8 @@ Future<PasskeySession> onboardNewAtSign(
 /// they are, not wrapped in [PasskeyLostException].
 ///
 /// [appName] and [appVersion], when given, are the app's name and version the
-/// client it opens tells the atServer.
+/// client it opens tells the atServer. [onOpenLock], when given, hears the
+/// open queue key the client it opens runs under.
 ///
 /// Stopping the session, or its client, closes the passkey vault it holds.
 Future<PasskeySession> passkeyLogin(
@@ -138,7 +139,8 @@ Future<PasskeySession> passkeyLogin(
         required String rpName,
         SessionTransportOptions? transport,
         String? appName,
-        String? appVersion}) =>
+        String? appVersion,
+        void Function(String lock)? onOpenLock}) =>
     _withCustody(
         app: app,
         rpId: rpId,
@@ -147,6 +149,7 @@ Future<PasskeySession> passkeyLogin(
         options: transport,
         appName: appName,
         appVersion: appVersion,
+        onOpenLock: onOpenLock,
         run: (custody) => custody.open(atSign: atSign));
 
 const _defaultDevice = 'browser';
@@ -161,13 +164,15 @@ Future<PasskeySession> _withCustody(
     required SessionTransportOptions? options,
     String? appName,
     String? appVersion,
+    void Function(String lock)? onOpenLock,
     required Future<PasskeySession> Function(PasskeyCustody) run}) async {
   final server = passkeyServerSide(
       options: options,
       app: app,
       device: device,
       appName: appName,
-      appVersion: appVersion);
+      appVersion: appVersion,
+      onOpenLock: onOpenLock);
   return runClosingStore(
       openEntryHintStore,
       (store) => run(PasskeyCustody(

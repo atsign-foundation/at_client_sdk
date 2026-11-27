@@ -20,6 +20,7 @@ import '../log_text.dart';
 /// `internal` for anything else.
 String errorCodeOf(Object error) => switch (error) {
       InvalidArgumentException() => 'invalid_argument',
+      SessionAlreadyOpenException() => 'invalid_argument',
       JsCollectionsError(:final kind) => collectionErrorCode(kind),
       NotifyFailedException(:final kind) => switch (kind) {
           NotifyFailure.sendFailed => 'notify_failed',
@@ -126,6 +127,7 @@ const collectionErrorCodes = <String>[
 /// and never its value.
 String atErrorMessage(Object error) => switch (error) {
       InvalidArgumentException() => _argumentMessage(error),
+      SessionAlreadyOpenException() => sessionAlreadyOpenMessage,
       JsCollectionsError() => _collectionMessage(error),
       NotifyFailedException(:final kind) => switch (kind) {
           NotifyFailure.sendFailed => 'sending the notification failed',

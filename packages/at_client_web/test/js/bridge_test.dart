@@ -24,6 +24,7 @@ import 'package:at_client_web/src/keys/indexeddb_store.dart';
 import 'package:at_client_web/src/log_text.dart' show singleLine;
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:at_client_web/src/session/session_options.dart';
+import 'package:at_client_web/src/session/session_queue.dart';
 import 'package:at_client_web/src/session/web_passkey_entry.dart'
     show openEntryHintStore;
 import 'package:at_lookup/at_lookup_web.dart' show HttpsSecondaryAddressFinder;
@@ -704,6 +705,32 @@ void main() {
         passkey.stopGate!.complete();
         await closing;
         expect(closed, isTrue);
+      });
+
+      test('a bridge session queues its close behind the open lock', () async {
+        final passkey = GatedPasskeySession(PasskeyClient())
+          ..stopGate = Completer<void>();
+        final login = RecordingPasskeyLogin(passkey);
+        final bridge = createJSInteropWrapper(BridgeEntry(
+            open: (o) => openJsSession(o, passkeyOpen: login.call),
+            isSecureContext: () => true));
+
+        final result =
+            await resolved(invoke(bridge, 'create', [jsObject(passkeyOpts())]))
+                as JSObject;
+
+        var ran = false;
+        final closing = resolved(invoke(result, 'close'));
+        await pumpEventQueue();
+        final behind = queuedOpen(login.lock, () async => ran = true);
+        await pumpEventQueue();
+        expect(ran, isFalse,
+            reason: 'the close holds the lock its open was queued on');
+
+        passkey.stopGate!.complete();
+        await closing;
+        await behind;
+        expect(ran, isTrue);
       });
 
       test(

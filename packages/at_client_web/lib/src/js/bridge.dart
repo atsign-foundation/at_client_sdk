@@ -12,6 +12,7 @@ import '../collections/js_collections_adapter.dart';
 import '../exceptions.dart';
 import '../session/portal_session.dart';
 import '../session/session_options.dart';
+import '../session/session_queue.dart';
 import '../session/session_transport.dart';
 import '../session/session_transport_options.dart';
 import '../session/web_passkey_entry.dart';
@@ -21,8 +22,9 @@ import '../session/at_client_session.dart';
 /// Opens the session of a caller's [SessionOptions].
 typedef OpenJsSession = Future<Session> Function(SessionOptions options);
 
-/// Opens the passkey session [options] describes over [transport].
-typedef OpenPasskeySession = Future<PasskeySession> Function(
+/// Opens the passkey session [options] describes over [transport], returning
+/// the session and the open queue key its client was opened under.
+typedef OpenPasskeySession = Future<(PasskeySession, String)> Function(
     PasskeySessionOptions options, SessionTransportOptions transport);
 
 final _logger = AtSignLogger('BridgeEntry');
@@ -34,11 +36,12 @@ final _logger = AtSignLogger('BridgeEntry');
 /// closes its vault, for a passkey.
 Future<Session> _openSession(SessionOptions options,
     {SessionTransport? keysTransport, OpenPasskeySession? passkeyOpen}) async {
-  final (AtClient client, Future<void> Function() stop) = switch (options) {
+  final (AtClient client, Future<void> Function() stop, String lock) =
+      switch (options) {
     KeysSessionOptions() => await _openKeys(options, keysTransport),
     PasskeySessionOptions() => await _openPasskey(options, passkeyOpen),
   };
-  return sessionOver(client, stop, options);
+  return sessionOver(client, stop, options, lock: lock);
 }
 
 /// [_openSession] with the keys transport and the passkey login left to the
@@ -49,17 +52,20 @@ final Future<Session> Function(SessionOptions options,
     OpenPasskeySession? passkeyOpen}) openJsSession = _openSession;
 
 /// The [Session] [options] describes over [client], whose [stop] ends what
-/// opened it. A construction that throws awaits [stop] before rethrowing, so
-/// an opened client or passkey session is never left running.
-Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
-    SessionOptions options) async {
+/// opened it, queued on [lock] if given. A construction that throws awaits
+/// [stop] before rethrowing, so an opened client or passkey session is never
+/// left running.
+Future<Session> sessionOver(
+    AtClient client, Future<void> Function() stop, SessionOptions options,
+    {String? lock}) async {
   try {
     return AtClientSession(client,
         namespace: options.namespace,
         isNavigatorOnline: () => web.window.navigator.onLine,
         networkChanges: networkChanges(),
         warn: _logger.warning,
-        stop: stop);
+        stop: stop,
+        lock: lock);
   } on Object {
     await stop();
     rethrow;
@@ -71,9 +77,10 @@ Future<Session> sessionOver(AtClient client, Future<void> Function() stop,
 SessionTransport keysTransport(KeysSessionOptions options) =>
     sessionTransport(SessionTransportOptions(root: options.rootDomain));
 
-Future<(AtClient, Future<void> Function())> _openKeys(
+Future<(AtClient, Future<void> Function(), String)> _openKeys(
     KeysSessionOptions options,
     [SessionTransport? transport]) async {
+  final lock = keysOpenLock(options.atSign, options.keys);
   final client = await portalSession(
       atSign: options.atSign,
       app: options.namespace,
@@ -81,29 +88,34 @@ Future<(AtClient, Future<void> Function())> _openKeys(
       transport: transport ?? keysTransport(options),
       appName: options.appName,
       appVersion: options.appVersion);
-  return (client, client.stop);
+  return (client, client.stop, lock);
 }
 
-Future<(AtClient, Future<void> Function())> _openPasskey(
+Future<(AtClient, Future<void> Function(), String)> _openPasskey(
     PasskeySessionOptions options,
     [OpenPasskeySession? login]) async {
-  final session = await (login ?? browserPasskeyOpener)(
+  final (session, lock) = await (login ?? browserPasskeyOpener)(
       options, SessionTransportOptions(root: options.rootDomain));
-  return (session.client, session.stop);
+  return (session.client, session.stop, lock);
 }
 
 /// The browser's passkey login, and the default a passkey session opens with:
-/// [passkeyLogin] over [transport] for [options].
-Future<PasskeySession> browserPasskeyOpener(
-        PasskeySessionOptions options, SessionTransportOptions transport) =>
-    passkeyLogin(
-        atSign: options.atSign,
-        app: options.namespace,
-        rpId: options.rpId,
-        rpName: options.rpName,
-        transport: transport,
-        appName: options.appName,
-        appVersion: options.appVersion);
+/// [passkeyLogin] over [transport] for [options], also returning the open
+/// queue key the client it opened ran under.
+Future<(PasskeySession, String)> browserPasskeyOpener(
+    PasskeySessionOptions options, SessionTransportOptions transport) async {
+  late String lock;
+  final session = await passkeyLogin(
+      atSign: options.atSign,
+      app: options.namespace,
+      rpId: options.rpId,
+      rpName: options.rpName,
+      transport: transport,
+      appName: options.appName,
+      appVersion: options.appVersion,
+      onOpenLock: (opened) => lock = opened);
+  return (session, lock);
+}
 
 /// An event each time the browser goes online or offline, so a session's
 /// `waiting:network` and `waiting:server` follow it. The session [sessionOver]

@@ -19,7 +19,8 @@ import 'session_queue.dart';
 /// connection runs over [transport]. It throws as `Atsign.open` does, and
 /// throws a [PortalSessionOfflineException], after stopping the client, when
 /// it did not come online. Opens for one atSign as one enrollment run one at
-/// a time, with those of `portalSession`.
+/// a time, with those of `portalSession`, rejecting with a
+/// [SessionAlreadyOpenException] while a client for the pair is live.
 Future<AtClient> openSession({
   required AtLookupMuxable lookUp,
   required String atSign,
@@ -31,8 +32,9 @@ Future<AtClient> openSession({
   String? appVersion,
 }) {
   final normalized = atSign.toAtsign();
-  return queuedOpen(
-      openLock(normalized, enrollmentId),
+  return queuedSessionOpen(
+      normalized,
+      enrollmentId,
       () => openOnline(
           atSign: normalized,
           app: app,

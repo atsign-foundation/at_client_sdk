@@ -61,6 +61,10 @@ void main() {
       InvalidArgumentException('opts', expected: 'an object'),
       'invalid_argument'
     ),
+    'SessionAlreadyOpenException': (
+      SessionAlreadyOpenException('@alice'),
+      'invalid_argument'
+    ),
     'EnrollmentInFlightException': (
       EnrollmentInFlightException(),
       'enrollment_in_flight'
@@ -422,6 +426,13 @@ void main() {
     expect(atErrorMessage(error),
         'a decision for this request is already in flight');
     expect(error.toString(), isNot(contains('@')));
+  });
+
+  test('a duplicate live session rejects with its fixed message', () {
+    final error = SessionAlreadyOpenException('@alice');
+    expect(errorCodeOf(error), 'invalid_argument');
+    expect(atErrorMessage(error), 'a session for this atSign is already open');
+    expect(atErrorMessage(error), isNot(contains('@')));
   });
 
   test('the in-flight failure is still an enrollment failure to a Dart caller',
