@@ -18,9 +18,9 @@ Feature: The bridge manifest publishes the sets a keyless conformance test needs
   # Replay: schemaVersion counts released manifests, so a consumer holding a
   #   cached copy can tell which layout it has ("the manifest schema version is
   #   2").
-  # DoS: the manifest publishes the bound every untrusted text takes, so a
-  #   consumer can cap what it shows without reading the bridge ("the manifest
-  #   bounds match the bridge constants").
+  # DoS: the manifest publishes the bounds every untrusted text and
+  #   notification key takes, so a consumer can cap what it shows without
+  #   reading the bridge ("the manifest bounds match the bridge constants").
   # Forgery: the create options are scanned from bridge.dart, so the manifest
   #   cannot advertise an option the bridge does not read ("the manifest lists
   #   the create options each session form reads").
@@ -37,8 +37,8 @@ Feature: The bridge manifest publishes the sets a keyless conformance test needs
   Scenario: the manifest lists the subscribe envelope fields
     Given the envelope BridgeSession.subscribe delivers
     When the manifest is generated
-    Then envelopes.subscribe names id, from, key, value, epochMillis and operation
-    And no other envelope appears yet
+    Then envelopes.subscribe names id, from, key, keyParts, value, epochMillis and operation
+    And envelopes.keyParts names name, namespace, sharedWith, sharedBy, isPublic and isCached
 
   Scenario: the manifest lists every connection status
     Given the statuses AtClientSession can report
@@ -47,9 +47,9 @@ Feature: The bridge manifest publishes the sets a keyless conformance test needs
     And the fallback the session starts with is among them
 
   Scenario: the manifest bounds match the bridge constants
-    Given the bridge's maximum error message length
+    Given the bridge's maximum error message length and maximum notification key length
     When the manifest is generated
-    Then bounds.maxErrorMessageLength equals it rather than a copied literal
+    Then bounds.maxErrorMessageLength and bounds.maxNotificationKeyLength equal them rather than copied literals
 
   Scenario: the manifest schema version is 2
     Given this release adds top-level keys and list entries

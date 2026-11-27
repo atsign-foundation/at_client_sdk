@@ -21,6 +21,10 @@ const enrollmentInFlightMessage =
 /// The longest message an `invalid_argument` or collection rejection carries.
 const maxErrorMessageLength = 128;
 
+/// The longest notification key the session delivers, counted in UTF-16 code
+/// units. A safety bound, not validity: a longer key is dropped unparsed.
+const maxNotificationKeyLength = 255;
+
 /// [id] folded to lower case, as AtCollection folds an item id. Exceptions
 /// and the adapter's per-item lock take their ids through this one fold.
 String foldItemId(String id) => id.toLowerCase();

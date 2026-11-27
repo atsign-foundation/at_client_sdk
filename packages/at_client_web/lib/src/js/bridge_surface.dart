@@ -33,11 +33,20 @@ const createOptions = <String, List<String>>{
 
 /// The fields of each envelope the bridge hands JS. Each list is sorted.
 const envelopes = <String, List<String>>{
+  'keyParts': [
+    'isCached',
+    'isPublic',
+    'name',
+    'namespace',
+    'sharedBy',
+    'sharedWith',
+  ],
   'subscribe': [
     'epochMillis',
     'from',
     'id',
     'key',
+    'keyParts',
     'operation',
     'value',
   ],

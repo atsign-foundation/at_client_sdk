@@ -216,6 +216,22 @@ AtNotification _event(String id,
 AtNotification _echo(String id) =>
     _event(id, key: 'k.attalk.wavi@alice', from: '@alice');
 
+/// A non-cached notification key of exactly [length] UTF-16 units, owned by
+/// @bob and shared with @alice, in namespace wavi.
+String _keyOfLength(int length) {
+  const prefix = '@alice:';
+  const suffix = '.wavi@bob';
+  return '$prefix${'k' * (length - prefix.length - suffix.length)}$suffix';
+}
+
+/// A `cached:` notification key of exactly [length] UTF-16 units, owned by
+/// @bob and cached for @alice, in namespace wavi.
+String _cachedKeyOfLength(int length) {
+  const prefix = 'cached:@alice:';
+  const suffix = '.wavi@bob';
+  return '$prefix${'k' * (length - prefix.length - suffix.length)}$suffix';
+}
+
 void main() {
   late _FakeClient client;
   late AtClientSession session;
@@ -497,6 +513,14 @@ void main() {
         value: 'yo',
         epochMillis: 42,
         operation: 'update',
+        keyParts: (
+          name: 'attalk',
+          namespace: 'wavi',
+          sharedWith: '@alice',
+          sharedBy: '@bob',
+          isPublic: false,
+          isCached: false,
+        ),
       ));
     });
 
@@ -645,6 +669,163 @@ void main() {
       session.subscribe(r'rpc\.req', (_) {}, onError: (_) {});
 
       expect(service.lastRegex, r'rpc\.req');
+    });
+  });
+
+  group('notification keys', () {
+    test('a delivered notification carries its parsed key parts', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      service.events.add(_event('p1', key: '@alice:note.wavi@bob'));
+      await pumpEventQueue();
+
+      expect(received.single.keyParts, (
+        name: 'note',
+        namespace: 'wavi',
+        sharedWith: '@alice',
+        sharedBy: '@bob',
+        isPublic: false,
+        isCached: false,
+      ));
+    });
+
+    test('key parts name the canonical owner for a dotted owner spelling',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      service.events.add(_event('dotted',
+          key: '@alice:note.wavi@bob.smith', from: '@bobsmith'));
+      await pumpEventQueue();
+
+      expect(received.single.keyParts.sharedBy, '@bobsmith');
+      expect(received.single.keyParts.sharedBy, received.single.from);
+    });
+
+    test('a key without a namespace has a null namespace in its parts',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      service.events.add(_event('ns', key: '@alice:attalk@bob'));
+      await pumpEventQueue();
+
+      expect(received.single.keyParts.namespace, isNull);
+    });
+
+    test('a 248-character notification key is delivered whole', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      final key = _keyOfLength(248);
+      expect(key.length, 248);
+      service.events.add(_event('long248', key: key));
+      await pumpEventQueue();
+
+      expect(received.single.key, key);
+      expect(received.single.keyParts.name.length, 232);
+    });
+
+    test(
+        'a notification key longer than 255 characters is dropped with a '
+        'warning', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      final longest = _cachedKeyOfLength(255);
+      final tooLong = _cachedKeyOfLength(256);
+      expect(longest.length, 255);
+      expect(tooLong.length, 256);
+      service.events
+        ..add(_event('longest', key: longest))
+        ..add(_event('tooLong', key: tooLong));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['longest']);
+      expect(received.single.key, longest);
+      expect(received.single.keyParts.isCached, isTrue);
+      expect(
+          warnings.single,
+          'Dropped notification "tooLong": its key is too long or holds '
+          'control characters');
+    });
+
+    test('a 250-character key without cached is delivered whole', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      final key = _keyOfLength(250);
+      expect(key.length, 250);
+      service.events.add(_event('long250', key: key));
+      await pumpEventQueue();
+
+      expect(received.single.key, key);
+      expect(received.single.keyParts.isCached, isFalse);
+    });
+
+    test('a notification key holding bidi controls is dropped with a warning',
+        () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      for (final unit in [0x202e, 0x2066, 0x200e, 0x061c]) {
+        final control = String.fromCharCode(unit);
+        service.events
+            .add(_event('bidi$unit', key: '@alice:k$control.wavi@bob'));
+      }
+      // General format characters such as U+200B are out of scope: this key
+      // is still delivered.
+      service.events.add(_event('zwsp', key: '@alice:k​.wavi@bob'));
+      await pumpEventQueue();
+
+      expect(received.map((n) => n.id), ['zwsp']);
+      expect(warnings, hasLength(4));
+      for (final warning in warnings) {
+        expect(warning,
+            contains('its key is too long or holds control characters'));
+      }
+    });
+
+    test(
+        'a notification key holding a space or a no-break space is still '
+        'dropped', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      service.events
+        ..add(_event('space', key: '@alice:k k.wavi@bob'))
+        ..add(_event('nbsp', key: '@alice:k k.wavi@bob'));
+      await pumpEventQueue();
+
+      expect(received, isEmpty);
+      expect(warnings, hasLength(2));
+    });
+
+    test(
+        'a key dropped for length or control text is logged as such, not as '
+        'a sender mismatch', () async {
+      final received = <ReceivedNotification>[];
+      session.subscribe('.*', received.add, onError: (_) {});
+
+      final direction = String.fromCharCode(0x202e);
+      final backslash = String.fromCharCode(0x5c);
+      final bidiId = 'bad${String.fromCharCode(10)}id$direction';
+      service.events
+        ..add(_event('tooLong', key: _cachedKeyOfLength(256)))
+        ..add(_event(bidiId, key: '@alice:k$direction.wavi@bob'));
+      await pumpEventQueue();
+
+      expect(received, isEmpty);
+      expect(warnings, [
+        'Dropped notification "tooLong": its key is too long or holds '
+            'control characters',
+        'Dropped notification "bad${backslash}nid${backslash}u202e": its key '
+            'is too long or holds control characters',
+      ]);
+      for (final warning in warnings) {
+        expect(warning, isNot(contains('sender')));
+      }
     });
   });
 

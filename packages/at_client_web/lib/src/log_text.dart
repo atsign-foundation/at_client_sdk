@@ -17,6 +17,11 @@ String sanitizeLogText(String value, {int maxLength = 256}) =>
 /// replaced by a space, so it stays on one line.
 String singleLine(String value) => value.replaceAll(_controlChars, ' ');
 
+/// Whether [value] holds a control or bidirectional formatting character: the
+/// same C0, C1 and direction characters [singleLine] flattens, so a
+/// notification key that would reorder text on a single line is refused.
+bool hasControlText(String value) => _controlChars.hasMatch(value);
+
 /// [value] cut to at most [maxLength] UTF-16 code units, ending in `...`
 /// when it was cut, never splitting a surrogate pair.
 String truncateText(String value, int maxLength) {

@@ -28,15 +28,19 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   invalid sharedWith rejects with bad_key and sends nothing", "bridge
   #   notify takes key text and refuses a non-string key", "subscribe
   #   with invalid regex rejects naming regex", "subscribe with non-function
-  #   callback returns {code: invalid_argument} without throwing"), and the
-  #   envelope's peer-chosen id and key take the message bound so neither can
-  #   carry control characters or unbounded text into JS ("a peer-chosen
-  #   notification id and key are bounded in the envelope").
+  #   callback returns {code: invalid_argument} without throwing"), a
+  #   notification key longer than 255 UTF-16 units is dropped before it is
+  #   parsed ("a notification key longer than 255 characters is dropped with a
+  #   warning"), and the envelope's peer-chosen id and key are bounded, so
+  #   neither can carry unbounded text into JS ("a peer-chosen notification id
+  #   and key are bounded in the envelope").
   # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
   #   without recipient, wrong sharedWith, injected text keys) and mismatched
   #   sender/key owner are dropped ("delivers only a notification sent by the
   #   key owner", "subscribe drops notifications with malformed keys or wrong
-  #   sharedWith").
+  #   sharedWith"), and a key holding a bidirectional control character is
+  #   dropped before delivery ("a notification key holding bidi controls is
+  #   dropped with a warning").
   #   Outbound key text cannot widen a key: it carries its own recipient,
   #   owner and namespace, parsed once, and the text's namespace is what is
   #   sent, never the session's ("notify sends the key text's namespace, not
@@ -44,11 +48,13 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   # Impersonation: outbound notify refuses a mismatched owner, a public or
   #   cached key, a recipient not written with @, and text the parsers refuse,
   #   before any lookup, and inbound notifications compare canonical sender and
-  #   owner ("notify with mismatched sharedBy rejects with bad_key and sends
-  #   nothing", "notify with public or cached flag rejects with bad_key and
-  #   sends nothing", "notify with empty or invalid key or invalid sharedWith
-  #   rejects with bad_key and sends nothing", "matches the sender and the key
-  #   owner by canonical atSign").
+  #   owner, delivering that canonical owner as sharedBy ("notify with
+  #   mismatched sharedBy rejects with bad_key and sends nothing", "notify with
+  #   public or cached flag rejects with bad_key and sends nothing", "notify
+  #   with empty or invalid key or invalid sharedWith rejects with bad_key and
+  #   sends nothing", "matches the sender and the key owner by canonical
+  #   atSign", "key parts name the canonical owner for a dotted owner
+  #   spelling").
 
   Scenario: notify resolves true when delivered and false when not
     Given an open session and a recipient
@@ -141,6 +147,60 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Then they are delivered with from as the canonical atSign
     And a notification with no key owner is not delivered
 
+  Scenario: a delivered notification carries its parsed key parts
+    Given a subscription on every key
+    When a notification arrives with the key @alice:note.wavi@bob from @bob
+    Then it is delivered with its name, namespace, recipient, owner, public and cached parts
+
+  @impersonation
+  Scenario: key parts name the canonical owner for a dotted owner spelling
+    Given a subscription on every key
+    When a notification arrives with the key @alice:note.wavi@bob.smith from @bobsmith
+    Then its parts carry sharedBy @bobsmith, the same atSign as from
+
+  Scenario: a key without a namespace has a null namespace in its parts
+    Given a subscription on every key
+    When a notification arrives with the key @alice:attalk@bob
+    Then its parts carry a null namespace
+
+  Scenario: a 248-character notification key is delivered whole
+    Given a subscription on every key
+    When a notification arrives with a 248-character key
+    Then it is delivered with that whole key
+
+  @dos
+  Scenario: a notification key longer than 255 characters is dropped with a warning
+    Given a subscription on every key
+    When a 255-character cached key and a 256-character key arrive
+    Then the 255-character key is delivered and the 256-character key is dropped with a warning
+
+  Scenario: a 250-character key without cached is delivered whole
+    Given a subscription on every key
+    When a notification arrives with a 250-character key that is not cached
+    Then it is delivered with that whole key
+
+  @forgery
+  Scenario: a notification key holding bidi controls is dropped with a warning
+    Given a subscription on every key
+    When a notification arrives whose key holds a bidirectional control character
+    Then it is dropped with a warning
+    # General format characters such as U+200B are not in scope: a key holding one is still delivered.
+
+  Scenario: a notification key holding a space or a no-break space is still dropped
+    Given a subscription on every key
+    When a notification arrives whose key holds a space or a no-break space
+    Then it is dropped
+
+  Scenario: a key dropped for length or control text is logged as such, not as a sender mismatch
+    Given a subscription on every key
+    When a notification arrives whose key is too long or holds control text
+    Then the warning names the key, not the sender
+
+  Scenario: the envelope carries the whole key and its parts
+    Given a bridge subscription on every key
+    When a notification arrives with a 248-character key
+    Then the envelope's key is that whole key and keyParts carries its six parts
+
   Scenario: subscribe drops notifications with malformed keys or wrong sharedWith
     Given a subscription on every key
     When notifications arrive with multiple @s, a bare @name.ns key, cached: without recipient, wrong sharedWith, or injected text keys
@@ -200,8 +260,9 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   @dos @forgery
   Scenario: a peer-chosen notification id and key are bounded in the envelope
     Given a subscription on every key
-    When a notification arrives whose id and key carry a newline, a direction character and 600 characters
-    Then both come back on one line, at most the rejection bound long
+    When a notification arrives from a session fake whose id and key carry a newline, a direction character and 600 characters
+    Then the id comes back on one line at most the rejection bound long
+    And the key and each of its parts come back on one line at most the notification key bound long
     And its from, value, epochMillis and operation are unchanged
 
   Scenario: a send at_client reports failed is a send failure

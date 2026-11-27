@@ -8,8 +8,20 @@ import '../exceptions.dart';
 import '../log_text.dart';
 import 'session_namespace.dart';
 
+/// The parts of a notification's key, parsed once from its text: [name] and
+/// its [namespace], the [sharedWith] recipient and the [sharedBy] owner, both
+/// canonical atSigns, and whether the key is `public:` or `cached:`.
+typedef KeyParts = ({
+  String name,
+  String? namespace,
+  String? sharedWith,
+  String sharedBy,
+  bool isPublic,
+  bool isCached,
+});
+
 /// A decrypted notification as a subscriber receives it; [operation] is
-/// `update` or `delete`.
+/// `update` or `delete`, and [keyParts] the parsed parts of [key].
 typedef ReceivedNotification = ({
   String id,
   String from,
@@ -17,6 +29,7 @@ typedef ReceivedNotification = ({
   String? value,
   int epochMillis,
   String operation,
+  KeyParts keyParts,
 });
 
 /// An enrollment request awaiting a decision, as filed: its [id], the
@@ -398,9 +411,17 @@ class AtClientSession implements Session {
 
   void _forget(String id) => _sent.remove(id);
 
-  /// The canonical atSign that sent [n], or null when [n.key] is malformed,
-  /// targets another recipient, or its owner does not match [n.from].
-  static String? _verifiedSender(AtNotification n, {required String own}) {
+  /// Whether [key] is longer than [maxNotificationKeyLength] UTF-16 units or
+  /// holds control text, either of which stops it being delivered.
+  static bool _unsafeKey(String key) =>
+      key.length > maxNotificationKeyLength || hasControlText(key);
+
+  /// The canonical atSign that sent [n] and the parts of its key, or null when
+  /// [n.key] is malformed, targets another recipient, or its owner does not
+  /// match [n.from]. The parts are built from the one [AtKey] parsed here, so
+  /// `sharedBy` is [from]'s canonical spelling.
+  static ({String from, KeyParts keyParts})? _verified(AtNotification n,
+      {required String own}) {
     final from = _canonical(n.from);
     if (from == null) return null;
     if (n.key.isEmpty || _notifInvalidChars.hasMatch(n.key)) return null;
@@ -448,11 +469,22 @@ class AtClientSession implements Session {
     if (rawOwner == null) return null;
     final owner = _canonical(rawOwner);
     if (owner == null || owner != from) return null;
-    if (!parsed.metadata.isPublic && parsed.sharedWith != null) {
-      final recipient = _canonical(parsed.sharedWith!);
+    final rawRecipient = parsed.sharedWith;
+    final recipient = rawRecipient == null ? null : _canonical(rawRecipient);
+    if (!parsed.metadata.isPublic && rawRecipient != null) {
       if (recipient != own) return null;
     }
-    return from;
+    return (
+      from: from,
+      keyParts: (
+        name: parsed.key,
+        namespace: parsed.namespace,
+        sharedWith: recipient,
+        sharedBy: owner,
+        isPublic: parsed.metadata.isPublic,
+        isCached: parsed.metadata.isCached,
+      ),
+    );
   }
 
   /// [atSign] trimmed, lower-cased and put in `@name` form; null when it is
@@ -485,13 +517,19 @@ class AtClientSession implements Session {
     subscription = service
         .subscribe(regex: pattern.pattern, shouldDecrypt: true)
         .map((n) {
-          final from = _verifiedSender(n, own: own);
-          if (from == null) {
+          if (_unsafeKey(n.key)) {
+            _warn('Dropped notification ${sanitizeLogText(n.id)}: its key is '
+                'too long or holds control characters');
+            return null;
+          }
+          final verified = _verified(n, own: own);
+          if (verified == null) {
             // Never the value: it is the sender's, decrypted for this client.
             _warn('Dropped notification ${sanitizeLogText(n.id)}: its sender '
                 'is not the owner of its key');
             return null;
           }
+          final (:from, :keyParts) = verified;
           if (from == own && _sent.contains(n.id)) return null;
           return (
             id: n.id,
@@ -501,6 +539,7 @@ class AtClientSession implements Session {
             epochMillis: n.epochMillis,
             operation:
                 n.operation?.endsWith('delete') == true ? 'delete' : 'update',
+            keyParts: keyParts,
           );
         })
         .where((e) => e != null)

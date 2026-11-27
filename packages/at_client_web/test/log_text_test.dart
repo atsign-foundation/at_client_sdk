@@ -15,6 +15,29 @@ void main() {
     expect(singleLine('a\nb\u202ec\x7f'), 'a b c ');
   });
 
+  test('hasControlText covers C0, C1 and direction characters', () {
+    for (final unit in [
+      0x00,
+      0x1f,
+      0x7f,
+      0x9f,
+      0x061c,
+      0x200e,
+      0x200f,
+      0x2028,
+      0x202e,
+      0x2066,
+      0x2069
+    ]) {
+      expect(hasControlText(String.fromCharCode(unit)), isTrue,
+          reason: 'U+${unit.toRadixString(16)}');
+    }
+    expect(hasControlText('a  b'), isFalse);
+    expect(hasControlText('a\u00a0b'), isFalse);
+    expect(hasControlText('a\u200bb'), isFalse);
+    expect(hasControlText('a\ufeffb'), isFalse);
+  });
+
   test('truncateText never splits a surrogate pair', () {
     // Seven units of eight: the cut at four falls between the halves of the
     // emoji (units 3 and 4), so the guard drops its high half.

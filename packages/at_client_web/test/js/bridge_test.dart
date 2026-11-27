@@ -938,13 +938,29 @@ void main() {
         key: 'rpc.req.1.tally',
         value: 'ping',
         epochMillis: 42,
-        operation: 'delete'
+        operation: 'delete',
+        keyParts: (
+          name: 'rpc.req.1',
+          namespace: 'tally',
+          sharedWith: '@alice',
+          sharedBy: '@alice',
+          isPublic: false,
+          isCached: false,
+        ),
       ));
       expect(seen, [
         {
           'id': 'n1',
           'from': '@alice',
           'key': 'rpc.req.1.tally',
+          'keyParts': {
+            'name': 'rpc.req.1',
+            'namespace': 'tally',
+            'sharedWith': '@alice',
+            'sharedBy': '@alice',
+            'isPublic': false,
+            'isCached': false,
+          },
           'value': 'ping',
           'epochMillis': 42,
           'operation': 'delete'
@@ -974,22 +990,88 @@ void main() {
         value: 'ping',
         epochMillis: 42,
         operation: 'update',
+        keyParts: (
+          name: hostile,
+          namespace: hostile,
+          sharedWith: hostile,
+          sharedBy: hostile,
+          isPublic: true,
+          isCached: false,
+        ),
       ));
 
       final event = seen.single! as Map;
-      for (final field in ['id', 'key']) {
-        final text = event[field]! as String;
-        expect(text, isNot(contains('\n')), reason: '$field holds no newline');
+      final id = event['id']! as String;
+      expect(id, isNot(contains('\n')), reason: 'id holds no newline');
+      expect(id, isNot(contains(direction)),
+          reason: 'id holds no direction character');
+      expect(singleLine(id), id, reason: 'id is one line');
+      expect(id.length, lessThanOrEqualTo(maxErrorMessageLength),
+          reason: 'id takes the rejection bound');
+
+      final key = event['key']! as String;
+      expect(key, isNot(contains(direction)),
+          reason: 'key holds no direction character');
+      expect(singleLine(key), key, reason: 'key is one line');
+      expect(key.length, lessThanOrEqualTo(maxNotificationKeyLength),
+          reason: 'key takes the notification key bound');
+      final parts = event['keyParts']! as Map;
+      expect(parts['isPublic'], isTrue);
+      expect(parts['isCached'], isFalse);
+      for (final field in ['name', 'namespace', 'sharedWith', 'sharedBy']) {
+        final text = parts[field]! as String;
         expect(text, isNot(contains(direction)),
-            reason: '$field holds no direction character');
-        expect(singleLine(text), text, reason: '$field is one line');
-        expect(text.length, lessThanOrEqualTo(maxErrorMessageLength),
-            reason: '$field takes the rejection bound');
+            reason: 'keyParts $field holds no direction character');
+        expect(singleLine(text), text, reason: 'keyParts $field is one line');
+        expect(text.length, lessThanOrEqualTo(maxNotificationKeyLength),
+            reason: 'keyParts $field takes the notification key bound');
       }
       expect(event['value'], 'ping');
       expect(event['from'], '@alice');
       expect(event['epochMillis'], 42);
       expect(event['operation'], 'update');
+    });
+
+    test('the envelope carries the whole key and its parts', () async {
+      final seen = <Object?>[];
+      invoke(s, 'subscribe', [
+        '.*'.toJS,
+        ((JSAny? event) => seen.add(event.dartify())).toJS,
+      ]);
+      // A legal 248-unit key arrives whole: the bridge never cuts it to the
+      // rejection bound.
+      final name = 'k' * 232;
+      final key = '@alice:$name.wavi@bob';
+      expect(key.length, 248);
+
+      session.listeners.single((
+        id: 'n1',
+        from: '@bob',
+        key: key,
+        value: 'v',
+        epochMillis: 7,
+        operation: 'update',
+        keyParts: (
+          name: name,
+          namespace: 'wavi',
+          sharedWith: '@alice',
+          sharedBy: '@bob',
+          isPublic: false,
+          isCached: false,
+        ),
+      ));
+
+      final event = seen.single! as Map;
+      expect(event['key'], key,
+          reason: 'a 248-character key crosses whole, never cut at 128');
+      expect(event['keyParts'], {
+        'name': name,
+        'namespace': 'wavi',
+        'sharedWith': '@alice',
+        'sharedBy': '@bob',
+        'isPublic': false,
+        'isCached': false,
+      });
     });
 
     test(
@@ -1011,6 +1093,14 @@ void main() {
         value: 'late',
         epochMillis: 99,
         operation: 'update',
+        keyParts: (
+          name: 'k',
+          namespace: 'tally',
+          sharedWith: null,
+          sharedBy: '@bob',
+          isPublic: false,
+          isCached: false,
+        ),
       ));
       session.errorSink!(StateError('late'));
 

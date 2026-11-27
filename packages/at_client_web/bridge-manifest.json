@@ -1,6 +1,7 @@
 {
   "bounds": {
-    "maxErrorMessageLength": 128
+    "maxErrorMessageLength": 128,
+    "maxNotificationKeyLength": 255
   },
   "collectionErrorCodes": [
     "COLLECTION_FAILED",
@@ -37,11 +38,20 @@
     ]
   },
   "envelopes": {
+    "keyParts": [
+      "isCached",
+      "isPublic",
+      "name",
+      "namespace",
+      "sharedBy",
+      "sharedWith"
+    ],
     "subscribe": [
       "epochMillis",
       "from",
       "id",
       "key",
+      "keyParts",
       "operation",
       "value"
     ]

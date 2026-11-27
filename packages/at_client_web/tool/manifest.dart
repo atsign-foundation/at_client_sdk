@@ -12,7 +12,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_web/src/exceptions.dart' show maxErrorMessageLength;
+import 'package:at_client_web/src/exceptions.dart'
+    show maxErrorMessageLength, maxNotificationKeyLength;
 import 'package:at_client_web/src/js/bridge_surface.dart'
     show bridgeSurface, createOptions, envelopes, statuses;
 import 'package:at_client_web/src/js/error_codes.dart'
@@ -69,7 +70,10 @@ void main(List<String> args) {
   }
 
   final manifest = <String, Object?>{
-    'bounds': {'maxErrorMessageLength': maxErrorMessageLength},
+    'bounds': {
+      'maxErrorMessageLength': maxErrorMessageLength,
+      'maxNotificationKeyLength': maxNotificationKeyLength,
+    },
     'collectionErrorCodes': collectionErrorCodes,
     'createOptions': createOptions,
     'envelopes': envelopes,

@@ -173,6 +173,13 @@ const _setupLockTimeoutMessage = 'another tab is setting up this atSign';
 String boundedRejectionText(String value) =>
     truncateText(singleLine(value), maxErrorMessageLength);
 
+/// [value] on one line and at most [maxNotificationKeyLength] long: the bound
+/// a notification key and each of its parts take in the subscribe envelope,
+/// so a peer-chosen key cannot carry control characters or unbounded text
+/// into JS.
+String boundedKeyText(String value) =>
+    truncateText(singleLine(value), maxNotificationKeyLength);
+
 /// What each parameter the session validates by itself has to be, for an
 /// [InvalidArgumentException] that names no `expected`. The namespace is not
 /// here: the opener refuses it as an [ArgumentError] and the bridge words it.

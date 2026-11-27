@@ -352,6 +352,21 @@ JSObject _envelope(Map<String, Object?> map) {
   return object;
 }
 
+/// [parts] as the object the subscribe envelope carries under `keyParts`: the
+/// key's name and namespace, its recipient and owner, and its public and
+/// cached flags. Every string takes the notification key bound; a null
+/// namespace or recipient stays null.
+Map<String, Object?> _keyParts(KeyParts parts) => {
+      'name': boundedKeyText(parts.name),
+      'namespace':
+          parts.namespace == null ? null : boundedKeyText(parts.namespace!),
+      'sharedWith':
+          parts.sharedWith == null ? null : boundedKeyText(parts.sharedWith!),
+      'sharedBy': boundedKeyText(parts.sharedBy),
+      'isPublic': parts.isPublic,
+      'isCached': parts.isCached,
+    };
+
 /// [event] with its peer-chosen label fields bounded like the subscribe
 /// envelope's: `id`, `owner` and `from`, and each ancestry entry's
 /// `subName`, are one line and at most [maxErrorMessageLength] long. Every
@@ -414,15 +429,18 @@ class BridgeSession {
       (await _session.notify(_jsKey(key), _string(value, 'value'))).toJS);
 
   /// Calls [callback] with each notification matching [regex] as
-  /// `{id, from, key, value, epochMillis, operation}`, and [onError], when
-  /// given, with the `{code, message}` of each error on the stream (without
-  /// it the error is logged); returns the function that unsubscribes, or,
-  /// when it cannot subscribe, the `{code, message}` object the promises
-  /// reject with. It does not throw: a Dart `throw` reaches JS wrapped, with
-  /// no `code` for the caller to read. `id` and `key` are peer-chosen, so
-  /// both take the rejection bound: one line, at most
-  /// [maxErrorMessageLength] long. `from` is the verified key owner, and
-  /// `value` is the notification's payload, delivered as received.
+  /// `{id, from, key, keyParts, value, epochMillis, operation}`, and
+  /// [onError], when given, with the `{code, message}` of each error on the
+  /// stream (without it the error is logged); returns the function that
+  /// unsubscribes, or, when it cannot subscribe, the `{code, message}` object
+  /// the promises reject with. It does not throw: a Dart `throw` reaches JS
+  /// wrapped, with no `code` for the caller to read. `id` is peer-chosen and
+  /// takes the rejection bound: one line, at most [maxErrorMessageLength]
+  /// long. `key` is peer-chosen and crosses whole, up to the notification key
+  /// bound ([maxNotificationKeyLength]); `keyParts` carries its parsed name,
+  /// namespace, recipient, owner and flags, each bounded the same way. `from`
+  /// is the verified key owner, and `value` is the notification's payload,
+  /// delivered as received.
   @JSExport()
   JSAny subscribe([JSAny? regex, JSAny? callback, JSAny? onError]) {
     try {
@@ -437,7 +455,8 @@ class BridgeSession {
               _envelope({
                 'id': boundedRejectionText(n.id),
                 'from': n.from,
-                'key': boundedRejectionText(n.key),
+                'key': boundedKeyText(n.key),
+                'keyParts': _keyParts(n.keyParts),
                 'value': n.value,
                 'epochMillis': n.epochMillis,
                 'operation': n.operation,

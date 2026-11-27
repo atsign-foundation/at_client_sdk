@@ -5,7 +5,8 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_web/src/exceptions.dart' show maxErrorMessageLength;
+import 'package:at_client_web/src/exceptions.dart'
+    show maxErrorMessageLength, maxNotificationKeyLength;
 import 'package:at_client_web/src/js/bridge_surface.dart'
     show bridgeSurface, createOptions, envelopes, statuses;
 import 'package:test/test.dart';
@@ -65,7 +66,8 @@ void main() {
 
   test('the manifest lists the subscribe envelope fields', () {
     expect(subscribeEnvelopeFields(bridge), equals(envelopes['subscribe']));
-    expect(envelopes.keys, equals(['subscribe']),
+    expect(_keyPartsFields(bridge), equals(envelopes['keyParts']));
+    expect(envelopes.keys, equals(['keyParts', 'subscribe']),
         reason: 'a new envelope needs its own entry and a schema bump');
   });
 
@@ -74,11 +76,35 @@ void main() {
   });
 
   test('the manifest bounds match the bridge constants', () {
-    expect(generated['bounds'],
-        equals({'maxErrorMessageLength': maxErrorMessageLength}));
+    expect(
+        generated['bounds'],
+        equals({
+          'maxErrorMessageLength': maxErrorMessageLength,
+          'maxNotificationKeyLength': maxNotificationKeyLength,
+        }));
   });
 
   test('the manifest schema version is 2', () {
     expect(generated['schemaVersion'], 2);
   });
+}
+
+/// The field names of the one `_keyParts({…})` map in [source], sorted.
+List<String> _keyPartsFields(String source) {
+  final marker = source.indexOf('_keyParts(KeyParts parts)');
+  if (marker < 0) throw StateError('bridge.dart has no _keyParts map');
+  final open = source.indexOf('{', source.indexOf('=>', marker));
+  var depth = 0;
+  var close = open;
+  for (; close < source.length; close++) {
+    final char = source[close];
+    if (char == '{') depth++;
+    if (char == '}' && --depth == 0) break;
+  }
+  final fields = {
+    for (final match
+        in RegExp(r"'([^']+)'\s*:").allMatches(source.substring(open, close)))
+      match.group(1)!,
+  };
+  return fields.toList()..sort();
 }
