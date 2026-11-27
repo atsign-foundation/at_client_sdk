@@ -15,6 +15,20 @@ const ipv6CertsDirVariable = 'AT_IPV6_CERTS_DIR';
 /// The atDirectory answer the fake gives for `@alice`.
 const aliceAddress = 'alice.example:6464';
 
+/// The session id and the proof the fake's `from:` challenge carries: any
+/// lowercase RFC-4122 value, since the client checks the shape and not the
+/// value.
+const challengeUuid = '00000000-0000-4000-8000-000000000000';
+
+/// The `from:` challenge the fake issues to [atSign]: `_<uuid><atSign>:<uuid>`
+/// with [challengeUuid] in both places, as an atServer mints one.
+String fromChallenge(String atSign) => '_$challengeUuid$atSign:$challengeUuid';
+
+/// The atSign a `from:` frame names, whether or not it carries client config:
+/// `from:@alice\n` and `from:@alice:clientConfig:{...}\n` both give `@alice`.
+String atSignOf(String frame) =>
+    frame.substring('from:'.length).split(RegExp('[:\\n]')).first;
+
 /// A proxy's `/ws` and an atDirectory's `/@alice`, over TLS on a loopback
 /// port. With no message it binds 127.0.0.1 and serves the certificate in
 /// [certsDirVariable]; with the message `'drop-first-upgrade'` it does the
@@ -22,7 +36,10 @@ const aliceAddress = 'alice.example:6464';
 /// the next; with the message `'ipv6'` it binds `::1` and serves the one in
 /// [ipv6CertsDirVariable].
 ///
-/// Sends its port, answers every frame on `/ws` with `data:ok`, answers
+/// Sends its port, answers a frame on `/ws` starting with `from:` with the
+/// challenge [fromChallenge] issues to the atSign the frame names, one
+/// starting with `pkam:` with `data:success` whatever signature it carries,
+/// and every other one with `data:ok`; it answers
 /// `GET /@alice` with [aliceAddress] to any origin, and answers any message
 /// on [channel] with what it received so far: each frame, and
 /// `GET <path>` for each atDirectory request. A dropped upgrade is recorded
@@ -83,9 +100,17 @@ void hybridMain(StreamChannel channel, Object? message) async {
     }
     final socket = await WebSocketTransformer.upgrade(request);
     socket.listen((message) {
-      received
-          .add(message is String ? message : utf8.decode(message as List<int>));
-      socket.add('data:ok\n@');
+      final frame =
+          message is String ? message : utf8.decode(message as List<int>);
+      received.add(frame);
+      socket.add(switch (frame) {
+        _ when frame.startsWith('from:') =>
+          'data:${fromChallenge(atSignOf(frame))}\n@',
+        _ when frame.startsWith('pkam:') => 'data:success\n@',
+        _ when frame.startsWith('stats:') =>
+          'data:[{"id":"3","name":"lastCommitID","value":"-1"}]\n@',
+        _ => 'data:ok\n@',
+      });
     });
   }
 }
