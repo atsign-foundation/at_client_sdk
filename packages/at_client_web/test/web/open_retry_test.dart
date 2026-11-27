@@ -22,6 +22,7 @@ import '../test_utils.dart' show classicalAtKeys;
 /// needs, and set `AT_VE_CERTS_DIR` to an at_server checkout's certs folder.
 /// Without it the fake throws and the test fails, naming the variable.
 void main() {
+  // dart2js generates the RSA key below in pure Dart, which can take tens of seconds.
   test('create() tolerates one refused connection', () async {
     final proxy =
         spawnHybridUri('ve_tls_proxy_fake.dart', message: 'drop-first-upgrade');
@@ -57,5 +58,5 @@ void main() {
         reason: 'a fresh socket then served the open');
 
     await resolved(invoke(session, 'close'));
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
