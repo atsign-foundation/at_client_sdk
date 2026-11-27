@@ -80,15 +80,15 @@ Draft it for the developer, and file it only if they agree.
 Fill in each field for the developer to paste:
 
 <!-- pyml disable-num-lines 9 md013-->
-| Field              | What goes in it                                                                                             |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Package            | One of `at_client_flutter`, `at_client_cli`, `at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup`, `at_client_skills`, `other` |
-| Package version    | The resolved version, from `pubspec.lock` or `dart pub deps`                                                |
-| Platform           | `Flutter iOS`, `Flutter Android`, `Flutter macOS`, `Flutter Windows`, `Flutter Linux` or `Dart CLI / server` |
-| What happened      | What the SDK did, with any exception and its message                                                        |
-| What you expected  | What the docs or the API led the developer to expect                                                        |
-| Steps to reproduce | The smallest code that shows it                                                                             |
-| Logs               | Relevant output, with keys, secrets and personal data removed                                               |
+| Field | What goes in it |
+| --- | --- |
+| Package | One of `at_client_flutter`, `at_client_cli`, `at_client`, `at_auth`, `at_commons`, `at_chops`, `at_lookup`, `at_client_skills`, `other` |
+| Package version | The resolved version, from `pubspec.lock` or `dart pub deps` |
+| Platform | `Flutter iOS`, `Flutter Android`, `Flutter macOS`, `Flutter Windows`, `Flutter Linux` or `Dart CLI / server` |
+| What happened | What the SDK did, with any exception and its message |
+| What you expected | What the docs or the API led the developer to expect |
+| Steps to reproduce | The smallest code that shows it |
+| Logs | Relevant output, with keys, secrets and personal data removed |
 
 **Feature request** —
 <https://github.com/atsign-foundation/at_client_sdk/issues/new?template=feature_request.yml>:

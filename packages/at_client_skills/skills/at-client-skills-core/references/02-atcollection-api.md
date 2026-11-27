@@ -57,14 +57,13 @@ final pets = await atClient.collection<Pet>('pets.my_app', ttl);
 
 ## Basic Getters
 
-<!-- pyml disable-num-lines 7 md013-->
-| Getter              | Type       | Description                                  |
-| ------------------- | ---------- | -------------------------------------------- |
-| `atSign`            | `Atsign`   | The atsign this `atClient` is acting as      |
-| `self`              | `Atsign`   | Alias for `atSign` — use for ownership tests |
-| `namespace`         | `String`   | The fully-qualified namespace                |
-| `defaultExpiration` | `Duration` | Default TTL for new items                    |
-| `isSubCollection`   | `bool`     | True if created via `subCollection(parent:)` |
+| Getter | Type | Description |
+| --- | --- | --- |
+| `atSign` | `Atsign` | The atsign this `atClient` is acting as |
+| `self` | `Atsign` | Alias for `atSign` — use for ownership tests |
+| `namespace` | `String` | The fully-qualified namespace |
+| `defaultExpiration` | `Duration` | Default TTL for new items |
+| `isSubCollection` | `bool` | True if created via `subCollection(parent:)` |
 
 ---
 
@@ -75,19 +74,19 @@ The mutability column is the part that bites: three of these are meant to be
 edited in place, and two cannot be reassigned at all.
 
 <!-- pyml disable-num-lines 13 md013-->
-| Field           | Type                 | Mutable? | Notes                                                         |
-| --------------- | -------------------- | -------- | ------------------------------------------------------------- |
-| `id`            | `String`             | no       | Unique within the collection; prefixed to the namespace       |
-| `owner`         | `Atsign`             | no       | Who created it — **your ownership test** for writes           |
-| `obj`           | `T`                  | no       | `late final` — mutate its fields, never reassign `obj` itself |
-| `type`          | `String`             | no       | `late final`; the type-tag that drives rehydration            |
-| `sharedWith`    | `Set<Atsign>`        | **yes**  | Non-nullable, never null. Edit the set, then `update`         |
-| `createdAt`     | `DateTime`           | **yes**  | Set on draft; read from server metadata on rehydrate          |
-| `expiresAt`     | `DateTime`           | **yes**  | Change it, then `update`, to re-schedule the item's expiry    |
-| `availableAt`   | `DateTime?`          | **yes**  | `null` = visible immediately; set it to delay recipient copies |
-| `parentOwners`  | `List<Atsign>`       | no       | Root-to-parent owner chain; empty in a root collection        |
-| `collection`    | `AtCollection<T>`    | no       | The collection that minted it                                 |
-| `self`          | `Atsign`             | no       | The atsign you are acting as — compare against `owner`        |
+| Field | Type | Mutable? | Notes |
+| --- | --- | --- | --- |
+| `id` | `String` | no | Unique within the collection; prefixed to the namespace |
+| `owner` | `Atsign` | no | Who created it — **your ownership test** for writes |
+| `obj` | `T` | no | `late final` — mutate its fields, never reassign `obj` itself |
+| `type` | `String` | no | `late final`; the type-tag that drives rehydration |
+| `sharedWith` | `Set<Atsign>` | **yes** | Non-nullable, never null. Edit the set, then `update` |
+| `createdAt` | `DateTime` | **yes** | Set on draft; read from server metadata on rehydrate |
+| `expiresAt` | `DateTime` | **yes** | Change it, then `update`, to re-schedule the item's expiry |
+| `availableAt` | `DateTime?` | **yes** | `null` = visible immediately; set it to delay recipient copies |
+| `parentOwners` | `List<Atsign>` | no | Root-to-parent owner chain; empty in a root collection |
+| `collection` | `AtCollection<T>` | no | The collection that minted it |
+| `self` | `Atsign` | no | The atsign you are acting as — compare against `owner` |
 
 `sharedWith` is a `final` **reference** to a mutable set: `item.sharedWith.add(...)`
 then `update(item)` works, `item.sharedWith = {...}` does not compile. The same
@@ -289,16 +288,16 @@ Returns an immutable `Query<T>` builder. See [03-query-api.md](03-query-api.md).
 ## Event Streams
 
 <!-- pyml disable-num-lines 10 md013-->
-| Stream                          | Type                        | Description                           |
-| ------------------------------- | --------------------------- | ------------------------------------- |
-| `watch()`                       | `Stream<CEvent>`            | All events below                      |
-| `updates`                       | `Stream<CItemUpdated>`      | Item created or updated               |
-| `deletes`                       | `Stream<CItemDeleted>`      | Item deleted (has `wasExpired` flag)  |
-| `readReceipts`                  | `Stream<CReadReceipt>`      | Someone read your item                |
-| `subUpdates`                    | `Stream<CSubItemUpdated>`   | Any sub-item changed (has `ancestry`) |
-| `subDeletes`                    | `Stream<CSubItemDeleted>`   | Any sub-item deleted (has `ancestry`) |
-| `availableEvents`               | `Stream<CItemAvailable>`    | Item's `availableAt` has passed       |
-| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime`       |
+| Stream | Type | Description |
+| --- | --- | --- |
+| `watch()` | `Stream<CEvent>` | All events below |
+| `updates` | `Stream<CItemUpdated>` | Item created or updated |
+| `deletes` | `Stream<CItemDeleted>` | Item deleted (has `wasExpired` flag) |
+| `readReceipts` | `Stream<CReadReceipt>` | Someone read your item |
+| `subUpdates` | `Stream<CSubItemUpdated>` | Any sub-item changed (has `ancestry`) |
+| `subDeletes` | `Stream<CSubItemDeleted>` | Any sub-item deleted (has `ancestry`) |
+| `availableEvents` | `Stream<CItemAvailable>` | Item's `availableAt` has passed |
+| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime` |
 
 See [04-events-api.md](04-events-api.md) for full event class fields.
 
@@ -318,12 +317,12 @@ practical depth ceiling is **11 levels (root + 10 nested sub-collections)**.
 
 ## Key Naming (Internal, for debugging)
 
-| Item type            | Key format                                         |
-| -------------------- | -------------------------------------------------- |
-| Self copy            | `<id>.<namespace>@<atSign>`                        |
-| Recipient copy       | `<recipient>:<id>.<namespace>@<atSign>`            |
-| Cached incoming copy | `cached:<id>.<namespace>@<sender>`                 |
-| Read receipt         | `<receiptId>.__rr.<parentId>.<namespace>@<reader>` |
+| Item type | Key format |
+| --- | --- |
+| Self copy | `<id>.<namespace>@<atSign>` |
+| Recipient copy | `<recipient>:<id>.<namespace>@<atSign>` |
+| Cached incoming copy | `cached:<id>.<namespace>@<sender>` |
+| Read receipt | `<receiptId>.__rr.<parentId>.<namespace>@<reader>` |
 
 ---
 

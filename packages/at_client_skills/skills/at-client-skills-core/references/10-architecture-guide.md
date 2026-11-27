@@ -10,14 +10,14 @@ Both patterns are valid and complementary — a single app can use both at once.
 ## Decision Table
 
 <!-- pyml disable-num-lines 9 md013-->
-| Criterion            | Use `AtCollection<T>`                            | Use Notifications + SQLite                   |
-| -------------------- | ------------------------------------------------ | -------------------------------------------- |
-| **Data shape**       | Discrete typed records                           | High-frequency telemetry / event streams     |
-| **Persistence**      | Synced to atServer; available across devices     | Local only; accumulated from notifications   |
-| **Sharing model**    | Per-item, shared with named atsigns              | One publisher → many subscribers             |
-| **Query needs**      | Rich queries, reactive watches, sub-collections  | Time-window aggregates, GROUP BY, charting   |
-| **Volume**           | Low–medium (hundreds to thousands of items)      | High (per-second metrics, logs, traces)      |
-| **Sync requirement** | Yes — SyncService keeps devices consistent       | No — notifications are fire-and-forget       |
+| Criterion | Use `AtCollection<T>` | Use Notifications + SQLite |
+| --- | --- | --- |
+| **Data shape** | Discrete typed records | High-frequency telemetry / event streams |
+| **Persistence** | Synced to atServer; available across devices | Local only; accumulated from notifications |
+| **Sharing model** | Per-item, shared with named atsigns | One publisher → many subscribers |
+| **Query needs** | Rich queries, reactive watches, sub-collections | Time-window aggregates, GROUP BY, charting |
+| **Volume** | Low–medium (hundreds to thousands of items) | High (per-second metrics, logs, traces) |
+| **Sync requirement** | Yes — SyncService keeps devices consistent | No — notifications are fire-and-forget |
 | **Primary examples** | Todos, contacts, notes, documents, chat messages | Docker stats dashboard, analytics, telemetry |
 
 ---

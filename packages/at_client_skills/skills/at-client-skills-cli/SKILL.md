@@ -70,11 +70,11 @@ directory, verbose, `--never-sync`, and more.
 throws:
 
 <!-- pyml disable-num-lines 6 md013-->
-| Exception                              | Means                                       | Retry?        |
-| -------------------------------------- | ------------------------------------------- | ------------- |
-| `AtCredentialRefusedException`         | the atServer refused the keys               | no — a person |
-| `SecondaryNotFoundException`           | the atDirectory has no atServer for the atsign | no — a person |
-| `SecondaryServerConnectivityException` | the atServer was not reached in time        | yes           |
+| Exception | Means | Retry? |
+| --- | --- | --- |
+| `AtCredentialRefusedException` | the atServer refused the keys | no — a person |
+| `SecondaryNotFoundException` | the atDirectory has no atServer for the atsign | no — a person |
+| `SecondaryServerConnectivityException` | the atServer was not reached in time | yes |
 | `FormatException` (`ArgParserException`) | a flag is missing or malformed, before anything connects | no — print the usage and exit |
 
 It can also throw what opening a client throws, such as
@@ -162,11 +162,11 @@ agent.
 ## 7. Several instances of one agent
 
 <!-- pyml disable-num-lines 5 md013-->
-| Instances…                         | Pattern                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| Keep state / use collections       | A server mutex per task: `atClient.tryAcquireServerMutex(key, ttl: …)` |
-| Stateless request/response workers | No-op sync + remote operations                                          |
-| N instances of one `AtRpc` server  | `AtRpc.server(enableRequestMutex: true)`                                |
+| Instances… | Pattern |
+| --- | --- |
+| Keep state / use collections | A server mutex per task: `atClient.tryAcquireServerMutex(key, ttl: …)` |
+| Stateless request/response workers | No-op sync + remote operations |
+| N instances of one `AtRpc` server | `AtRpc.server(enableRequestMutex: true)` |
 
 - `tryAcquireServerMutex` returns null when another instance holds the lock,
   and throws any other failure. It needs an atServer from p3.13.0.

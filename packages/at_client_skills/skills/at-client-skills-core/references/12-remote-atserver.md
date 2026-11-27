@@ -119,12 +119,12 @@ preference or option says.
 ## When to reach for remote operations
 
 <!-- pyml disable-num-lines 7 md013-->
-| Situation                                             | Use                                                                                     |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Ordinary app data (todos, notes, shares)              | **Default** — local write, background sync                                              |
-| Cross-process coordination / mutex keys               | `put` + `useRemoteAtServer = true`                                                      |
-| Read-your-write right after a remote write            | `get` + `useRemoteAtServer = true`                                                      |
-| Cached copy of another atsign's key looks stale       | `get` + `bypassCache = true`                                                            |
+| Situation | Use |
+| --- | --- |
+| Ordinary app data (todos, notes, shares) | **Default** — local write, background sync |
+| Cross-process coordination / mutex keys | `put` + `useRemoteAtServer = true` |
+| Read-your-write right after a remote write | `get` + `useRemoteAtServer = true` |
+| Cached copy of another atsign's key looks stale | `get` + `bypassCache = true` |
 | Stateless / horizontally-scaled instance with no sync | `remoteLocalPref = remoteOnly` client-wide (see the at-client-skills-cli skill) |
 
 > Remote operations trade offline-tolerance and speed for immediacy. They open
@@ -191,7 +191,7 @@ collection operations follow whatever the _client_ is configured to do:
 - `remoteLocalPref = remoteOnly`: every collection op (like everything else on
   that client) runs against the remote atServer.
 
-What you cannot do is flip a *single* collection call to remote. Two kinds of
+What you cannot do is flip a _single_ collection call to remote. Two kinds of
 key justify dropping below `AtCollection` to raw `put`/`get`:
 
 1. **Infrastructure keys** needing per-operation control — cross-process

@@ -7,11 +7,11 @@ broadcast-style streams. There are two sources of events (controlled by
 `EventSource` at collection creation):
 
 <!-- pyml disable-num-lines 5 md013-->
-| `EventSource`        | What fires events                                                                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EventSource.data`   | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
-| `EventSource.notifs` | Cross-atsign writes received via `NotificationService` — locally-driven writes are NOT visible                                               |
-| `EventSource.both`   | Both sources; the same cross-atsign write can fire **twice** (no dedup); default                                                             |
+| `EventSource` | What fires events |
+| --- | --- |
+| `EventSource.data` | All local keystore mutations via `AtClient.dataEvents` — locally-driven writes AND TTL expiry deletions AND sync-applied cross-atsign writes |
+| `EventSource.notifs` | Cross-atsign writes received via `NotificationService` — locally-driven writes are NOT visible |
+| `EventSource.both` | Both sources; the same cross-atsign write can fire **twice** (no dedup); default |
 
 ---
 
@@ -152,15 +152,15 @@ All events. Useful for debugging or aggregate reacting.
 ### Typed streams (prefer these in production code)
 
 <!-- pyml disable-num-lines 9 md013-->
-| Getter / Method                 | Stream type                 | Fires when                                   |
-| ------------------------------- | --------------------------- | -------------------------------------------- |
-| `updates`                       | `Stream<CItemUpdated>`      | Any L0 item created or updated               |
-| `deletes`                       | `Stream<CItemDeleted>`      | Any L0 item deleted (TTL or explicit)        |
-| `readReceipts`                  | `Stream<CReadReceipt>`      | A recipient marks my item as read            |
-| `subUpdates`                    | `Stream<CSubItemUpdated>`   | Any descendant item created or updated       |
-| `subDeletes`                    | `Stream<CSubItemDeleted>`   | Any descendant item deleted                  |
-| `availableEvents`               | `Stream<CItemAvailable>`    | Lazy-started scheduler; `availableAt` passed |
-| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime`              |
+| Getter / Method | Stream type | Fires when |
+| --- | --- | --- |
+| `updates` | `Stream<CItemUpdated>` | Any L0 item created or updated |
+| `deletes` | `Stream<CItemDeleted>` | Any L0 item deleted (TTL or explicit) |
+| `readReceipts` | `Stream<CReadReceipt>` | A recipient marks my item as read |
+| `subUpdates` | `Stream<CSubItemUpdated>` | Any descendant item created or updated |
+| `subDeletes` | `Stream<CSubItemDeleted>` | Any descendant item deleted |
+| `availableEvents` | `Stream<CItemAvailable>` | Lazy-started scheduler; `availableAt` passed |
+| `expiringSoonEvents(leadTime:)` | `Stream<CItemExpiringSoon>` | Item expiring within `leadTime` |
 
 **Getters vs methods:**  
 Parameterless event surfaces are **getters** (`updates`, `deletes`, etc.).  

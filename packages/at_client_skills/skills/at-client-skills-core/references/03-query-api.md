@@ -243,7 +243,7 @@ abstract class $Todo {
 ### PathField operators
 
 | Operator | Available on | Returns |
-| ---------- | ------------- | --------- |
+| --- | --- | --- |
 | `.eq(value)` | All `PathField<V>` | `Predicate` |
 | `.neq(value)` | All `PathField<V>` | `Predicate` |
 | `.lt(value)` | `PathField<V extends Comparable>` | `Predicate` |

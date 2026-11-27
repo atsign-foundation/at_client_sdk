@@ -6,7 +6,7 @@ bad error handling here comes from catching the wrong one.
 
 <!-- pyml disable-num-lines 5 md013-->
 | Family | Examples | Means | Do |
-| ------ | -------- | ----- | -- |
+| --- | --- | --- | --- |
 | Dart core errors | `ArgumentError`, `StateError`, `LateInitializationError` | **Your bug** — the call was invalid | Fix the call; don't catch |
 | `AtException` + subtypes | `AtKeyException`, `AtConnectException`, `AtDecryptionException` | Runtime or environmental | Catch and handle |
 | Outside the `AtException` tree | `CollectionOpException`, `StoppedException`, `TimeoutException` (`dart:async`) | Real runtime conditions that `on AtException` will **not** catch | Catch explicitly |
@@ -37,7 +37,7 @@ code is wrong rather than the environment:
 
 <!-- pyml disable-num-lines 4 md013-->
 | Thrown | Cause |
-| ------ | ----- |
+| --- | --- |
 | `ArgumentError` | namespace without a `.`; `update`/`delete` on an item you don't own |
 | `StateError` | `create` with an id that already exists; `delete` on an item that still has sub-items |
 

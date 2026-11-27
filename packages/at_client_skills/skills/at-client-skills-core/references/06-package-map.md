@@ -13,10 +13,10 @@ An app depends on **one platform package** and imports only from it (its
 barrel, and any helper library its platform skill names):
 
 <!-- pyml disable-num-lines 4 md013-->
-| App                                     | Add                 | Import                                             |
-| --------------------------------------- | ------------------- | -------------------------------------------------- |
-| Dart CLI, daemon, server, Dart on IoT   | `at_client_cli`     | `package:at_client_cli/at_client_cli.dart`         |
-| Flutter (mobile, desktop, embedded)     | `at_client_flutter` | `package:at_client_flutter/at_client_flutter.dart` |
+| App | Add | Import |
+| --- | --- | --- |
+| Dart CLI, daemon, server, Dart on IoT | `at_client_cli` | `package:at_client_cli/at_client_cli.dart` |
+| Flutter (mobile, desktop, embedded) | `at_client_flutter` | `package:at_client_flutter/at_client_flutter.dart` |
 
 Each re-exports at_client's API — `AtClient`, `AtCollection<T>`, `CItem<T>`,
 `Query<T>`, `NotificationService`, `SyncService`, the `Atsign` verbs — with
@@ -199,7 +199,7 @@ These packages are still published but are in the process of being deprecated.
 Their functionality will eventually move into example application code.
 
 | Package | In-migration status |
-| --------- | ------------------- |
+| --- | --- |
 | `at_chat_flutter` | Migration in progress |
 | `at_contacts_flutter` | Migration in progress |
 | `at_contacts_group_flutter` | Migration in progress |

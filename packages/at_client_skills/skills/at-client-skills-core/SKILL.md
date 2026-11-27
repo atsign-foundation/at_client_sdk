@@ -95,10 +95,10 @@ everything that differs by platform (storage, transport, keys, logging).
 Install with `dart pub add` — it resolves the latest compatible version:
 
 <!-- pyml disable-num-lines 4 md013-->
-| App                              | Add and import                                                  |
-| -------------------------------- | --------------------------------------------------------------- |
-| Dart CLI / daemon / server / IoT | `at_client_cli` — `package:at_client_cli/at_client_cli.dart`         |
-| Flutter app                      | `at_client_flutter` — `package:at_client_flutter/at_client_flutter.dart` |
+| App | Add and import |
+| --- | --- |
+| Dart CLI / daemon / server / IoT | `at_client_cli` — `package:at_client_cli/at_client_cli.dart` |
+| Flutter app | `at_client_flutter` — `package:at_client_flutter/at_client_flutter.dart` |
 
 A project with both Flutter apps and headless agents is two packages: the apps
 on `at_client_flutter`, the agents in a pure-Dart package on `at_client_cli`.
@@ -410,12 +410,12 @@ service lifecycles, enrollment approval and the shutdown checklist.
 ## 10. Architecture: AtCollection vs Notifications+SQLite
 
 <!-- pyml disable-num-lines 6 md013-->
-|                 | `AtCollection<T>`               | Notifications + SQLite            |
-| --------------- | ------------------------------- | --------------------------------- |
-| **Data shape**  | Typed records, discrete items   | High-frequency events / telemetry |
-| **Persistence** | Synced via atServer             | Local-only, from notifications    |
-| **Volume**      | Low-medium (hundreds-thousands) | High (per-second metrics, logs)   |
-| **Example**     | Todos, notes, contacts          | Live dashboard, analytics         |
+| | `AtCollection<T>` | Notifications + SQLite |
+| --- | --- | --- |
+| **Data shape** | Typed records, discrete items | High-frequency events / telemetry |
+| **Persistence** | Synced via atServer | Local-only, from notifications |
+| **Volume** | Low-medium (hundreds-thousands) | High (per-second metrics, logs) |
+| **Example** | Todos, notes, contacts | Live dashboard, analytics |
 
 ```dart
 // Send — returns the notification id; body is usually JSON
@@ -555,17 +555,17 @@ Removed in at_client 4.0 — code using these no longer compiles. To move a
 whole app off at_client 3.x, follow the [upgrade guide][upgrade-guide].
 
 <!-- pyml disable-num-lines 11 md013-->
-| Avoid                                                              | Use instead                                                 |
-| ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `AtCollectionModel` / `AtJsonCollectionModel`                      | `AtCollection<T>` via `atClient.collection(...)`            |
-| `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)`    | `Atsign(a).open(...)` (§9)                                  |
-| `atClient.notify(...)`, `notifyChange(...)`, `notifyAll(...)`      | `notificationService.notify(...)`, once per recipient       |
-| `atClient.startMonitor(...)`                                       | `notificationService.subscribe(...)`                        |
-| `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService`         |
-| `notificationService.send(namespace: ...)`                         | `send(idAndNamespace: ...)`                                 |
+| Avoid | Use instead |
+| --- | --- |
+| `AtCollectionModel` / `AtJsonCollectionModel` | `AtCollection<T>` via `atClient.collection(...)` |
+| `AtClientManager.setCurrentAtSign(...)`, `fromAuthSession(...)` | `Atsign(a).open(...)` (§9) |
+| `atClient.notify(...)`, `notifyChange(...)`, `notifyAll(...)` | `notificationService.notify(...)`, once per recipient |
+| `atClient.startMonitor(...)` | `notificationService.subscribe(...)` |
+| `AtClientManager.getInstance().syncService`, `.notificationService` | `client.syncService`, `client.notificationService` |
+| `notificationService.send(namespace: ...)` | `send(idAndNamespace: ...)` |
 | `uploadFile`, `downloadFile`, `shareFiles`, `atClient.stream(...)` | `put` or `notify` the value; file transfer belongs in the app |
-| `AtClient.atChops`; the `atChops:` and `isDedicated:` parameters   | Delete them                                                 |
-| Importing `at_auth`, `at_onboarding_cli`, `at_cli_commons` in an app | The platform package                                      |
+| `AtClient.atChops`; the `atChops:` and `isDedicated:` parameters | Delete them |
+| Importing `at_auth`, `at_onboarding_cli`, `at_cli_commons` in an app | The platform package |
 
 Read [references/01-deprecation-guide.md](references/01-deprecation-guide.md)
 for every removed API and its replacement, and

@@ -15,11 +15,11 @@ deployed on legacy.
 ## The postures
 
 <!-- pyml disable-num-lines 5 md013-->
-| Posture                          | Writes                                  | Reads post-quantum data | Needs                                                                       |
-| -------------------------------- | --------------------------------------- | ----------------------- | --------------------------------------------------------------------------- |
-| `PqPosture.legacy` (the default) | legacy encryption                       | no                      | nothing new                                                                 |
-| `PqPosture.pqReady`              | legacy, so every peer can read it       | yes                     | an atServer that verifies ML-DSA-65 signatures                              |
-| `PqPosture.pqActive`             | post-quantum; a legacy write is refused | yes                     | every client of its namespaces on `pqReady` or later first; `namespace` set |
+| Posture | Writes | Reads post-quantum data | Needs |
+| --- | --- | --- | --- |
+| `PqPosture.legacy` (the default) | legacy encryption | no | nothing new |
+| `PqPosture.pqReady` | legacy, so every peer can read it | yes | an atServer that verifies ML-DSA-65 signatures |
+| `PqPosture.pqActive` | post-quantum; a legacy write is refused | yes | every client of its namespaces on `pqReady` or later first; `namespace` set |
 
 The at_client README's "Post-quantum cryptography" section has the full
 ladder and what each stage switches on.

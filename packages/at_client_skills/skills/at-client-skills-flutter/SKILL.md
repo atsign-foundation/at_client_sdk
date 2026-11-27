@@ -51,12 +51,12 @@ it: `dart run skills get --skill at-client-skills-core`.
 ## 2. Signing in: four flows, four dialogs
 
 <!-- pyml disable-num-lines 6 md013-->
-| Flow | When                                        | Dialogs                                            |
-| ---- | ------------------------------------------- | -------------------------------------------------- |
-| 1    | A new atsign, first time (CRAM)             | `RegistrarCramDialog` for the secret, `CramDialog` |
-| 2    | An existing `.atKeys` file                  | `AtKeysFileDialog`, then `PkamDialog`              |
-| 3    | A returning user, keys in the keychain      | `AtSignSelectionDialog`, then `PkamDialog`         |
-| 4    | A new device for an existing atsign (APKAM) | `ApkamActivationDialog`                            |
+| Flow | When | Dialogs |
+| --- | --- | --- |
+| 1 | A new atsign, first time (CRAM) | `RegistrarCramDialog` for the secret, `CramDialog` |
+| 2 | An existing `.atKeys` file | `AtKeysFileDialog`, then `PkamDialog` |
+| 3 | A returning user, keys in the keychain | `AtSignSelectionDialog`, then `PkamDialog` |
+| 4 | A new device for an existing atsign (APKAM) | `ApkamActivationDialog` |
 
 Every dialog hands back the **`AtClient` it opened** (`null` means the user
 cancelled or the dialog failed), and the app owns it: it uses it, makes it

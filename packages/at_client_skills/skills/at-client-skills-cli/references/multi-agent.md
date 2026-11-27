@@ -173,12 +173,11 @@ final client = await Atsign(atSign).open(
 > the remote-atServer reference in at-client-skills-core): with sync disabled, a
 > default local write would never leave the machine.
 
-<!-- pyml disable-num-lines 5 md013-->
-| Instances…                          | Pattern                                    |
-| ----------------------------------- | ------------------------------------------ |
-| Keep state / use collections        | 1 — a server mutex per task                |
-| Stateless request/response workers  | 2 — no-op sync + remote ops                |
-| N instances of one `AtRpc` server   | `enableRequestMutex: true` (packaged 1)    |
+| Instances… | Pattern |
+| --- | --- |
+| Keep state / use collections | 1 — a server mutex per task |
+| Stateless request/response workers | 2 — no-op sync + remote ops |
+| N instances of one `AtRpc` server | `enableRequestMutex: true` (packaged 1) |
 
 ---
 

@@ -264,7 +264,7 @@ The SDK's own test suite demonstrates every pattern in detail:
 
 <!-- pyml disable-num-lines 7 md013-->
 | File | What it covers |
-| ------ | ---------------- |
+| --- | --- |
 | `packages/at_client/test/at_collections_test.dart` | Core CRUD, factory registry, draft, basic events via `EventSource.notifs` |
 | `packages/at_client/test/at_collections_query_test.dart` | `Query<T>` builder, `where`, `orderBy`, `watch`, `watchWithSub` |
 | `packages/at_client/test/at_collections_data_events_test.dart` | `EventSource.data` path, local write → event |

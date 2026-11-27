@@ -8,12 +8,11 @@ from `package:at_client/at_client.dart`, and so from both platform packages.
 
 **When to use RPC vs the alternatives:**
 
-<!-- pyml disable-num-lines 5 md013-->
-| You need…                                     | Use                                  |
-| --------------------------------------------- | ------------------------------------ |
-| Shared, persistent, typed app data            | `AtCollection<T>` (the default)      |
-| Fire-and-forget events / telemetry            | `NotificationService` send/subscribe |
-| "Call another atsign and get an answer back"  | **AtRpc / AtRpcClient**              |
+| You need… | Use |
+| --- | --- |
+| Shared, persistent, typed app data | `AtCollection<T>` (the default) |
+| Fire-and-forget events / telemetry | `NotificationService` send/subscribe |
+| "Call another atsign and get an answer back" | **AtRpc / AtRpcClient** |
 
 RPC is for *actions and queries* ("plan this route", "what is your status?"),
 not for *data* — results worth keeping should be written to an `AtCollection`

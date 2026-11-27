@@ -83,20 +83,20 @@ connect attempt waits before the client comes back offline, 5 s by default).
 **What can refuse:**
 
 <!-- pyml disable-num-lines 14 md013-->
-| Thrown                          | When                                                                                                     | Do                                                            |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `AtOpenRefusedException`        | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve                        |
-| `AtEnrollmentPendingException`  | The keys hold only an enrollment awaiting approval                                                       | `resumeEnrollment`                                            |
-| `AtEnrollmentPendingException`  | `resumeEnrollment` found several pending enrollments matching what it was given                          | Name both `app` and `device`                                  |
-| `AtNoCredentialException`       | The keys hold no credential and no request: a denial, a cancel or an expiry left them so                 | Enroll again                                                  |
-| `AtStorageInUseException`       | Another process holds the Hive store at this location open                                               | Give each process a location of its own                       |
-| `StateError` "already live"     | A client for this atSign as the same enrollment, or on the same storage, is live in this process         | `stop()` it first; another enrollment opens beside it         |
-| `AtEnrollmentException`         | `pending.client(...)`: the request was denied, or expired; its pending keys are removed                  | Tell the user; a new `enroll` is a new request                |
-| `AtEnrollmentException`         | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet"; the request is kept | Show the message; wait again with `resumeEnrollment`, or `cancel()` |
-| Any other error                 | `pending.client(...)`: the request was approved, but its keys could not be collected; the request is kept | Wait again with `resumeEnrollment` before a person considers `cancel()` |
-| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()`                              | Nothing; the pending keys are gone                            |
-| `StoppedException`              | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()`                                | `resumeEnrollment` later; the request is kept                 |
-| `AtCredentialRefusedException`  | `authenticatesAs(...)`: the atServer refused the keys                                                    | Show the cause                                                |
+| Thrown | When | Do |
+| --- | --- | --- |
+| `AtOpenRefusedException` | The first open of these keys on this device, and the atServer refused them (or the atDirectory has none) | Show the cause; nothing local to serve |
+| `AtEnrollmentPendingException` | The keys hold only an enrollment awaiting approval | `resumeEnrollment` |
+| `AtEnrollmentPendingException` | `resumeEnrollment` found several pending enrollments matching what it was given | Name both `app` and `device` |
+| `AtNoCredentialException` | The keys hold no credential and no request: a denial, a cancel or an expiry left them so | Enroll again |
+| `AtStorageInUseException` | Another process holds the Hive store at this location open | Give each process a location of its own |
+| `StateError` "already live" | A client for this atSign as the same enrollment, or on the same storage, is live in this process | `stop()` it first; another enrollment opens beside it |
+| `AtEnrollmentException` | `pending.client(...)`: the request was denied, or expired; its pending keys are removed | Tell the user; a new `enroll` is a new request |
+| `AtEnrollmentException` | `pending.client(...)`: the atServer kept answering the wait with neither a decision nor "not yet"; the request is kept | Show the message; wait again with `resumeEnrollment`, or `cancel()` |
+| Any other error | `pending.client(...)`: the request was approved, but its keys could not be collected; the request is kept | Wait again with `resumeEnrollment` before a person considers `cancel()` |
+| `AtEnrollmentCancelledException` | `pending.client(...)` or `awaitApproval`: the app called `pending.cancel()` | Nothing; the pending keys are gone |
+| `StoppedException` | `pending.client(...)` or `awaitApproval`: the app called `pending.stop()` | `resumeEnrollment` later; the request is kept |
+| `AtCredentialRefusedException` | `authenticatesAs(...)`: the atServer refused the keys | Show the cause |
 
 ---
 
@@ -189,13 +189,13 @@ await client.connection.awaitOnline(budget: const Duration(seconds: 30),
 ```
 
 <!-- pyml disable-num-lines 8 md013-->
-| Outcome   | Cause                                                             | Meaning                                                                                |
-| --------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `online`  | —                                                                 | Connected and the atServer accepted the keys                                           |
-| `offline` | `unattempted`                                                     | Nothing has tried yet                                                                  |
-| `offline` | `unreachable`                                                     | No network, or the atDirectory / atServer did not answer; local store served           |
-| `offline` | `noAtServer`                                                      | The atDirectory answered: this atSign has no atServer (not activated, or reset)        |
-| `offline` | `stopped`                                                         | `stop()` ran; the last change emitted                                                  |
+| Outcome | Cause | Meaning |
+| --- | --- | --- |
+| `online` | — | Connected and the atServer accepted the keys |
+| `offline` | `unattempted` | Nothing has tried yet |
+| `offline` | `unreachable` | No network, or the atDirectory / atServer did not answer; local store served |
+| `offline` | `noAtServer` | The atDirectory answered: this atSign has no atServer (not activated, or reset) |
+| `offline` | `stopped` | `stop()` ran; the last change emitted |
 | `refused` | `revoked`, `unauthenticated`, `invalidEnrollment`, `enrollmentNotApproved`, `enrollmentDenied`, `otherRefusal` | The atServer rejected the keys; revocation landing mid-life arrives here too |
 
 Every verb the client runs on its own connection keeps the state current, so
@@ -362,13 +362,13 @@ its id, and an approval screen that does not display the rest is asking someone
 to consent to nothing in particular:
 
 <!-- pyml disable-num-lines 7 md013-->
-| Field        | Type                   | What it tells the approver              |
-| ------------ | ---------------------- | ---------------------------------------- |
-| `enrollmentId` | `String?`            | The handle for `approve` / `deny`        |
-| `appName`    | `String?`              | Which app is asking                      |
-| `deviceName` | `String?`              | Which device it is running on            |
-| `namespace`  | `Map<String, dynamic>?` | The access requested, `{namespace: 'rw'}` — despite the singular name |
-| `status`     | `String?`              | The approval state the atServer holds    |
+| Field | Type | What it tells the approver |
+| --- | --- | --- |
+| `enrollmentId` | `String?` | The handle for `approve` / `deny` |
+| `appName` | `String?` | Which app is asking |
+| `deviceName` | `String?` | Which device it is running on |
+| `namespace` | `Map<String, dynamic>?` | The access requested, `{namespace: 'rw'}` — despite the singular name |
+| `status` | `String?` | The approval state the atServer holds |
 
 `namespace` is the one to read closely: it is what the device will be able to
 reach, and it is the whole point of the decision. An enrolment asking for
