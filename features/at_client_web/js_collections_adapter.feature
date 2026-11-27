@@ -33,10 +33,14 @@ Feature: The JS collections adapter translates onto AtCollection
   #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
   #   A peer cannot make a transient failure look like corrupt data, because a
   #   transport failure fails the listing: "a listing whose read fails in transit rejects
-  #   COLLECTION_FAILED".
+  #   COLLECTION_FAILED". A remove deletes by id only for an item whose own
+  #   read reports it undecodable, and never for a transient failure, so a
+  #   corrupt value is the only thing that triggers a delete: "an unreadable
+  #   own item can be removed".
   # Impersonation: a write to an item another atSign owns is refused before any
   #   key is written: "An update, share or remove of another owner's item rejects
-  #   with COLLECTION_ITEM_NOT_OWNER".
+  #   with COLLECTION_ITEM_NOT_OWNER". An unreadable item is no exception: "an
+  #   unreadable item owned by another atSign cannot be removed".
 
   Scenario: An open passes namespace, expiration, type and eventSource through unchanged
     Given a client
@@ -223,6 +227,17 @@ Feature: The JS collections adapter translates onto AtCollection
     Given an item with a sub-item
     When the adapter removes it without cascade, then with cascade
     Then the first rejects with COLLECTION_ITEM_HAS_SUB_ITEMS and the second removes both
+
+  Scenario: an unreadable own item can be removed
+    Given @alice's own item "u1" stored as "not json"
+    When the adapter removes "u1" owned by @alice
+    Then the remove resolves and the stored key is gone
+    And a remove of that item with a sub-item and cascade false rejects with COLLECTION_ITEM_HAS_SUB_ITEMS
+
+  Scenario: an unreadable item owned by another atSign cannot be removed
+    Given @bob shares an unreadable "b1" with @alice
+    When @alice's adapter removes "b1" owned by @bob
+    Then the remove rejects with COLLECTION_ITEM_NOT_OWNER and the record is kept
 
   Scenario: Each where operator maps onto wherePath over nested and missing paths
     Given items with flat, nested, null and missing values

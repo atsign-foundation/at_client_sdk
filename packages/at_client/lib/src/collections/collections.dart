@@ -1290,7 +1290,30 @@ interface class AtCollection<T> {
   /// If [cascade] is true, every self-owned descendant (at any depth) is
   /// deleted before [item] itself.
   Future<void> delete(CItem<T> item, {bool cascade = false}) async {
-    final results = await _delete(item, cascade: cascade);
+    final results = await _delete(item.id, item.owner, cascade: cascade);
+    if (results.any((r) => r is OpFailure)) {
+      throw CollectionOpException<T>(results);
+    }
+    await _awaitLocalEmissions();
+  }
+
+  /// Deletes the item stored under [id] in this collection, owned by this
+  /// atSign, and every one of its recipient copies. Throws
+  /// [CollectionOpException] on any key-level failure.
+  ///
+  /// The counterpart of [delete] for an item this device cannot read, whose
+  /// [CItem] cannot be built: the delete is addressed by [id] alone, so an
+  /// undecodable stored record is still removable. The bookkeeping is
+  /// [delete]'s — the [cascade] refusal while self-owned descendants exist,
+  /// the seen-id cache eviction, the [CItemDeleted] event and the ancestors'
+  /// [CSubItemDeleted] events.
+  ///
+  /// [id] is folded to lower case. Throws [ArgumentError] before any read
+  /// when [id] is empty or contains `.`, `:`, `@`, whitespace or a control
+  /// character. Nothing is deleted, and nothing fails, when no such item
+  /// exists.
+  Future<void> deleteById(String id, {bool cascade = false}) async {
+    final results = await _delete(_foldedId(id), atSign, cascade: cascade);
     if (results.any((r) => r is OpFailure)) {
       throw CollectionOpException<T>(results);
     }
@@ -2966,7 +2989,7 @@ interface class AtCollection<T> {
   /// CSubItemDeleted has fully-populated ancestor owners. Apps that
   /// hand-listen to deletes can take advantage; apps that
   /// match-on-id-only continue to work unchanged.
-  void _emitAncestorSubDeleted(CItem<T> item) {
+  void _emitAncestorSubDeleted(Atsign owner, String id) {
     if (_parentItem == null) return;
     final links = <CAncestor>[
       CAncestor(
@@ -2978,8 +3001,8 @@ interface class AtCollection<T> {
     AtCollection<dynamic>? cursor = _parentCollection;
     while (cursor != null) {
       cursor._emit(CSubItemDeleted(
-        owner: item.owner,
-        id: item.id,
+        owner: owner,
+        id: id,
         ancestry: links.reversed.toList(),
       ));
       if (cursor._parentItem == null) break;
@@ -3595,15 +3618,19 @@ interface class AtCollection<T> {
     return results;
   }
 
-  /// Deletes [item] and its recipient copies; if [cascade] is true also
-  /// deletes self-owned descendants. Never throws on key-level failure —
-  /// [delete] wraps this and raises [CollectionOpException] if any op
-  /// failed.
+  /// Deletes the item [id] owned by [owner] and its recipient copies; if
+  /// [cascade] is true also deletes self-owned descendants. Never throws on
+  /// key-level failure — [delete] and [deleteById] wrap this and raise
+  /// [CollectionOpException] if any op failed.
+  ///
+  /// Keyed by `(id, owner)` rather than by a [CItem] so an item whose stored
+  /// value cannot be decoded, and so has no [CItem], can still be deleted.
   Future<List<OpResult>> _delete(
-    CItem<T> item, {
+    String id,
+    Atsign owner, {
     bool cascade = false,
   }) async {
-    if (item.owner != atSign) {
+    if (owner != atSign) {
       throw ArgumentError('You may not delete items owned by other atSigns');
     }
 
@@ -3614,13 +3641,13 @@ interface class AtCollection<T> {
     // sub-items on a DIFFERENT-owner's same-id parent) are rejected.
     final expectedChainPrefix = <Atsign>[..._expectedAncestorOwners(), self];
     final descendants = await _selfOwnedDescendantKeysFiltered(
-      item.id,
+      id,
       expectedChainPrefix,
     );
     if (descendants.isNotEmpty && !cascade) {
       throw StateError(
-        'Cannot delete item ${item.id}: ${descendants.length} self-owned '
-        'descendant(s) still exist. Call delete(item, cascade: true) to '
+        'Cannot delete item $id: ${descendants.length} self-owned '
+        'descendant(s) still exist. Call it again with cascade: true to '
         'also remove them, or delete them explicitly first.',
       );
     }
@@ -3637,7 +3664,7 @@ interface class AtCollection<T> {
         }
       }
     }
-    for (final k in await _getKeysInternal(id: item.id, owner: atSign)) {
+    for (final k in await _getKeysInternal(id: id, owner: atSign)) {
       try {
         await atClient.delete(k);
         results.add(OpSuccess(k, CollectionOp.delete));
@@ -3647,9 +3674,9 @@ interface class AtCollection<T> {
         // create()/update() probes correctly. Same gate fires the
         // local CEvent emission — see [_put] for the rationale.
         if (k.sharedWith == null) {
-          _seenSelfIds.remove(item.id);
-          _emit(CItemDeleted(owner: item.owner, id: item.id));
-          _emitAncestorSubDeleted(item);
+          _seenSelfIds.remove(id);
+          _emit(CItemDeleted(owner: owner, id: id));
+          _emitAncestorSubDeleted(owner, id);
         }
       } catch (e) {
         if (e is StoppedException) rethrow;

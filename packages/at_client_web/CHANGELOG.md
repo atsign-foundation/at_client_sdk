@@ -1,5 +1,6 @@
 ## Unreleased
 
+- A collection `remove` of an own item whose stored value cannot be decoded deletes it by id instead of rejecting `COLLECTION_ITEM_UNREADABLE`; an unreadable item of another atSign still rejects `COLLECTION_ITEM_NOT_OWNER`.
 - A collection listing or get whose read fails in transit rejects `COLLECTION_FAILED` instead of reporting the record unreadable, so a timeout or an unreachable atServer never becomes a `COLLECTION_ITEM_UNREADABLE` entry.
 
 - `notify` remembers the notification id it mints before sending, so an echo that arrives before the send reports the id is still dropped; its final-status wait is bounded by the network default (30 s), and a send still queued when that runs out resolves false while keeping its id, so a late echo is dropped too. An undelivered send, and a send that throws, forget the id and prune, and a connection lost while reading the final status rejects `offline`, while a refusal from an atServer that answered reaches the caller unchanged.

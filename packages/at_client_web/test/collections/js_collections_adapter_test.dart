@@ -1100,6 +1100,53 @@ void main() {
       expect(await notes.getItems(), isEmpty);
     });
 
+    test('an unreadable own item can be removed', () async {
+      final todos = await open();
+      await todos.create({'title': 'x'}, id: 'u1');
+      final raw = rawCollection(alice, _ns, writeTypeTag: 'Todo');
+      final notes = raw.subCollection<Map<String, dynamic>>(
+        parent: await raw.get('u1', alice.atSign),
+        subName: 'notes',
+        defaultExpiration: _day,
+        writeTypeTag: 'Note',
+      );
+      await notes.create(obj: {'text': 'child'}, id: 'n1');
+      await todos.create({'title': 'y'}, id: 'u2');
+      // As another client would leave them: the two items undecodable, the
+      // sub-item still readable.
+      server.overwriteValues(
+          (key) => '$key' == 'u1.$_ns@alice' || '$key' == 'u2.$_ns@alice',
+          'not json');
+
+      await expectLater(
+        todos.remove(mine('u1')),
+        _rejectsWith(CollectionFailure.hasSubItems, id: 'u1', owner: '@alice'),
+      );
+      expect(server.hasKey('u1.$_ns@alice'), isTrue);
+
+      await todos.remove(mine('u1'), cascade: true);
+
+      expect(server.hasKey('u1.$_ns@alice'), isFalse);
+      expect(await notes.getItems(), isEmpty);
+
+      await todos.remove(mine('u2'));
+
+      expect(server.hasKey('u2.$_ns@alice'), isFalse);
+      expect(await raw.getItems(), isEmpty);
+    });
+
+    test('an unreadable item owned by another atSign cannot be removed',
+        () async {
+      await bobSharesUnreadable('b1');
+      final todos = await open();
+
+      await expectLater(
+        todos.remove(bobs('b1')),
+        _rejectsWith(CollectionFailure.notOwner, id: 'b1', owner: '@bob'),
+      );
+      expect(server.hasKey('b1.$_ns@bob'), isTrue);
+    });
+
     test(
         'concurrent update, share and remove on one item run sequentially without losing writes',
         () async {

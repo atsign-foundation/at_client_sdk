@@ -255,12 +255,20 @@ final class JsCollectionsAdapter implements ItemCollection {
 
   /// Deletes the item at [address]. Rejects with [CollectionFailure.hasSubItems] when it
   /// has sub-items and [cascade] is false.
+  ///
+  /// An own item this device cannot read is deleted by id, so a record
+  /// whose stored value does not decode does not have to stay; an
+  /// unreadable item of another atSign still rejects
+  /// [CollectionFailure.notOwner].
   @override
-  Future<void> remove(JsItemAddress address,
-          {bool cascade = false}) =>
+  Future<void> remove(JsItemAddress address, {bool cascade = false}) =>
       _ownedWrite(
-          address, (current) => _collection.delete(current, cascade: cascade),
-          stateError: CollectionFailure.hasSubItems);
+        address,
+        (current) => _collection.delete(current, cascade: cascade),
+        stateError: CollectionFailure.hasSubItems,
+        onUnreadable: () =>
+            _collection.deleteById(address.id, cascade: cascade),
+      );
 
   /// Calls [onEvent] with each AtCollection event and [onError] with each
   /// error on the event stream, until the returned function is called; its
@@ -288,10 +296,16 @@ final class JsCollectionsAdapter implements ItemCollection {
   /// check, and returns what it returns. A [write] that returns the item
   /// converts it with [_item] itself, so a `remove` never fails after it
   /// deleted.
+  ///
+  /// [onUnreadable], when given, runs instead of [write] for an own item
+  /// whose read fails with [CItemReadException]; the owner check has already
+  /// passed, so the item belongs to this atSign. Any other read failure is
+  /// still the operation's failure.
   Future<R> _ownedWrite<R>(
     JsItemAddress address,
     Future<R> Function(CItem<Map<String, dynamic>> current) write, {
     CollectionFailure stateError = CollectionFailure.notFound,
+    Future<R> Function()? onUnreadable,
   }) =>
       _mapFailures(
         () {
@@ -303,7 +317,15 @@ final class JsCollectionsAdapter implements ItemCollection {
                 collectionOwner: _collection.atSign);
           }
           return _queueWrite(address.id, owner, () async {
-            final current = await _collection.get(address.id, owner);
+            final CItem<Map<String, dynamic>> current;
+            try {
+              current = await _collection.get(address.id, owner);
+            } on CItemReadException {
+              // Only a record that cannot be decoded reaches here: a read
+              // that fails in transit is a different error and stays one.
+              if (onUnreadable == null) rethrow;
+              return await onUnreadable();
+            }
             return await write(current);
           });
         },

@@ -1,5 +1,6 @@
 ## Unreleased
 
+- `AtCollection.deleteById` deletes an own item by its id, so a record this device cannot decode can still be removed; it keeps `delete`'s bookkeeping: the refusal while self-owned descendants exist, the seen-id cache eviction, the `CItemDeleted` event and the ancestors' `CSubItemDeleted` events. It is on the `AtCollection` interface, so a class outside this package that implements it must add the method.
 - `AtCollection.getItemsAsStream`, and the `get`, `getOrNull` and `getItems` paths over it, report a read that fails in transit — a timeout, or an atServer that cannot be reached — as that error instead of wrapping it in `CItemReadException`; only a record this device cannot decode is reported unreadable. `isTransportFailure` exposes the distinction.
 
 - feat: `notify` takes an optional `finalStatusBudget` that bounds the wait for the notification's final delivery status. When the budget runs out, the result comes back with `unconfirmed` set, its status still the queued one, and neither `onSuccess` nor `onError` called; without a budget the poll runs as before. The parameter is on the `NotificationService` interface, so a class outside this package that implements it and overrides `notify` must add the parameter.
