@@ -25,7 +25,9 @@ Feature: Every failure carries a code the caller branches on
   # Forgery: rejections are constructed as plain objects carrying only fixed
   #   codes and parameter-only or sanitized messages ("a rejection is a plain
   #   object with only code and message", "a passkey failure message names no
-  #   atSign, lock, reason, enrollment id or browser error").
+  #   atSign, lock, reason, enrollment id or browser error"), and a code is
+  #   chosen by a structured field and never by exception text ("an atSign with
+  #   no atServer rejects offline, not pkam_refused").
   # Impersonation: errors carry no unverified peer-supplied identity claims ("a
   #   mapped exception keeps its message").
 
@@ -39,6 +41,16 @@ Feature: Every failure carries a code the caller branches on
     Given a failure inside the Dart bridge that maps to bad_key
     When a session call is made
     Then it rejects with code bad_key and the message the bridge words for that exception
+
+  # An atSign the atDirectory has no atServer for is not a refusal of the
+  # credentials, so an app checks the atSign or retries rather than discarding
+  # its keys. The code is chosen by the structured cause, never by text.
+
+  Scenario: an atSign with no atServer rejects offline, not pkam_refused
+    Given an AtOpenRefusedException whose state carries the cause noAtServer
+    When the failure is mapped
+    Then it rejects with code offline and the message 'no atServer was found for this atSign'
+    And an AtOpenRefusedException refused for any other cause still rejects pkam_refused with the message it had
 
   Scenario: a rejection is a plain object with only code and message
     Given a failure inside the Dart bridge

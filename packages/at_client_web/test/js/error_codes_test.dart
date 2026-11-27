@@ -28,6 +28,11 @@ void main() {
           '@alice', AtConnectionState.refused(AtConnectionCause.revoked)),
       'pkam_refused'
     ),
+    'AtOpenRefusedException (no atServer)': (
+      AtOpenRefusedException(
+          '@alice', AtConnectionState.offline(AtConnectionCause.noAtServer)),
+      'offline'
+    ),
     'PortalSessionOfflineException': (
       PortalSessionOfflineException(
           '@alice', AtConnectionState.offline(AtConnectionCause.unreachable)),
@@ -153,6 +158,24 @@ void main() {
   for (final MapEntry(key: name, value: (error, code)) in cases.entries) {
     test('$name maps to $code', () => expect(errorCodeOf(error), code));
   }
+
+  test('an atSign with no atServer rejects offline, not pkam_refused', () {
+    final noAtServer = AtOpenRefusedException(
+        '@alice', AtConnectionState.offline(AtConnectionCause.noAtServer));
+    expect(errorCodeOf(noAtServer), 'offline');
+    expect(atErrorMessage(noAtServer), 'no atServer was found for this atSign');
+    expect(atErrorMessage(noAtServer), isNot(contains('@alice')));
+
+    for (final cause in AtConnectionCause.values
+        .where((cause) => cause != AtConnectionCause.noAtServer)) {
+      final refused =
+          AtOpenRefusedException('@alice', AtConnectionState.refused(cause));
+      expect(errorCodeOf(refused), 'pkam_refused', reason: cause.name);
+      expect(atErrorMessage(refused),
+          'the atServer refused the session (${cause.name})',
+          reason: cause.name);
+    }
+  });
 
   test('every code the bridge can reject with is produced by one mapping', () {
     const mapped = {

@@ -1,5 +1,6 @@
 ## Unreleased
 
+- An open refused because the atDirectory has no atServer for the atSign rejects `offline` with the message `no atServer was found for this atSign`, so an app checks the atSign or retries later instead of discarding the keys; a refusal for any other cause still rejects `pkam_refused` with the message it had.
 - A collection open refuses the type `binary`, at_client's reserved tag for byte items, rejecting `COLLECTION_INVALID_ARGUMENT` with the refusal `type`; a reopen of an open collection with another `expirationMs` rejects `COLLECTION_INVALID_ARGUMENT` with the refusal `expiration` instead of being passed through, and an `==` or `!=` where clause whose value is an object or an array rejects `COLLECTION_INVALID_ARGUMENT` with the refusal `whereValue` instead of matching nothing.
 - A collection `create` with an id whose existence check fails rejects `COLLECTION_FAILED` with the lookup's cause instead of `COLLECTION_ITEM_ALREADY_EXISTS`, and writes nothing, so a failed probe never overwrites the item.
 - A collection `remove` of an own item whose stored value cannot be decoded deletes it by id instead of rejecting `COLLECTION_ITEM_UNREADABLE`; an unreadable item of another atSign still rejects `COLLECTION_ITEM_NOT_OWNER`.

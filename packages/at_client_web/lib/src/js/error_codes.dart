@@ -26,6 +26,15 @@ String errorCodeOf(Object error) => switch (error) {
           NotifyFailure.offline => 'offline',
           NotifyFailure.timeout => 'timeout',
         },
+      // An atSign the atDirectory has no atServer for is not a refusal of the
+      // credentials: an app checks the atSign or retries later, which is what
+      // `offline` already means. The arm is guarded on the structured cause,
+      // so it sits above the plain refusal arm; every other refusal stays
+      // `pkam_refused`.
+      AtOpenRefusedException(
+        state: AtConnectionState(cause: AtConnectionCause.noAtServer)
+      ) =>
+        'offline',
       AtOpenRefusedException() => 'pkam_refused',
       // A lost passkey is split on the runtime type of its cause alone. An
       // atServer refusal of the key this passkey derives is terminal, so it
@@ -123,6 +132,10 @@ String atErrorMessage(Object error) => switch (error) {
           NotifyFailure.offline => 'the atServer could not be reached',
           NotifyFailure.timeout => 'the atServer did not answer in time',
         },
+      AtOpenRefusedException(
+        state: AtConnectionState(cause: AtConnectionCause.noAtServer)
+      ) =>
+        _noAtServerMessage,
       AtOpenRefusedException(:final state) =>
         'the atServer refused the session (${state.cause?.name ?? 'refused'})',
       PasskeyLostException(cause: PkamRefusedException()) =>
@@ -166,6 +179,10 @@ const _passkeyLostMessage =
 const _prfUnavailableMessage =
     'this browser or authenticator has no passkey PRF';
 const _setupLockTimeoutMessage = 'another tab is setting up this atSign';
+
+/// The fixed message an atSign the atDirectory has no atServer for takes: it
+/// names the atSign kind and nothing the caller or the atDirectory said.
+const _noAtServerMessage = 'no atServer was found for this atSign';
 
 /// [value] on one line and at most [maxErrorMessageLength] long: the one bound
 /// every message and every echoed rejection field shares, so a peer-chosen id
