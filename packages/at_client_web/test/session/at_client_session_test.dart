@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client_web/src/collections/item_locks.dart';
+import 'package:at_client_web/src/collections/js_collections_adapter.dart';
 import 'package:at_client_web/src/exceptions.dart';
 import 'package:at_client_web/src/session/at_client_session.dart';
 import 'package:test/fake.dart';
@@ -165,6 +166,22 @@ class _CancelFailingConnection extends Fake implements AtConnection {
       (StreamController<AtConnectionState>()
             ..onCancel = () => Future<void>.error(StateError('boom')))
           .stream;
+}
+
+/// A collection whose [watch] hands each event of [events] to the listener it
+/// was given, so a test can drive watch callbacks as the real stream does.
+class _EventStreamCollection extends Fake implements ItemCollection {
+  final events = StreamController<JsEvent>.broadcast();
+
+  @override
+  Future<void> Function() watch(
+    void Function(JsEvent event) onEvent, {
+    required void Function(JsCollectionsError error) onError,
+  }) =>
+      events.stream
+          .listen(onEvent,
+              onError: (Object error) => onError(error as JsCollectionsError))
+          .cancel;
 }
 
 class _FakeClient extends Fake implements AtClient {
@@ -999,6 +1016,68 @@ void main() {
       await pumpEventQueue();
 
       expect(warnings, isEmpty);
+    });
+  });
+
+  group('listener errors', () {
+    test('a subscribe callback that throws is logged and delivery continues',
+        () async {
+      final attempted = <String>[];
+      final escaped = <Object>[];
+
+      await runZonedGuarded(() async {
+        session.subscribe(
+          '.*',
+          (event) {
+            attempted.add(event.id);
+            throw StateError('boom');
+          },
+          onError: (_) {},
+        );
+        service.events
+          ..add(_event('e1'))
+          ..add(_event('e2'));
+        await pumpEventQueue();
+      }, (error, stack) => escaped.add(error));
+
+      expect(attempted, ['e1', 'e2']);
+      expect(warnings, [
+        'Notification listener threw an error',
+        'Notification listener threw an error',
+      ]);
+      expect(escaped, isEmpty);
+    });
+
+    test(
+        'a collection watch callback that throws is logged and delivery '
+        'continues', () async {
+      final inner = _EventStreamCollection();
+      final collection = SessionBoundCollection(session, inner);
+      final attempted = <String>[];
+      final escaped = <Object>[];
+
+      await runZonedGuarded(() async {
+        collection.watch(
+          (event) {
+            attempted.add(event['type']! as String);
+            throw StateError('boom');
+          },
+          onError: (_) {},
+        );
+        inner.events
+          ..add({'type': 'updated', 'id': 'i1'})
+          ..add({'type': 'deleted', 'id': 'i2'});
+        await pumpEventQueue();
+      }, (error, stack) => escaped.add(error));
+
+      expect(attempted, ['updated', 'deleted']);
+      expect(warnings, [
+        'Collection watch listener threw an error',
+        'Collection watch listener threw an error',
+      ]);
+      expect(escaped, isEmpty);
+
+      await session.close();
     });
   });
 

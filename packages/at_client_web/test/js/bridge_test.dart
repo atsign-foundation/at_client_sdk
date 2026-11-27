@@ -448,6 +448,24 @@ void main() {
       expect(opened, isEmpty);
     });
 
+    test('options are read without Object.hasOwn', () async {
+      final objectClass = globalContext['Object']! as JSObject;
+      final saved = objectClass['hasOwn'];
+      expect(saved, isNotNull, reason: 'this engine has Object.hasOwn');
+      objectClass.delete('hasOwn'.toJS);
+      try {
+        final r = await rejected(invoke(api, 'create', [
+          jsObject(opts({'namespace': 5}))
+        ]));
+
+        expect(r.code, 'invalid_argument');
+        expect(r.message, contains('namespace'));
+      } finally {
+        objectClass['hasOwn'] = saved;
+      }
+      expect(opened, isEmpty);
+    });
+
     test('a caller mistake at create opens no connection', () async {
       for (final bad in <Map<String, Object?>>[
         opts({'atSign': 'not an atsign'}),

@@ -39,7 +39,11 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
   #   neither can carry unbounded text into JS ("a peer-chosen notification id
   #   and key are bounded in the envelope"), and a send that throws after it
   #   was remembered forgets its id, so repeated failures cannot grow the sent
-  #   set ("a notify that throws after its send forgets its id").
+  #   set ("a notify that throws after its send forgets its id"), and a
+  #   subscribe or collection watch callback that throws is logged instead of
+  #   escaping, so one bad callback cannot stop delivery ("a subscribe callback
+  #   that throws is logged and delivery continues", "a collection watch
+  #   callback that throws is logged and delivery continues").
   # Forgery: malformed notification keys (multiple @, bare @name.ns, cached:
   #   without recipient, wrong sharedWith, injected text keys) and mismatched
   #   sender/key owner are dropped ("delivers only a notification sent by the
@@ -271,6 +275,16 @@ Feature: notify sends to another atSign and subscribe delivers only genuine even
     Given a subscription with no onError
     When the session reports a subscription error
     Then nothing is thrown
+
+  Scenario: a subscribe callback that throws is logged and delivery continues
+    Given a subscription whose onEvent throws
+    When two notifications arrive
+    Then both are attempted, each throw is logged, and nothing escapes the zone
+
+  Scenario: a collection watch callback that throws is logged and delivery continues
+    Given a collection watch whose onEvent throws
+    When two collection events arrive
+    Then both are attempted, each throw is logged, and nothing escapes the zone
 
   Scenario: close stops delivering subscription events and errors even if the stream emits before cancel settles
     Given an active subscription whose stream emits an event or error after close starts

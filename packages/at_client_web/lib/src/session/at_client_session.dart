@@ -62,8 +62,9 @@ abstract interface class Session {
   /// [regex], except the echoes of those this session sent (a sent id coming
   /// from this session's own atSign); the returned function unsubscribes.
   /// An error on the notification stream goes to [onError] and the
-  /// subscription carries on. A notification dropped because its sender is
-  /// not the owner of its key is logged, never delivered.
+  /// subscription carries on; a callback that throws is logged and delivery
+  /// carries on too. A notification dropped because its sender is not the
+  /// owner of its key is logged, never delivered.
   void Function() subscribe(
       String regex, void Function(ReceivedNotification) onEvent,
       {required void Function(Object error) onError});
@@ -566,7 +567,11 @@ class AtClientSession implements Session {
         .listen(
           (event) {
             if (_closed) return;
-            onEvent(event);
+            try {
+              onEvent(event);
+            } on Object catch (_) {
+              _warn('Notification listener threw an error');
+            }
           },
           onError: (Object error) {
             if (_closed) return;
@@ -815,7 +820,11 @@ class SessionBoundCollection implements ItemCollection {
     cancel = _inner.watch(
       (event) {
         if (_session.isClosed) return;
-        onEvent(event);
+        try {
+          onEvent(event);
+        } on Object catch (_) {
+          _session._warn('Collection watch listener threw an error');
+        }
       },
       onError: (error) {
         if (_session.isClosed) return;

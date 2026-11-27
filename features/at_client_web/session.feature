@@ -31,7 +31,11 @@ Feature: create opens a session and close ends it
   #   credential-less keys before opening a connection ("create rejects with
   #   unsupported outside a secure context", "invalid or empty atSign rejects
   #   naming atSign", "invalid or empty namespace rejects naming namespace",
-  #   "credential-less keys reject with bad_key"); appName and appVersion are
+  #   "credential-less keys reject with bad_key"), options are read with
+  #   `Object.prototype.hasOwnProperty`, so an engine without `Object.hasOwn`
+  #   still rejects a bad option as invalid_argument instead of reporting the
+  #   open as internal ("options are read without Object.hasOwn"); appName and
+  #   appVersion are
   #   carried as strings, trimmed and blank-cleared, and at_auth cuts each to
   #   64 UTF-16 units ("a non-string appName or appVersion rejects
   #   invalid_argument naming the option"). An open's connect and
@@ -264,6 +268,13 @@ Feature: create opens a session and close ends it
     Given a passkey server side built with appName and appVersion
     When its gateway opens a client
     Then the client it opens names that app on its preference
+
+  @dos
+  Scenario: options are read without Object.hasOwn
+    Given create options with an invalid option and an engine whose Object has no hasOwn
+    When create is called
+    Then it rejects with invalid_argument naming that option, not internal
+    And no session is opened
 
   @dos
   Scenario: a caller mistake at create opens no connection

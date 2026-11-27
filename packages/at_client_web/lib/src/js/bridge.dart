@@ -209,9 +209,14 @@ final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSAny _objectPrototype = _objectClass['prototype']!;
 final JSObject _arrayClass = globalContext['Array']! as JSObject;
 
+/// The JS `Object.prototype.hasOwnProperty`, called with the object it is
+/// asked about as its `this`: `Object.hasOwn` is missing on engines older than
+/// ES2022, and `callMethod` on the prototype would bind the prototype itself.
+final JSFunction _hasOwnProperty =
+    (_objectClass['prototype']! as JSObject)['hasOwnProperty']! as JSFunction;
+
 bool _hasOwn(JSObject object, String name) =>
-    (_objectClass.callMethod('hasOwn'.toJS, object, name.toJS)! as JSBoolean)
-        .toDart;
+    (_hasOwnProperty.callAsFunction(object, name.toJS)! as JSBoolean).toDart;
 
 JSAny? _own(JSObject object, String name) =>
     _hasOwn(object, name) ? object[name] : null;
