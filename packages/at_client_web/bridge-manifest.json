@@ -86,6 +86,7 @@
     ],
     "BridgeSession": [
       "approve",
+      "atSign",
       "close",
       "collection",
       "deny",

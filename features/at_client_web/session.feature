@@ -37,13 +37,29 @@ Feature: create opens a session and close ends it
   #   not an identity: the atSign still comes from the keys and a session
   #   without one names no app ("an open with appName and appVersion names the
   #   app on the client preference", "an open without appName leaves the
-  #   particulars unset").
+  #   particulars unset"). The atSign a session reports is canonical, lower
+  #   case in `@name` form with its dots stripped whatever spelling create was
+  #   given, so JS composes keys for one spelling and not a look-alike ("a
+  #   session atSign is canonical whatever spelling create was given", "atSign
+  #   returns the canonical session atSign").
 
   Scenario: opens with the options and returns a session
     Given create options with an atSign, a namespace and keys
     When create is called
     Then the session opens with exactly those options
     And the result has notify, subscribe, status, onStatus, collection and close
+
+  Scenario: a session atSign is canonical whatever spelling create was given
+    Given create options whose atSign is given with capitals, without the @ or with dots
+    When the options are built
+    Then the atSign is lower case, in @ form and without dots
+    And the keys form and the passkey form agree
+
+  Scenario: atSign returns the canonical session atSign
+    Given an open session
+    When atSign is called
+    Then it returns the session's atSign in @ form without dots
+    And it still returns it after close
 
   Scenario: create resolves only once the session is open
     Given a bridge whose session opener has not yet returned

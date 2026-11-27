@@ -32,6 +32,27 @@ void main() {
       expect(o.namespace, 'myapp');
     });
 
+    test('a session atSign is canonical whatever spelling create was given',
+        () {
+      for (final (given, canonical) in [
+        ('alice', '@alice'),
+        ('@ALICE', '@alice'),
+        ('Bob.Smith', '@bobsmith'),
+        ('@bob.smith', '@bobsmith'),
+      ]) {
+        expect(_keysOptions(atSign: given).atSign, canonical, reason: given);
+        expect(
+            PasskeySessionOptions(
+                    atSign: given,
+                    namespace: 'app',
+                    rpId: 'example.com',
+                    rpName: 'X')
+                .atSign,
+            canonical,
+            reason: given);
+      }
+    });
+
     test('an invalid atSign names atSign and never echoes the value', () {
       expect(
           () => _keysOptions(atSign: 'SECRET atSign'), _namingField('atSign'));

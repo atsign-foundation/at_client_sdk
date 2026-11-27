@@ -1,5 +1,6 @@
 ## Unreleased
 
+- The bridge session exposes `atSign()`, the session's atSign in its canonical form (lower case, `@` form, dots stripped), so an app composes keys with the one spelling instead of its own; it is a read, so it answers on a closed session too.
 - `bridge-manifest.json` (schema 2) also publishes the create options each session form reads, the subscribe envelope fields, every connection status and the bridge's maximum error message length, generated from the Dart constants.
 - `create` takes optional `appName` and `appVersion` on both the keys and passkey forms and names the app to the atServer on the client it opens; blank values are unset, and asking for either with an explicit preference is refused naming the option.
 - Passkey sign-in failures report `passkey_lost`, `pkam_refused`, `unsupported` or `timeout` instead of `internal`.

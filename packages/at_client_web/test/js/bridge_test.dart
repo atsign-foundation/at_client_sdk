@@ -144,8 +144,12 @@ class _FakeSession implements Session {
   var statusNow = 'connecting';
   final statusListeners = <void Function(String)>[];
 
+  /// The atSign of the options the session was opened with, canonical, as the
+  /// client reports it.
+  var atSignNow = '@alice';
+
   @override
-  String get atSign => '@alice';
+  String get atSign => atSignNow;
 
   @override
   bool get isClosed => closed;
@@ -311,6 +315,7 @@ void main() {
         open: (o) async {
           opened.add(o);
           if (openFailure case final error?) throw error;
+          session.atSignNow = o.atSign;
           return session;
         },
         isSecureContext: () => secure));
@@ -344,6 +349,7 @@ void main() {
       expect(
           _ownNames(result),
           unorderedEquals([
+            'atSign',
             'notify',
             'subscribe',
             'status',
@@ -378,6 +384,7 @@ void main() {
       expect(
           _ownNames((outcome as Resolved).value! as JSObject),
           unorderedEquals([
+            'atSign',
             'notify',
             'subscribe',
             'status',
@@ -1116,6 +1123,20 @@ void main() {
             as JSObject;
 
         expect(r['message'].dartify() as String, contains('onError'));
+      });
+    });
+
+    group('atSign', () {
+      test('atSign returns the canonical session atSign', () async {
+        final result = await create(opts({'atSign': 'Bob.Smith'}));
+
+        expect(invoke(result, 'atSign').dartify(), '@bobsmith',
+            reason: 'lower case, in @ form, with its dots stripped');
+
+        await resolved(invoke(result, 'close'));
+
+        expect(invoke(result, 'atSign').dartify(), '@bobsmith',
+            reason: 'a read still answers once the session is closed');
       });
     });
 

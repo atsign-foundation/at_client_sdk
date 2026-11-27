@@ -453,6 +453,13 @@ class BridgeSession {
     }
   }
 
+  /// The session's atSign, in `@name` form, lower case and without dots: the
+  /// canonical form to compose keys with. It is a read of what the session
+  /// already holds, so it still answers once the session is closed and never
+  /// calls the atServer.
+  @JSExport()
+  JSString atSign() => _session.atSign.toJS;
+
   /// The connection status: `connecting`, `connected`, `waiting:network`,
   /// `waiting:server` or `waiting:auth`.
   @JSExport()

@@ -71,6 +71,7 @@ const bridgeSurface = <String, List<String>>{
   ],
   'BridgeSession': [
     'approve',
+    'atSign',
     'close',
     'collection',
     'deny',

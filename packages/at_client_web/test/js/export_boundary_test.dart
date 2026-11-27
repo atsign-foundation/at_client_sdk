@@ -60,6 +60,7 @@ void main() {
     }
     expect(names, {
       'BridgeSession': {
+        'atSign',
         'notify',
         'subscribe',
         'status',
