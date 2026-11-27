@@ -308,8 +308,9 @@ final class JsCollectionsAdapter implements ItemCollection {
   ///
   /// [onUnreadable], when given, runs instead of [write] for an own item
   /// whose read fails with [CItemReadException]; the owner check has already
-  /// passed, so the item belongs to this atSign. Any other read failure is
-  /// still the operation's failure.
+  /// passed, so the item belongs to this atSign. It is not limited to records
+  /// that fail to decode: a read the atServer refused is wrapped the same way.
+  /// Any other read failure is still the operation's failure.
   Future<R> _ownedWrite<R>(
     JsItemAddress address,
     Future<R> Function(CItem<Map<String, dynamic>> current) write, {
@@ -330,8 +331,10 @@ final class JsCollectionsAdapter implements ItemCollection {
             try {
               current = await _collection.get(address.id, owner);
             } on CItemReadException {
-              // Only a record that cannot be decoded reaches here: a read
-              // that fails in transit is a different error and stays one.
+              // Any read failure but a transport one reaches here: a record
+              // that does not decode, or an error the atServer or keystore
+              // answered with. A transport failure is a different error and
+              // stays one.
               if (onUnreadable == null) rethrow;
               return await onUnreadable();
             }
