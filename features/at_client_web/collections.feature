@@ -117,6 +117,18 @@ Feature: Collections store, read and share items through the session
     Then the data and each object inside it have no prototype
     And all of its keys are present
 
+  Scenario: an undefined data member is dropped and an undefined query value is refused
+    Given an item whose data has a member whose JS value is undefined
+    When create and update are called and a query clause compares a value that is JS undefined
+    Then the undefined data member is dropped and the rest of the data arrives as written
+    And each comparison clause rejects with code invalid_argument naming value
+    And an isNull clause and a comparison with a null value still pass through
+
+  Scenario: an undefined array element or top-level value stays null
+    Given an array holding JS undefined elements
+    When create is called with that array in its data, and a query clause carries an undefined value to ignore
+    Then the undefined array element arrives as null and the ignored value passes as null
+
   Scenario: a data key named __proto__ arrives as data, not a prototype
     Given item data from JSON with a key named __proto__
     When create is called

@@ -52,6 +52,36 @@ Future<Rejected> rejected(JSAny? promise) async {
 
 JSObject jsObject(Map<String, Object?> map) => map.jsify()! as JSObject;
 
+/// A JS object holding [defined] plus each of [undefinedKeys] as a member
+/// whose value is JS `undefined`. Dart cannot write `undefined` under
+/// dart2wasm, so the members are built JS-side: `Object.fromEntries` over
+/// `[key, undefined]` pairs, each pair an `Array.from({length: 2})` with its
+/// first element replaced by the key.
+JSObject withUndefinedMembers(
+    Map<String, Object?> defined, List<String> undefinedKeys) {
+  final array = globalContext['Array']! as JSObject;
+  final pairs = <JSAny?>[
+    for (final key in undefinedKeys)
+      (array.callMethod('from'.toJS, jsObject({'length': 2}))! as JSObject)
+        ..setProperty(0.toJS, key.toJS)
+  ];
+  final object = (globalContext['Object']! as JSObject)
+      .callMethod('fromEntries'.toJS, pairs.toJS)! as JSObject;
+  defined.forEach((key, value) => object[key] = value.jsify());
+  return object;
+}
+
+/// An array of [length] elements all JS `undefined`, with each entry of
+/// [defined] written at its index, so a hole the caller fills sits beside
+/// undefined elements.
+JSArray<JSAny?> arrayWithUndefined(int length, Map<int, Object?> defined) {
+  final list = (globalContext['Array']! as JSObject)
+      .callMethod('from'.toJS, jsObject({'length': length}))! as JSObject;
+  defined
+      .forEach((index, value) => list.setProperty(index.toJS, value.jsify()));
+  return list as JSArray<JSAny?>;
+}
+
 JSAny? invoke(JSObject target, String name, [List<JSAny?> args = const []]) =>
     args.isEmpty
         ? target.callMethod(name.toJS)

@@ -1441,6 +1441,80 @@ void main() {
         expect(data.keys, containsAll(['__proto__', 'a']));
       });
 
+      test(
+          'an undefined data member is dropped and an undefined query value is refused',
+          () async {
+        final data = withUndefinedMembers({
+          'a': 1,
+          'nested': withUndefinedMembers({'d': 2}, ['c'])
+        }, [
+          'b'
+        ]);
+
+        await resolved(invoke(c, 'create', [data]));
+        final (created, _, _) =
+            adapter.last! as (Map<String, dynamic>, String?, List<String>);
+        expect(created, {
+          'a': 1,
+          'nested': {'d': 2}
+        });
+
+        await resolved(invoke(c, 'update', [
+          jsObject({'id': 'i1'}),
+          data
+        ]));
+        final (id, owner, updated) =
+            adapter.last! as (String, String, Map<String, dynamic>);
+        expect((id, owner), ('i1', '@alice'));
+        expect(updated, {
+          'a': 1,
+          'nested': {'d': 2}
+        });
+
+        adapter.calls.clear();
+        for (final op in ['==', '!=', '<', '<=', '>', '>=']) {
+          final r = await rejected(invoke(c, 'query', [
+            [
+              withUndefinedMembers({'path': 'a', 'op': op}, ['value'])
+            ].toJS
+          ]));
+
+          expect(r.code, 'invalid_argument', reason: op);
+          expect(r.message, contains('value'), reason: op);
+        }
+        expect(adapter.calls, isEmpty,
+            reason: 'a refused clause never reaches the collection');
+
+        await resolved(invoke(c, 'query', [
+          [
+            jsObject({'path': 'a', 'op': 'isNull'}),
+            jsObject({'path': 'a', 'op': '==', 'value': null})
+          ].toJS
+        ]));
+        expect(adapter.last, [('a', 'isNull', null), ('a', '==', null)]);
+      });
+
+      test('an undefined array element or top-level value stays null',
+          () async {
+        await resolved(invoke(c, 'create', [
+          jsObject({
+            'list': arrayWithUndefined(2, {0: 1})
+          })
+        ]));
+        final (data, _, _) =
+            adapter.last! as (Map<String, dynamic>, String?, List<String>);
+        expect(data, {
+          'list': [1, null]
+        });
+
+        await resolved(invoke(c, 'query', [
+          [
+            withUndefinedMembers({'path': 'a', 'op': 'isNull'}, ['value'])
+          ].toJS
+        ]));
+        expect(adapter.last, [('a', 'isNull', null)]);
+      });
+
       test('collection get defaults the owner to the session and resolves null',
           () async {
         await resolved(invoke(c, 'get', [

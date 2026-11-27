@@ -208,6 +208,30 @@ Never _rejectOption(ArgumentError e) => throw switch (e.name) {
 final JSObject _objectClass = globalContext['Object']! as JSObject;
 final JSAny _objectPrototype = _objectClass['prototype']!;
 final JSObject _arrayClass = globalContext['Array']! as JSObject;
+final JSObject _reflect = globalContext['Reflect']! as JSObject;
+
+/// `Object.is`, called from JS so its second argument can stay `undefined`.
+final JSFunction _objectIs = _objectClass['is']! as JSFunction;
+
+/// The own enumerable members of [object] whose value is JS `undefined`. No
+/// value is read into Dart: dart2wasm cannot tell `undefined` from `null` once
+/// a value crosses, so each `Object.entries` pair is sliced to `[value]` in JS
+/// and handed to `Object.is(value)`, whose second argument is then
+/// `undefined`, and which is true only for an undefined value.
+Set<String> _undefinedMembers(JSObject object) {
+  final entries = _objectClass.callMethod('entries'.toJS, object)!
+      as JSArray<JSArray<JSAny?>>;
+  return {
+    for (final entry in entries.toDart)
+      if ((_reflect.callMethodVarArgs('apply'.toJS, [
+        _objectIs,
+        null,
+        entry.callMethod('slice'.toJS, 1.toJS)
+      ])! as JSBoolean)
+          .toDart)
+        (entry.toDart[0]! as JSString).toDart
+  };
+}
 
 /// The JS `Object.prototype.hasOwnProperty`, called with the object it is
 /// asked about as its `this`: `Object.hasOwn` is missing on engines older than
@@ -291,9 +315,11 @@ List<String> _strings(JSAny? value, String name) {
 const _maxJsDepth = maxItemDataDepth;
 
 /// The JS value [value] as plain Dart values: strings, bools, numbers
-/// (integral ones as `int`), lists and string-keyed maps. Anything else —
-/// a function, bigint, Date, Map, Set, RegExp, or typed array — is refused
-/// naming [name].
+/// (integral ones as `int`), lists and string-keyed maps. An object member
+/// whose value is JS `undefined` is dropped, as `JSON.stringify` drops it,
+/// while an `undefined` array element or top-level value is null. Anything
+/// else — a function, bigint, Date, Map, Set, RegExp, or typed array — is
+/// refused naming [name].
 Object? _toDart(JSAny? value, String name, [int depth = 0]) {
   if (value == null || value.isUndefinedOrNull) return null;
   if (value.isA<JSString>()) return (value as JSString).toDart;
@@ -328,9 +354,11 @@ Object? _toDart(JSAny? value, String name, [int depth = 0]) {
     final keys =
         (_objectClass.callMethod('keys'.toJS, object)! as JSArray<JSString>)
             .toDart;
+    final undefinedKeys = _undefinedMembers(object);
     return <String, dynamic>{
       for (final key in keys)
-        key.toDart: _toDart(_own(object, key.toDart), name, depth + 1)
+        if (!undefinedKeys.contains(key.toDart))
+          key.toDart: _toDart(_own(object, key.toDart), name, depth + 1)
     };
   }
   throw _invalidArgument(name, 'plain JSON values');
@@ -583,6 +611,10 @@ int _wholeNumber(JSAny? value, String name) {
   return n;
 }
 
+/// The where-clause ops that compare against their `value`; `isNull` and
+/// `isNotNull` read none.
+const _comparisonOps = {'==', '!=', '<', '<=', '>', '>='};
+
 /// The JS surface of one collection: the adapter's eight operations on JS
 /// values. Items are addressed `{id, owner}`, `owner` being this session's
 /// atSign when left out. Only the members carrying a member-level `@JSExport`
@@ -677,9 +709,16 @@ class BridgeCollection {
           for (final raw in (where as JSArray<JSAny?>).toDart)
             () {
               final clause = _object(raw, 'where');
+              final path = _string(_own(clause, 'path'), 'path');
+              final op = _string(_own(clause, 'op'), 'op');
+              if (_comparisonOps.contains(op) &&
+                  _undefinedMembers(clause).contains('value')) {
+                throw _invalidArgument(
+                    'value', 'a value; use isNull to match a missing field');
+              }
               return (
-                path: _string(_own(clause, 'path'), 'path'),
-                op: _string(_own(clause, 'op'), 'op'),
+                path: path,
+                op: op,
                 value: _toDart(_own(clause, 'value'), 'value'),
               );
             }()
