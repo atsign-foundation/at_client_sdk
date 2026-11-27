@@ -168,6 +168,13 @@ abstract class NotificationService {
   ///
   /// onError is called when the notification could not delivered. Note that this could be a very long time
   ///
+  /// [finalStatusBudget] bounds the wait for the notification's final delivery
+  /// status. When it is given, the poll stops once that much time has passed,
+  /// and the returned [NotificationResult] is marked
+  /// [NotificationResult.unconfirmed] with its status still queued; neither
+  /// [onSuccess] nor [onError] is called for it. Left null, the poll runs until
+  /// the atServer reports a final status or the service is stopped, as before.
+  ///
   /// Following exceptions are encapsulated in [NotificationResult.atClientException]
   ///* [AtKeyException] when invalid [NotificationParams.atKey.key] is formed or when
   ///invalid metadata is provided.
@@ -217,6 +224,7 @@ abstract class NotificationService {
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
       bool encryptValue = true,
+      Duration? finalStatusBudget,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary});
@@ -367,6 +375,12 @@ class NotificationResult {
   AtKey? atKey;
   NotificationStatusEnum notificationStatusEnum =
       NotificationStatusEnum.undelivered;
+
+  /// Whether the final-status wait ran out of
+  /// [NotificationService.notify]'s `finalStatusBudget` while the notification
+  /// was still queued, so its delivery status is unknown. Such a result keeps
+  /// its default [notificationStatusEnum] and carries no exception.
+  bool unconfirmed = false;
 
   AtClientException? atClientException;
 

@@ -1086,6 +1086,7 @@ class NotificationServiceImpl extends NotificationService {
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
       bool encryptValue = true,
+      Duration? finalStatusBudget,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {
@@ -1136,12 +1137,12 @@ class NotificationServiceImpl extends NotificationService {
       if (waitForFinalDeliveryStatus) {
         await _pollFinalStatus(
             notificationParams, notificationResult, onSuccess, onError,
-            awaited: true);
+            awaited: true, finalStatusBudget: finalStatusBudget);
         return notificationResult;
       } else {
         unawaited(_pollFinalStatus(
             notificationParams, notificationResult, onSuccess, onError,
-            awaited: false));
+            awaited: false, finalStatusBudget: finalStatusBudget));
         return notificationResult;
       }
     }
@@ -1164,11 +1165,13 @@ class NotificationServiceImpl extends NotificationService {
       NotificationParams notificationParams,
       NotificationResult notificationResult,
       Function? onSuccess,
-      Function? onError) async {
+      Function? onError,
+      {Duration? finalStatusBudget}) async {
     var notificationParser = NotificationResponseParser();
     // Gets the notification status and parse the response.
-    var notificationStatus = notificationParser
-        .parse(await _getFinalNotificationStatus(notificationParams.id));
+    var notificationStatus = notificationParser.parse(
+        await _getFinalNotificationStatus(notificationParams.id,
+            budget: finalStatusBudget));
     switch (notificationStatus.response) {
       case 'delivered':
         notificationResult.notificationStatusEnum =
@@ -1189,6 +1192,12 @@ class NotificationServiceImpl extends NotificationService {
           onError(notificationResult);
         }
         break;
+      // Only a poll that ran out of its budget answers with the queued status:
+      // the notification reached no final status, so the result says so and
+      // neither callback runs.
+      case 'queued':
+        notificationResult.unconfirmed = true;
+        break;
     }
   }
 
@@ -1202,15 +1211,20 @@ class NotificationServiceImpl extends NotificationService {
   /// [awaited], and otherwise is handed to [onError] and logged, rather than
   /// left to surface as an unhandled error in whatever zone sent the
   /// notification.
+  ///
+  /// A [finalStatusBudget] that runs out ends the poll without a failure, and
+  /// the result says so through [NotificationResult.unconfirmed].
   Future<void> _pollFinalStatus(
       NotificationParams notificationParams,
       NotificationResult notificationResult,
       Function? onSuccess,
       Function? onError,
-      {required bool awaited}) async {
+      {required bool awaited,
+      Duration? finalStatusBudget}) async {
     try {
       await _waitForAndHandleFinalNotificationSendStatus(
-          notificationParams, notificationResult, onSuccess, onError);
+          notificationParams, notificationResult, onSuccess, onError,
+          finalStatusBudget: finalStatusBudget);
       return;
     } catch (e) {
       if (isStopped) {
@@ -1240,9 +1254,15 @@ class NotificationServiceImpl extends NotificationService {
   /// Takes the notificationId as input as returns the status of the notification
   ///
   /// Throws once the service is stopped: the answer would never reach anyone.
-  Future<String> _getFinalNotificationStatus(String notificationId) async {
+  ///
+  /// A [budget] bounds the polling: once it has run out, this returns the
+  /// status last read (the queued status, or queued when no answer arrived
+  /// yet) instead of waiting for a final one.
+  Future<String> _getFinalNotificationStatus(String notificationId,
+      {Duration? budget}) async {
     String status = '';
     bool firstCheck = true;
+    final stopwatch = budget == null ? null : (Stopwatch()..start());
     // For every 2 seconds, queries the status of the notification
     while (status.isEmpty || status == 'data:queued') {
       if (isStopped) {
@@ -1257,7 +1277,15 @@ class NotificationServiceImpl extends NotificationService {
       } else {
         await _pause(Duration(seconds: 2));
       }
+      // A stop during the pause goes back round to the throw above, so a budget
+      // that ran out in the same moment never hides it.
       if (isStopped) continue;
+      if (stopwatch != null && stopwatch.elapsed > budget!) {
+        // Nothing is asked of the atServer once the budget has run out. The
+        // status is still the queued one (or unknown, which the sender's side
+        // can only report as queued) and the caller marks it unconfirmed.
+        return status.isEmpty ? 'data:queued' : status;
+      }
       status = await atClient.notifyStatus(notificationId);
     }
     return status;

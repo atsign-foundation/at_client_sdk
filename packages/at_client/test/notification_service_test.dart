@@ -3234,6 +3234,113 @@ void main() {
               'change edits');
     });
   });
+
+  /// Catalogue: features/at_client/notify_final_status_budget.feature
+  group('a notify can bound its final-status wait', () {
+    late MockAtClientImpl atClient;
+    late MockRemoteSecondary remote;
+    late NotificationServiceImpl service;
+
+    setUpAll(() {
+      registerFallbackValue(AtKey());
+      registerFallbackValue(FakeNotifyVerbBuilder());
+      registerFallbackValue(PutRequestOptions());
+    });
+
+    setUp(() async {
+      atClient = MockAtClientImpl();
+      remote = MockRemoteSecondary();
+      final finder = MockSecondaryAddressFinder();
+      // The mock answers getCurrentAtSign() and atSign itself.
+      when(() => atClient.enrollmentId).thenReturn(null);
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference()
+        ..namespace = 'wavi'
+        ..monitorAutoStart = false);
+      when(() => atClient.getRemoteSecondary()).thenReturn(remote);
+      when(() => remote.executeVerb(any())).thenAnswer((_) async => 'data:n1');
+      when(() => finder.findSecondary('@bob'))
+          .thenAnswer((_) async => SecondaryAddress('bob.example', 1));
+      service = await NotificationServiceImpl.create(atClient,
+          monitor: FakeMonitor(),
+          secondaryAddressFinder: finder) as NotificationServiceImpl;
+    });
+
+    NotificationParams params() => NotificationParams.forUpdate(
+        (AtKey.shared('phone', namespace: 'wavi', sharedBy: '@alice')
+              ..sharedWith('@bob'))
+            .build());
+
+    test(
+        'A final-status poll stops at its budget and returns the queued status',
+        () async {
+      // The recipient never takes delivery, so every answer leaves the
+      // notification queued.
+      var statusCalls = 0;
+      when(() => atClient.notifyStatus(any())).thenAnswer((_) async {
+        statusCalls++;
+        return 'data:queued';
+      });
+      NotificationResult? succeeded;
+      NotificationResult? errored;
+      final elapsed = Stopwatch()..start();
+
+      final result = await service.notify(params(),
+          finalStatusBudget: const Duration(seconds: 3),
+          onSuccess: (NotificationResult r) => succeeded = r,
+          onError: (NotificationResult r) => errored = r);
+      elapsed.stop();
+      final statusCallsAtReturn = statusCalls;
+      // Past the poll's longest pause: a poll still running would ask again.
+      await Future.delayed(const Duration(milliseconds: 2200));
+
+      expect(elapsed.elapsed, lessThan(const Duration(seconds: 5)),
+          reason: 'the budget is 3 seconds and the poll may only be inside '
+              'one of its pauses (the longest is 2 seconds) when it runs out; '
+              'a wait that is still polled after its budget has not bounded '
+              'anything');
+      expect(statusCalls, greaterThan(0),
+          reason: 'the poll runs before its budget can run out, so the '
+              'queued status is one the atServer answered');
+      expect(statusCalls, statusCallsAtReturn,
+          reason: 'a poll that has returned must not ask the atServer again; '
+              'a timer still running is a wait nothing bounds');
+      expect(result.unconfirmed, isTrue,
+          reason: 'the caller asked for a bounded wait and got one, so the '
+              'result must say the delivery status is unconfirmed rather '
+              'than claim the notification was delivered or that it failed');
+      expect(result.notificationStatusEnum, NotificationStatusEnum.undelivered,
+          reason: 'the queued answer leaves the enum at its default; '
+              'unconfirmed is a field, not a third status');
+      expect(succeeded, isNull,
+          reason: 'nothing was confirmed delivered, so onSuccess must not '
+              'run');
+      expect(errored, isNull,
+          reason: 'running out of budget is not a delivery failure, so '
+              'onError must not run');
+    });
+
+    test('A notify without a final-status budget polls as before', () async {
+      // Queued for a while, as an offline recipient's is, then delivered.
+      var statusCalls = 0;
+      when(() => atClient.notifyStatus(any())).thenAnswer((_) async {
+        statusCalls++;
+        return statusCalls < 3 ? 'data:queued' : 'data:delivered';
+      });
+      NotificationResult? succeeded;
+
+      final result = await service.notify(params(),
+          onSuccess: (NotificationResult r) => succeeded = r);
+
+      expect(statusCalls, 3,
+          reason: 'with no budget the poll keeps asking through every queued '
+              'answer until the atServer reports a final status');
+      expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
+      expect(result.unconfirmed, isFalse,
+          reason: 'a delivered status was confirmed, so the result is not '
+              'unconfirmed');
+      expect(succeeded, same(result));
+    });
+  });
 }
 
 class StatsAtKeyMatcher extends Matcher {

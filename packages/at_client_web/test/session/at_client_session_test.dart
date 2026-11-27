@@ -42,6 +42,7 @@ class _FakeNotifications extends Fake implements NotificationService {
       {bool waitForFinalDeliveryStatus = true,
       bool checkForFinalDeliveryStatus = true,
       bool encryptValue = true,
+      Duration? finalStatusBudget,
       Function(NotificationResult)? onSuccess,
       Function(NotificationResult)? onError,
       Function(NotificationResult)? onSentToSecondary}) async {

@@ -1,3 +1,7 @@
+## Unreleased
+
+- feat: `notify` takes an optional `finalStatusBudget` that bounds the wait for the notification's final delivery status. When the budget runs out, the result comes back with `unconfirmed` set, its status still the queued one, and neither `onSuccess` nor `onError` called; without a budget the poll runs as before. The parameter is on the `NotificationService` interface, so a class outside this package that implements it and overrides `notify` must add the parameter.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and
