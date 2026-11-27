@@ -1,4 +1,7 @@
 {
+  "bounds": {
+    "maxErrorMessageLength": 128
+  },
   "collectionErrorCodes": [
     "COLLECTION_FAILED",
     "COLLECTION_INVALID_ARGUMENT",
@@ -12,6 +15,37 @@
     "COLLECTION_PARTIAL_FAILURE",
     "COLLECTION_TYPE_MISMATCH"
   ],
+  "createOptions": {
+    "keys": [
+      "appName",
+      "appVersion",
+      "atSign",
+      "keys",
+      "namespace",
+      "passkey",
+      "rootDomain"
+    ],
+    "passkey": [
+      "appName",
+      "appVersion",
+      "atSign",
+      "namespace",
+      "passkey",
+      "rootDomain",
+      "rpId",
+      "rpName"
+    ]
+  },
+  "envelopes": {
+    "subscribe": [
+      "epochMillis",
+      "from",
+      "id",
+      "key",
+      "operation",
+      "value"
+    ]
+  },
   "errorCodes": [
     "bad_key",
     "closed",
@@ -28,7 +62,14 @@
     "timeout",
     "unsupported"
   ],
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "statuses": [
+    "connected",
+    "connecting",
+    "waiting:auth",
+    "waiting:network",
+    "waiting:server"
+  ],
   "surface": {
     "BridgeCollection": [
       "create",

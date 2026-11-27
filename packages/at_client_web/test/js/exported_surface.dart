@@ -346,3 +346,147 @@ List<String> splitTopLevel(String text) {
   }
   return parts..add(text.substring(from));
 }
+
+/// The option names `BridgeEntry._options` reads, split the way the method
+/// branches: [common] is everything before the `if (_flag(object, 'passkey'))`
+/// block, its own `'passkey'` test included; [passkey] is inside that block;
+/// [keys] is after it.
+({Set<String> common, Set<String> keys, Set<String> passkey}) createOptionNames(
+    String source) {
+  final body = _bodyOf(source, 'SessionOptions _options(');
+  final branch = RegExp(
+    r"if\s*\(\s*_flag\(object,\s*'passkey'\)\s*\)\s*\{",
+  ).firstMatch(body);
+  if (branch == null) {
+    throw StateError("bridge.dart has no `if (_flag(object, 'passkey'))`");
+  }
+  final close = _matchingBrace(body, branch.end - 1);
+  return (
+    common: _optionNames(body.substring(0, branch.end)),
+    passkey: _optionNames(body.substring(branch.end, close)),
+    keys: _optionNames(body.substring(close + 1)),
+  );
+}
+
+/// The names in `_own(object, '…')`, `_field(object, '…')` and
+/// `_flag(object, '…')` calls in [text].
+Set<String> _optionNames(String text) => {
+      for (final match in RegExp(r"_(?:own|field|flag)\(object,\s*'([^']+)'\)")
+          .allMatches(text))
+        match.group(1)!,
+    };
+
+/// The keys of the one `_envelope({…})` map inside
+/// `BridgeSession.subscribe`'s body, sorted.
+List<String> subscribeEnvelopeFields(String source) {
+  final body = _bodyOf(source, 'JSAny subscribe(');
+  final call = body.indexOf('_envelope({');
+  if (call < 0 || body.indexOf('_envelope(', call + 1) >= 0) {
+    throw StateError('subscribe has no single _envelope({…})');
+  }
+  final open = call + '_envelope('.length;
+  final close = _matchingBrace(body, open);
+  final fields = {
+    for (final match
+        in RegExp(r"'([^']+)'\s*:").allMatches(body.substring(open, close)))
+      match.group(1)!,
+  };
+  return fields.toList()..sort();
+}
+
+/// The status strings `AtClientSession` can report: every string literal in
+/// `_statusOf`, plus the `?? '…'` fallback the constructor starts with, sorted.
+List<String> statusNames(String source) {
+  final statusOf = _bodyOf(source, 'String? _statusOf(');
+  final constructor = _bodyOf(source, 'AtClientSession(this._client');
+  final names = {
+    for (final match in RegExp(r"'([^']*)'").allMatches(statusOf))
+      match.group(1)!,
+    for (final match in RegExp(r"\?\?\s*'([^']*)'").allMatches(constructor))
+      match.group(1)!,
+  };
+  return names.toList()..sort();
+}
+
+/// The body of the declaration that starts at the first occurrence of
+/// [signature] in [source]: the text between its body's braces. The parameter
+/// list's `)` is found first, so a named parameter group's `{` is not mistaken
+/// for the body.
+String _bodyOf(String source, String signature) {
+  final start = source.indexOf(signature);
+  if (start < 0) throw StateError('no `$signature` in the source');
+  final closeParen = _matchingBrace(source, source.indexOf('(', start));
+  final openBrace = source.indexOf('{', closeParen);
+  final closeBrace = _matchingBrace(source, openBrace);
+  return source.substring(openBrace + 1, closeBrace);
+}
+
+/// The index of the bracket that closes the one at [open] in [source], with
+/// comments and string literals skipped so a bracket inside either cannot
+/// change the depth.
+int _matchingBrace(String source, int open) {
+  final opener = source[open];
+  final String closer;
+  if (opener == '{') {
+    closer = '}';
+  } else if (opener == '(') {
+    closer = ')';
+  } else if (opener == '[') {
+    closer = ']';
+  } else {
+    throw StateError('${source.substring(open)} does not start a bracket');
+  }
+  var depth = 0;
+  var i = open;
+  while (i < source.length) {
+    final ch = source[i];
+    if (ch == '/' && i + 1 < source.length && source[i + 1] == '/') {
+      i += 2;
+      while (i < source.length && source[i] != '\n') {
+        i++;
+      }
+      continue;
+    }
+    if (ch == '/' && i + 1 < source.length && source[i + 1] == '*') {
+      var nesting = 1;
+      i += 2;
+      while (i < source.length && nesting > 0) {
+        if (source[i] == '/' && i + 1 < source.length && source[i + 1] == '*') {
+          nesting++;
+          i += 2;
+        } else if (source[i] == '*' &&
+            i + 1 < source.length &&
+            source[i + 1] == '/') {
+          nesting--;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+    if (ch == '\'' || ch == '"') {
+      final triple =
+          i + 2 < source.length && source[i + 1] == ch && source[i + 2] == ch;
+      final delim = triple ? ch * 3 : ch;
+      i += delim.length;
+      while (i < source.length && !source.startsWith(delim, i)) {
+        if (!triple && source[i] == '\n') break;
+        if (source[i] == r'\' && i + 1 < source.length) {
+          i += 2;
+          continue;
+        }
+        i++;
+      }
+      if (source.startsWith(delim, i)) i += delim.length;
+      continue;
+    }
+    if (ch == opener) depth++;
+    if (ch == closer) {
+      depth--;
+      if (depth == 0) return i;
+    }
+    i++;
+  }
+  throw StateError('unbalanced $opener in the source');
+}

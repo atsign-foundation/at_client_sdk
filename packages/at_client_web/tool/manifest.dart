@@ -12,11 +12,17 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_client_web/src/js/bridge_surface.dart' show bridgeSurface;
+import 'package:at_client_web/src/exceptions.dart' show maxErrorMessageLength;
+import 'package:at_client_web/src/js/bridge_surface.dart'
+    show bridgeSurface, createOptions, envelopes, statuses;
 import 'package:at_client_web/src/js/error_codes.dart'
     show atErrorCodes, collectionErrorCodes;
 
-const _schemaVersion = 1;
+/// The manifest format. Adding a top-level key or a list entry bumps this;
+/// renaming or removing one is a breaking manifest change. It counts released
+/// manifests, not commits, so later changes on this branch do not bump it
+/// again until a manifest is released.
+const _schemaVersion = 2;
 
 const _usage = 'usage: dart tool/manifest.dart\n'
     '       dart tool/manifest.dart --out PATH';
@@ -40,6 +46,13 @@ void main(List<String> args) {
 
   _checkList('collectionErrorCodes', collectionErrorCodes);
   _checkList('errorCodes', atErrorCodes);
+  for (final MapEntry(key: form, value: options) in createOptions.entries) {
+    _checkList('createOptions[$form]', options);
+  }
+  for (final MapEntry(key: name, value: fields) in envelopes.entries) {
+    _checkList('envelopes[$name]', fields);
+  }
+  _checkList('statuses', statuses);
   if (bridgeSurface.isEmpty) _fail('bridgeSurface is empty');
   for (final MapEntry(key: owner, value: members) in bridgeSurface.entries) {
     _checkList('surface[$owner]', members);
@@ -56,9 +69,13 @@ void main(List<String> args) {
   }
 
   final manifest = <String, Object?>{
+    'bounds': {'maxErrorMessageLength': maxErrorMessageLength},
     'collectionErrorCodes': collectionErrorCodes,
+    'createOptions': createOptions,
+    'envelopes': envelopes,
     'errorCodes': atErrorCodes,
     'schemaVersion': _schemaVersion,
+    'statuses': statuses,
     'surface': _sortedMap(bridgeSurface),
   };
   final text = '${const JsonEncoder.withIndent('  ').convert(manifest)}\n';
