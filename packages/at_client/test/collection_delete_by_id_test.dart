@@ -8,7 +8,10 @@ import 'test_utils/mocks.dart';
 
 /// Catalogue: features/at_client/collection_delete_by_id.feature
 void main() {
-  setUpAll(() => registerFallbackValue(FakeAtKey()));
+  setUpAll(() {
+    registerFallbackValue(FakeAtKey());
+    registerFallbackValue(GetRequestOptions());
+  });
 
   const selfAtSignStr = '@alice';
   final selfAtSign = selfAtSignStr.toAtsign();
@@ -44,6 +47,17 @@ void main() {
         ..metadata = (Metadata()
           ..createdAt = DateTime.now().toUtc()
           ..expiresAt = DateTime.now().add(const Duration(days: 1)));
+    });
+    when(() => atClient.getMeta(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenAnswer((inv) async {
+      final key = inv.positionalArguments[0] as AtKey;
+      if (!store.containsKey('$key')) {
+        throw KeyNotFoundException('no key $key');
+      }
+      return Metadata()
+        ..createdAt = DateTime.now().toUtc()
+        ..expiresAt = DateTime.now().add(const Duration(days: 1));
     });
     when(() => atClient.getAtKeys(regex: any(named: 'regex'))).thenAnswer(
       (inv) async {

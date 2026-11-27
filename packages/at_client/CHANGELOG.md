@@ -1,5 +1,6 @@
 ## Unreleased
 
+- `AtCollection.create` with an explicit id checks the store on every call instead of trusting the seen-id cache, so an item deleted or expired elsewhere can be created again. A check that itself fails rejects with the lookup's own error and writes nothing, rather than overwriting the item; a `StateError` from the lookup is wrapped in `AtClientException`. `upsert` is unchanged.
 - `AtCollection.deleteById` deletes an own item by its id, so a record this device cannot decode can still be removed; it keeps `delete`'s bookkeeping: the refusal while self-owned descendants exist, the seen-id cache eviction, the `CItemDeleted` event and the ancestors' `CSubItemDeleted` events. It is on the `AtCollection` interface, so a class outside this package that implements it must add the method.
 - `AtCollection.getItemsAsStream`, and the `get`, `getOrNull` and `getItems` paths over it, report a read that fails in transit — a timeout, or an atServer that cannot be reached — as that error instead of wrapping it in `CItemReadException`; only a record this device cannot decode is reported unreadable. `isTransportFailure` exposes the distinction.
 

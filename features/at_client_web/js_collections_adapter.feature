@@ -28,7 +28,10 @@ Feature: The JS collections adapter translates onto AtCollection
   #   returns readable items and reports unreadable ones"), while a read that
   #   fails in transit fails the listing instead of being reported as an
   #   unreadable record: "a listing whose read fails in transit rejects
-  #   COLLECTION_FAILED".
+  #   COLLECTION_FAILED". A create with an id probes metadata once, and a
+  #   probe that fails rejects rather than being retried: "create with an id
+  #   whose existence check fails rejects COLLECTION_FAILED, not
+  #   ALREADY_EXISTS".
   # Forgery: an item's owner is the sharedBy of its key and never a field of its
   #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
   #   A peer cannot make a transient failure look like corrupt data, because a
@@ -36,7 +39,10 @@ Feature: The JS collections adapter translates onto AtCollection
   #   COLLECTION_FAILED". A remove deletes by id only for an item whose own
   #   read reports it undecodable, and never for a transient failure, so a
   #   corrupt value is the only thing that triggers a delete: "an unreadable
-  #   own item can be removed".
+  #   own item can be removed". A failed existence check is not dressed up as
+  #   another writer's record, so it rejects COLLECTION_FAILED rather than
+  #   COLLECTION_ITEM_ALREADY_EXISTS: "create with an id whose existence
+  #   check fails with a StateError cause rejects COLLECTION_FAILED".
   # Impersonation: a write to an item another atSign owns is refused before any
   #   key is written: "An update, share or remove of another owner's item rejects
   #   with COLLECTION_ITEM_NOT_OWNER". An unreadable item is no exception: "an
@@ -92,6 +98,16 @@ Feature: The JS collections adapter translates onto AtCollection
     Given an item "i1"
     When the adapter creates another item "i1"
     Then the create rejects with COLLECTION_ITEM_ALREADY_EXISTS
+
+  Scenario: create with an id whose existence check fails rejects COLLECTION_FAILED, not ALREADY_EXISTS
+    Given a metadata lookup of "i1" sent to the atServer times out
+    When the adapter creates an item with the id "i1"
+    Then the create rejects with COLLECTION_FAILED and not COLLECTION_ITEM_ALREADY_EXISTS
+
+  Scenario: create with an id whose existence check fails with a StateError cause rejects COLLECTION_FAILED
+    Given a metadata lookup of "i1" sent to the atServer throws a StateError
+    When the adapter creates an item with the id "i1"
+    Then the create rejects with COLLECTION_FAILED and the kind "AtClientException"
 
   Scenario: Two creates with one id at once are serialised by the adapter
     Given an adapter

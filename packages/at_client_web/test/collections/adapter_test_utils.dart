@@ -27,6 +27,7 @@ void registerAdapterFallbacks() {
   registerFallbackValue(const Duration());
   registerFallbackValue('');
   registerFallbackValue(false);
+  registerFallbackValue(GetRequestOptions());
 }
 
 class MockAtClient extends Mock implements AtClient {}
@@ -76,6 +77,14 @@ class FakeAtServer {
     return AtValue()
       ..value = stored.value
       ..metadata = stored.key.metadata;
+  }
+
+  Metadata _getMeta(Atsign me, AtKey key) {
+    final stored = _store[key.toString()];
+    if (stored == null || !_visibleTo(stored.key, me)) {
+      throw KeyNotFoundException('no key ${key.toString()}');
+    }
+    return stored.key.metadata;
   }
 
   /// How many keys are stored.
@@ -190,8 +199,13 @@ class FakeAtClient {
       _beforePut?.call(key);
       return _server._put(key, inv.positionalArguments[1] as String);
     });
+    when(() => mock.getPreferences()).thenReturn(AtClientPreference());
     when(() => mock.get(any())).thenAnswer((inv) => Future.sync(
         () => _server._get(atSign, inv.positionalArguments[0] as AtKey)));
+    when(() => mock.getMeta(any(),
+        getRequestOptions:
+            any(named: 'getRequestOptions'))).thenAnswer((inv) => Future.sync(
+        () => _server._getMeta(atSign, inv.positionalArguments[0] as AtKey)));
     when(() => mock.delete(any())).thenAnswer(
         (inv) async => _server._delete(inv.positionalArguments[0] as AtKey));
     when(() => mock.getAtKeys(regex: any(named: 'regex'))).thenAnswer(

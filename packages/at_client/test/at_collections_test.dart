@@ -38,6 +38,7 @@ class Widget {
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());
+    registerFallbackValue(GetRequestOptions());
   });
 
   late MockAtClient atClient;
@@ -53,6 +54,11 @@ void main() {
     atClient = MockAtClient();
     notifStream = StreamController<AtNotification>.broadcast();
     when(() => atClient.atSign).thenReturn(selfAtSign);
+    // create's explicit-id probe is a metadata lookup. These fixtures
+    // create fresh ids, so no record is held unless a test overrides this.
+    when(() => atClient.getMeta(any(),
+            getRequestOptions: any(named: 'getRequestOptions')))
+        .thenThrow(KeyNotFoundException('no such key'));
   });
 
   tearDown(() async {
@@ -1019,6 +1025,11 @@ void main() {
           ..expiresAt = DateTime.now().add(const Duration(days: 1));
         return v;
       });
+      when(() => atClient.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((_) async => Metadata()
+            ..createdAt = DateTime.now().toUtc()
+            ..expiresAt = DateTime.now().add(const Duration(days: 1)));
       when(() => atClient.put(any(), any())).thenAnswer((_) async => true);
       when(
         () => atClient.getAtKeys(regex: any(named: 'regex')),

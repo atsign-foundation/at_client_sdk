@@ -24,7 +24,10 @@ class _Collections {
 }
 
 void main() {
-  setUpAll(() => registerFallbackValue(FakeAtKey()));
+  setUpAll(() {
+    registerFallbackValue(FakeAtKey());
+    registerFallbackValue(GetRequestOptions());
+  });
 
   const selfAtSignStr = '@alice';
   final selfAtSign = selfAtSignStr.toAtsign();
@@ -1054,6 +1057,9 @@ void main() {
       final c = buildParent();
       when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => c.atClient.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(KeyNotFoundException('no such key'));
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => <AtKey>[]);
 
@@ -1092,6 +1098,9 @@ void main() {
       final c = buildParent();
       when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => c.atClient.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(KeyNotFoundException('no such key'));
       when(() => c.atClient.getAtKeys(regex: any(named: 'regex')))
           .thenAnswer((_) async => <AtKey>[]);
 
@@ -1155,6 +1164,9 @@ void main() {
       when(() => c.atClient.put(any(), any())).thenAnswer((_) async => true);
       when(() => c.atClient.delete(any())).thenAnswer((_) async => true);
       when(() => c.atClient.get(any())).thenThrow(Exception('no such key'));
+      when(() => c.atClient.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenThrow(KeyNotFoundException('no such key'));
       // Self-key+recipients scan for c1: returns the self-key.
       // Descendants scan for c1: returns [].
       final c1Key = AtKey.fromString('c1.comments.p1.$parentNs$selfAtSignStr');

@@ -525,6 +525,49 @@ void main() {
       );
     });
 
+    test(
+        'create with an id whose existence check fails rejects COLLECTION_FAILED, not ALREADY_EXISTS',
+        () async {
+      final todos = await open();
+      when(() => alice.mock.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer == true) {
+          throw AtTimeoutException('no answer');
+        }
+        throw KeyNotFoundException('no record');
+      });
+
+      await expectLater(
+        todos.create({'title': 'a'}, id: 'i1'),
+        _rejectsWith(CollectionFailure.failed, id: 'i1', owner: '@alice'),
+      );
+    });
+
+    test(
+        'create with an id whose existence check fails with a StateError cause rejects COLLECTION_FAILED',
+        () async {
+      final todos = await open();
+      when(() => alice.mock.getMeta(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer((inv) async {
+        final options =
+            inv.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        if (options?.useRemoteAtServer == true) {
+          throw StateError('lookup broke');
+        }
+        throw KeyNotFoundException('no record');
+      });
+
+      await expectLater(
+        todos.create({'title': 'a'}, id: 'i1'),
+        _rejectsWith(CollectionFailure.failed,
+            id: 'i1', owner: '@alice', causeType: 'AtClientException'),
+      );
+    });
+
     test('Two creates with one id at once are serialised by the adapter',
         () async {
       registerFallbackValue(<String, dynamic>{});

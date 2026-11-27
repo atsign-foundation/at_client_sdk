@@ -77,6 +77,9 @@ class _Client extends Fake implements AtClient {
   String? getCurrentAtSign() => me;
 
   @override
+  AtClientPreference? getPreferences() => null;
+
+  @override
   Future<AtCollection<T>> collection<T>(
     String namespace,
     Duration defaultExpiration, {
@@ -148,6 +151,13 @@ class _Client extends Fake implements AtClient {
         ..expiresAt = record.expiresAt
         ..ttl = record.ttl
         ..immutable = record.immutable);
+  }
+
+  @override
+  Future<Metadata?> getMeta(AtKey key,
+      {GetRequestOptions? getRequestOptions}) async {
+    final value = await get(key, getRequestOptions: getRequestOptions);
+    return value.metadata;
   }
 
   @override

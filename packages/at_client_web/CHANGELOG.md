@@ -1,5 +1,6 @@
 ## Unreleased
 
+- A collection `create` with an id whose existence check fails rejects `COLLECTION_FAILED` with the lookup's cause instead of `COLLECTION_ITEM_ALREADY_EXISTS`, and writes nothing, so a failed probe never overwrites the item.
 - A collection `remove` of an own item whose stored value cannot be decoded deletes it by id instead of rejecting `COLLECTION_ITEM_UNREADABLE`; an unreadable item of another atSign still rejects `COLLECTION_ITEM_NOT_OWNER`.
 - A collection listing or get whose read fails in transit rejects `COLLECTION_FAILED` instead of reporting the record unreadable, so a timeout or an unreachable atServer never becomes a `COLLECTION_ITEM_UNREADABLE` entry.
 

@@ -442,8 +442,8 @@ interface class AtCollection<T> {
   // an item we just persisted — the common bulk-edit path. Cleared
   // on successful self-delete; left alone on failures so a retry
   // path still probes. An entry can outlive its item, when another
-  // client of this atSign deletes it or it expires, so [upsert] reads
-  // past it to decide the new-item rule.
+  // client of this atSign deletes it or it expires, so [upsert] and
+  // [create] read past it to decide the new-item rule.
   final Set<String> _seenSelfIds = <String>{};
 
   // Lazy-init scheduler that fires CItemAvailable into [_events] when
@@ -982,11 +982,31 @@ interface class AtCollection<T> {
     if (id != null) {
       useId = _foldedId(id, forWrite: true);
       _checkNewId(useId, id);
-      if (await _selfKeyExists(useId)) {
-        throw StateError(
-          'Cannot create item with id "$useId": already exists in $namespace. '
-          'Use update() to modify an existing item.',
-        );
+      // Ask the store every time: the seen-id cache only records ids this
+      // process wrote, and the item may since have been deleted or expired
+      // elsewhere. A check that itself fails is not evidence that the id is
+      // free, so create refuses with the lookup's own cause rather than
+      // overwriting.
+      final probe = await _selfKeyHeld(useId);
+      switch (probe.held) {
+        case _Held.yes:
+          throw StateError(
+            'Cannot create item with id "$useId": already exists in $namespace. '
+            'Use update() to modify an existing item.',
+          );
+        case _Held.no:
+          break;
+        case _Held.unchecked:
+          final cause = probe.cause!;
+          if (cause is StateError) {
+            // The adapter reads any StateError from create() as "the item
+            // already exists"; a failed lookup did not establish that.
+            throw AtClientException.message(
+              'Could not check whether an item with id "$useId" exists in '
+              '$namespace: ${cause.message}',
+            );
+          }
+          Error.throwWithStackTrace(cause, StackTrace.current);
       }
     } else {
       useId = await _uniqueItemId();
@@ -998,8 +1018,8 @@ interface class AtCollection<T> {
       expiresAt: expiresAt,
       availableAt: availableAt,
     );
-    // `create` has already established (via the `_selfKeyExists` guard
-    // above) that no self-key exists for `(owner=atSign, id=useId)`.
+    // `create` has already established (via the metadata check above) that
+    // no self-key exists for `(owner=atSign, id=useId)`.
     // Self and recipient copies are written under one metadata in `_put`
     // (same TTL), so absence of the self-key implies absence of any
     // legitimate sibling `cached:<recipient>:<id>.<ns>@<self>` copies —
@@ -1018,7 +1038,7 @@ interface class AtCollection<T> {
     //      written, then a new process calls `create` with the same
     //      manual id and a different `sharedWith`.
     //   3. Two processes on the same atSign race on the same manual id
-    //      (the `_selfKeyExists` check is not atomic with `_put`).
+    //      (the metadata check is not atomic with `_put`).
     // All three require deliberately questionable application
     // implementation choices (bypassing the collection's own delete
     // path, reusing manual ids across process boundaries without
@@ -1124,7 +1144,7 @@ interface class AtCollection<T> {
       availableAt: availableAt,
     );
     if (!_newIdPattern.hasMatch(draft.id)) {
-      final held = await _selfKeyHeld(draft.id);
+      final held = (await _selfKeyHeld(draft.id)).held;
       if (held != _Held.yes) {
         _checkNewId(draft.id, id, atServerChecked: held == _Held.no);
       }
@@ -3335,8 +3355,9 @@ interface class AtCollection<T> {
   /// counts as held; when local storage holds nothing, it asks the atServer
   /// too, so an item that sync has not yet brought to this device is still
   /// held. At the atServer only metadata counts: a lookup that fails for any
-  /// reason but the item's absence leaves the item unchecked.
-  Future<_Held> _selfKeyHeld(String id) async {
+  /// reason but the item's absence leaves the item unchecked, and the
+  /// returned record's `cause` carries that failure.
+  Future<({_Held held, Object? cause})> _selfKeyHeld(String id) async {
     final key = '$id.$namespace$atSign';
     final atServerOnly = atClient.getPreferences()?.remoteLocalPref ==
         RemoteLocalPref.remoteOnly;
@@ -3344,17 +3365,17 @@ interface class AtCollection<T> {
       try {
         await atClient.getMeta(AtKey.fromString(key),
             getRequestOptions: GetRequestOptions()..useRemoteAtServer = remote);
-        return _Held.yes;
+        return (held: _Held.yes, cause: null);
       } catch (e) {
         if (e is StoppedException) rethrow;
         if (e is AtKeyNotFoundException || e is KeyNotFoundException) continue;
-        if (!remote) return _Held.yes;
+        if (!remote) return (held: _Held.yes, cause: null);
         // NOTE: an atServer lookup that fails for any reason but the item's
         // absence leaves the item unchecked.
-        return _Held.unchecked;
+        return (held: _Held.unchecked, cause: e);
       }
     }
-    return _Held.no;
+    return (held: _Held.no, cause: null);
   }
 
   Future<bool> _selfKeyExists(String id) async {
