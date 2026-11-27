@@ -52,6 +52,10 @@ Future<AtClient> openSession({
 /// explicit [prefs] is used as it is, so asking to name an app with one
 /// throws an [ArgumentError]. [atLookUp], when given, is the connection the
 /// client takes over. [logger] names the caller in the teardown warning.
+/// The client's first connect and the authentication it waits for are bounded
+/// by the network default (`AtNetworkTimeouts.effectiveDefault`), read as the
+/// open starts, so a retry ladder and a PKAM that finishes late still fit;
+/// `AtConnection.defaultBudget` stays what every other caller gets.
 Future<AtClient> openOnline({
   required String atSign,
   required String app,
@@ -92,6 +96,9 @@ Future<AtClient> openOnline({
     atLookUp: atLookUp,
     lookUps: transport.lookUps,
     secondaryAddressFinder: transport.finder,
+    // Read here, at call time: the network default is a mutable static, and
+    // an open must fit the retry ladder and the PKAM it waits for inside it.
+    connectBudget: AtNetworkTimeouts.effectiveDefault,
   );
   try {
     final state = client.connection.current;

@@ -1,5 +1,6 @@
 ## Unreleased
 
+- Session opens pass the network default (30 s) as the budget of their first connect, so authentication that finishes after five seconds still opens the session and a dead atServer ends the open in thirty seconds; `AtConnection.defaultBudget` stays five seconds for every other caller.
 - `subscribe` delivers each notification's whole key, up to 255 UTF-16 units, instead of cutting it to the message bound, and adds `keyParts` (`name`, `namespace`, `sharedWith`, `sharedBy`, `isPublic`, `isCached`) parsed once from that key; a key longer than 255 units or holding control or bidirectional formatting characters is dropped with a warning that names the key, not the sender. `bridge-manifest.json` publishes the `keyParts` envelope and `maxNotificationKeyLength`.
 - The bridge session exposes `atSign()`, the session's atSign in its canonical form (lower case, `@` form, dots stripped), so an app composes keys with the one spelling instead of its own; it is a read, so it answers on a closed session too.
 - `bridge-manifest.json` (schema 2) also publishes the create options each session form reads, the subscribe envelope fields, every connection status and the bridge's maximum error message length, generated from the Dart constants.

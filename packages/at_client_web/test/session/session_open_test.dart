@@ -29,6 +29,10 @@ void main() {
   final finder = FixedSecondaryAddressFinder('atserver.test', 1);
   late Wire wire;
 
+  /// The process-wide network default as the suite found it, put back after
+  /// each test so a test that shortens it changes no other.
+  late Duration networkDefault;
+
   SessionTransport transport() =>
       (lookUps: wire.lookUps, finder: finder, root: AtRootDomain.atsignDomain);
 
@@ -58,9 +62,11 @@ void main() {
 
   setUp(() {
     wire = Wire();
+    networkDefault = AtNetworkTimeouts.defaultTimeout;
   });
 
   tearDown(() async {
+    AtNetworkTimeouts.defaultTimeout = networkDefault;
     for (final c
         in List<AtClient>.from(AtClientImpl.atClientInstanceMap.values)) {
       await c.stop();
@@ -147,6 +153,74 @@ void main() {
 
     expect(store.reads, greaterThan(0));
     expect(client.enrollmentId, 'eid1');
+  });
+
+  group('the network default is the open budget', () {
+    test('an open whose authentication finishes after five seconds succeeds',
+        () async {
+      final held = Completer<bool>();
+      wire.pkamScript.add(held);
+      Timer(const Duration(milliseconds: 5200), () => held.complete(true));
+
+      final client = await open();
+
+      expect(client.connection.current.isOnline, isTrue,
+          reason: 'the open waited past the five second connection budget '
+              'for its PKAM');
+    });
+
+    test(
+        'an open passes the network default as its budget on both session '
+        'forms', () async {
+      AtNetworkTimeouts.defaultTimeout = const Duration(seconds: 7);
+      final forms = <(String, Future<AtClient> Function())>[
+        ('passkey (openSession)', open),
+        (
+          'keys (portalSession)',
+          () => portalSession(
+              atSign: _atSign,
+              app: _app,
+              keys: classicalAtKeys(enrollmentId: 'eid1'),
+              transport: transport())
+        ),
+      ];
+
+      for (final (name, start) in forms) {
+        wire.pkamScript.add(Completer<bool>());
+        final watch = Stopwatch()..start();
+        await expectLater(
+            start(), throwsA(isA<PortalSessionOfflineException>()),
+            reason: 'the $name open waits the network default for its PKAM');
+        watch.stop();
+
+        expect(watch.elapsed, greaterThan(const Duration(seconds: 6)),
+            reason: 'the $name open did not fail at the five second '
+                'connection budget');
+        expect(watch.elapsed, lessThan(const Duration(seconds: 8)),
+            reason: 'the $name open ended within the seven second network '
+                'default');
+      }
+    });
+
+    test('an open that cannot finish within thirty seconds rejects offline',
+        () async {
+      AtNetworkTimeouts.defaultTimeout = const Duration(seconds: 7);
+      wire.pkamScript.add(Completer<bool>());
+
+      final watch = Stopwatch()..start();
+      await expectLater(
+          open(),
+          throwsA(isA<PortalSessionOfflineException>()
+              .having((e) => e.state.outcome, 'outcome',
+                  AtConnectionOutcome.offline)
+              .having((e) => e.state.cause, 'cause',
+                  AtConnectionCause.unreachable)));
+      watch.stop();
+
+      expect(watch.elapsed, greaterThan(const Duration(seconds: 6)),
+          reason: 'the open waited the network default, not the five second '
+              'connection budget');
+    });
   });
 
   group('concurrent opens', () {

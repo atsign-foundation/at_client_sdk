@@ -27,7 +27,15 @@ Feature: create opens a session and close ends it
   #   "credential-less keys reject with bad_key"); appName and appVersion are
   #   carried as strings, trimmed and blank-cleared, and at_auth cuts each to
   #   64 UTF-16 units ("a non-string appName or appVersion rejects
-  #   invalid_argument naming the option").
+  #   invalid_argument naming the option"). An open's connect and
+  #   authentication are bounded by the network default, so a dead atServer
+  #   ends the open in thirty seconds at most and never at the shorter
+  #   connection budget, while one that answers late still succeeds ("an open
+  #   that cannot finish within thirty seconds rejects offline", "an open
+  #   passes the network default as its budget on both session forms", "an
+  #   open whose authentication finishes after five seconds succeeds"); a
+  #   refused first connection is retried on a fresh socket instead of failing
+  #   the open ("create() tolerates one refused connection").
   # Forgery: options are read only as own plain properties and keys are parsed
   #   into AtKeys rather than trusted as strings ("keys may be an object as
   #   well as the document text").
@@ -165,6 +173,32 @@ Feature: create opens a session and close ends it
     Given a session opened without appName and appVersion
     When the client is online
     Then its preference's atClientParticulars name no app
+
+  Scenario: an open whose authentication finishes after five seconds succeeds
+    Given a session whose PKAM answers after five seconds
+    When the session is opened
+    Then the open waits for that answer and the session comes online
+    And it does not fail at the five second connection budget
+
+  Scenario: an open passes the network default as its budget on both session forms
+    Given the network default timeout is set to seven seconds
+    And a session whose PKAM never answers
+    When the keys form is opened and the passkey form is opened
+    Then each rejects offline after more than five seconds
+    And each rejects within the seven second network default
+
+  Scenario: an open that cannot finish within thirty seconds rejects offline
+    Given the network default timeout is set below thirty seconds
+    And a session whose PKAM never answers
+    When the session is opened
+    Then it rejects offline once the network default is spent
+    And it did not reject at the five second connection budget
+
+  Scenario: create() tolerates one refused connection
+    Given a proxy that closes the first WebSocket upgrade before answering
+    When create is called
+    Then the first attempt is retried on a fresh socket
+    And the session opens
 
   Scenario: appName with explicit prefs is refused naming appName
     Given an open with an explicit preference and an appName
