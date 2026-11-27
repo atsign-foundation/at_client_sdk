@@ -31,7 +31,9 @@ Feature: The JS collections adapter translates onto AtCollection
   #   COLLECTION_FAILED". A create with an id probes metadata once, and a
   #   probe that fails rejects rather than being retried: "create with an id
   #   whose existence check fails rejects COLLECTION_FAILED, not
-  #   ALREADY_EXISTS".
+  #   ALREADY_EXISTS". The refusals added at open and for an equality value
+  #   are decided before any key is read or written, so they add no work an
+  #   atServer or a peer can be made to do: DoS: n/a.
   # Forgery: an item's owner is the sharedBy of its key and never a field of its
   #   data or envelope: "An item's owner comes from the key's sharedBy, never from its data".
   #   A peer cannot make a transient failure look like corrupt data, because a
@@ -42,7 +44,10 @@ Feature: The JS collections adapter translates onto AtCollection
   #   own item can be removed". A failed existence check is not dressed up as
   #   another writer's record, so it rejects COLLECTION_FAILED rather than
   #   COLLECTION_ITEM_ALREADY_EXISTS: "create with an id whose existence
-  #   check fails with a StateError cause rejects COLLECTION_FAILED".
+  #   check fails with a StateError cause rejects COLLECTION_FAILED". A
+  #   `where` value that is an object or an array is refused instead of being
+  #   compared, so no clause can suggest structural equality it never had:
+  #   "equality on an object or array value is refused".
   # Impersonation: a write to an item another atSign owns is refused before any
   #   key is written: "An update, share or remove of another owner's item rejects
   #   with COLLECTION_ITEM_NOT_OWNER". An unreadable item is no exception: "an
@@ -66,6 +71,16 @@ Feature: The JS collections adapter translates onto AtCollection
   Scenario: A non-positive expirationMs rejects with COLLECTION_INVALID_ARGUMENT
     When the adapter opens a collection with expirationMs 0 or -1
     Then the open rejects with COLLECTION_INVALID_ARGUMENT
+    And AtClient.collection is never called
+
+  Scenario: reopening a collection with another expiration rejects COLLECTION_INVALID_ARGUMENT naming expiration
+    Given a collection already open on this client for the namespace
+    When the adapter opens that namespace again with another expirationMs
+    Then the open rejects with COLLECTION_INVALID_ARGUMENT and the refusal "expiration"
+
+  Scenario: a collection of type binary is refused at open
+    When the adapter opens a collection with type "binary"
+    Then the open rejects with COLLECTION_INVALID_ARGUMENT and the refusal "type"
     And AtClient.collection is never called
 
   Scenario: A failed open rejects with COLLECTION_FAILED naming the error kind
@@ -272,6 +287,11 @@ Feature: The JS collections adapter translates onto AtCollection
   Scenario: An unknown or reserved operator or a bad path or value rejects with COLLECTION_INVALID_ARGUMENT
     When the adapter queries with "like", "~", "=<" with a map value, an empty path segment or a map value for "<"
     Then each rejects with COLLECTION_INVALID_ARGUMENT naming the problem
+
+  Scenario: equality on an object or array value is refused
+    When the adapter queries with "==" and "!=" over an object value and over an array value
+    Then each rejects with COLLECTION_INVALID_ARGUMENT and the refusal "whereValue"
+    And a scalar value still matches
 
   Scenario: A query returns matching readable items and reports unreadable ones
     Given a readable item and an unreadable shared item "b1" owned by @bob

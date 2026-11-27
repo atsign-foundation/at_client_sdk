@@ -9,6 +9,7 @@ import 'test_utils/no_keys.dart';
 import 'test_utils/transport.dart';
 
 /// Catalogue: features/at_client/collection_write_type_tag.feature
+/// Catalogue: features/at_client/collection_reopen_expiration.feature
 void main() {
   const ns = 'notes.wavi';
   const at = '@reopen';
@@ -104,6 +105,45 @@ void main() {
       'Given a namespace opened in mixed case, when the collection is handed '
       'out, then its namespace is lower-cased', () async {
     expect((await open('x+upper')).namespace, ns);
+  });
+
+  test('reopening a collection with another expiration is refused', () async {
+    const day = Duration(days: 1);
+    final first = await client.collection<_Todo>(ns, day, writeTypeTag: 'x');
+
+    await expectLater(
+      client.collection<_Todo>(ns, const Duration(days: 2), writeTypeTag: 'x'),
+      throwsA(isA<ArgumentError>()
+          .having((e) => e.name, 'name', 'defaultExpiration')
+          .having((e) => e.message, 'message', contains(ns))),
+    );
+
+    // Nothing was replaced: the first collection is still the cached one,
+    // with the expiration it was built with.
+    final again = await client.collection<_Todo>(ns, day, writeTypeTag: 'x');
+    expect(again, same(first));
+    expect(again.defaultExpiration, day);
+  });
+
+  test(
+      'reopening a collection with its own expiration returns the cached '
+      'collection', () async {
+    const day = Duration(days: 1);
+    final first = await open('-');
+    expect(await open('-'), same(first));
+    expect(first.defaultExpiration, day);
+  });
+
+  test(
+      'opening another eventSource of the namespace with another expiration '
+      'is allowed', () async {
+    const day = Duration(days: 1);
+    final both = await client.collection<_Todo>(ns, day, writeTypeTag: 'x');
+    final data = await client.collection<_Todo>(ns, const Duration(days: 2),
+        eventSource: EventSource.data, writeTypeTag: 'x');
+    expect(data, isNot(same(both)));
+    expect(data.defaultExpiration, const Duration(days: 2));
+    expect(both.defaultExpiration, day);
   });
 
   test(

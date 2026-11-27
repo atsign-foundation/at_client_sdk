@@ -420,6 +420,49 @@ void main() {
           ));
     });
 
+    test(
+        'reopening a collection with another expiration rejects COLLECTION_INVALID_ARGUMENT naming expiration',
+        () async {
+      await open();
+
+      // AtClient.collection refuses a reopen of the cached collection with
+      // another default expiration; the adapter maps that refusal.
+      alice.failNextCollection(ArgumentError.value(
+          const Duration(days: 2),
+          'defaultExpiration',
+          'the collection $_ns is already open on this client with a default '
+              'expiration of $_day'));
+
+      await expectLater(
+        JsCollectionsAdapter.open(alice.mock,
+            namespace: _ns,
+            type: 'Todo',
+            expirationMs: const Duration(days: 2).inMilliseconds),
+        throwsA(isA<JsCollectionsError>()
+            .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+            .having((e) => e.refusal, 'refusal', CollectionRefusal.expiration)
+            .having((e) => e.causeType, 'kind', 'ArgumentError')),
+      );
+    });
+
+    test('a collection of type binary is refused at open', () async {
+      await expectLater(
+        open(type: 'binary'),
+        throwsA(isA<JsCollectionsError>()
+            .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+            .having((e) => e.refusal, 'refusal', CollectionRefusal.type)),
+      );
+      verifyNever(() => alice.mock.collection<Map<String, dynamic>>(
+            any(),
+            any(),
+            eventSource: any(named: 'eventSource'),
+            fromJson: any(named: 'fromJson'),
+            typeTag: any(named: 'typeTag'),
+            writeTypeTag: any(named: 'writeTypeTag'),
+            cleanupOrphansOnCreation: any(named: 'cleanupOrphansOnCreation'),
+          ));
+    });
+
     test('A failed open rejects with COLLECTION_FAILED naming the error kind',
         () async {
       alice.failNextCollection(StateError('upstream down'));
@@ -1436,6 +1479,28 @@ void main() {
                 lessThan(120))
             .having(atErrorMessage, 'truncated', contains('...'))),
       );
+    });
+
+    test('equality on an object or array value is refused', () async {
+      final todos = await seeded();
+      final refused = throwsA(isA<JsCollectionsError>()
+          .having(errorCodeOf, 'code', 'COLLECTION_INVALID_ARGUMENT')
+          .having((e) => e.refusal, 'refusal', CollectionRefusal.whereValue));
+
+      for (final (op, value) in [
+        ('==', <String, dynamic>{'a': 1}),
+        ('!=', <String, dynamic>{'a': 1}),
+        ('==', <Object?>[1]),
+        ('!=', <Object?>[1]),
+      ]) {
+        await expectLater(
+            todos.query([(path: 'meta', op: op, value: value)]), refused,
+            reason: '$op $value');
+      }
+
+      // A scalar value still matches.
+      expect(await where(todos, 'meta.prio', '==', 2), {'a'});
+      expect(await where(todos, 'meta.prio', '!=', 2), {'b', 'c'});
     });
 
     test('A query returns matching readable items and reports unreadable ones',

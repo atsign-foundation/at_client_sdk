@@ -670,6 +670,14 @@ class AtClientImpl implements AtClient {
       }
     }
     final cacheKey = (folded, eventSource);
+    // The cached collection's defaultExpiration is the lifetime every item
+    // written through it gets, and it is final at construction. Refuse a
+    // reopen that names another one rather than hand it out: live writers
+    // would then expire items at a time this caller did not ask for.
+    final open = _collections[cacheKey];
+    if (open != null) {
+      _refuseCollectionExpirationChange(open, defaultExpiration);
+    }
     final c = _collections.putIfAbsent(
       cacheKey,
       () => AtCollection<T>(
@@ -2463,4 +2471,30 @@ class AtClientImpl implements AtClient {
   AtClientPreference? getPreferences() {
     return _preference;
   }
+}
+
+/// Throws [ArgumentError] naming `defaultExpiration` when `open`, a
+/// collection [AtClient.collection] already handed out for this namespace and
+/// eventSource, lives for another default expiration than
+/// [defaultExpiration] asks for.
+///
+/// [AtCollection.defaultExpiration] is the lifetime every item written
+/// through the collection gets, and it is final at construction: a live
+/// writer expires items at the first TTL. So a reopen that names another one
+/// is refused rather than handed the cached collection, which would leave
+/// the caller writing items that live for a time it did not ask for. The
+/// same expiration hands the cached collection out as before.
+void _refuseCollectionExpirationChange(
+    AtCollection<dynamic> open, Duration defaultExpiration) {
+  final held = open.defaultExpiration;
+  if (held == defaultExpiration) return;
+  throw ArgumentError.value(
+      defaultExpiration,
+      'defaultExpiration',
+      'the collection ${open.namespace} is already open on this client '
+          'expiring new items after $held, not $defaultExpiration, and a '
+          'collection\'s default expiration is final at construction — it '
+          'cannot adopt this one. Open it with the expiration it was first '
+          'opened with, or use another namespace. Handing it out would leave '
+          'this caller writing items that live for a time it did not ask for');
 }

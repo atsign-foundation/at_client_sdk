@@ -119,8 +119,9 @@ final class JsCollectionsAdapter implements ItemCollection {
 
   /// Opens [namespace] through [AtClient.collection], unchanged, writing
   /// [type] as the wire type tag. [eventSource] is `'data'`, `'notifs'` or
-  /// `'both'`; when omitted, AtClient's default applies. A blank [type] or a
-  /// non-positive [expirationMs] rejects with
+  /// `'both'`; when omitted, AtClient's default applies. A blank [type], the
+  /// reserved [type] `'binary'` (at_client's `Uint8List` tag, which no JS
+  /// value produces) or a non-positive [expirationMs] rejects with
   /// [CollectionFailure.invalidArgument] before anything opens.
   static Future<JsCollectionsAdapter> open(
     AtClient client, {
@@ -136,6 +137,11 @@ final class JsCollectionsAdapter implements ItemCollection {
               refusal: CollectionRefusal.expiration);
         }
         if (type.trim().isEmpty) {
+          throw JsCollectionsError(CollectionFailure.invalidArgument,
+              refusal: CollectionRefusal.type);
+        }
+        // at_client reserves `binary` for byte items, which no JS value is.
+        if (type == 'binary') {
           throw JsCollectionsError(CollectionFailure.invalidArgument,
               refusal: CollectionRefusal.type);
         }
@@ -200,7 +206,10 @@ final class JsCollectionsAdapter implements ItemCollection {
 
   /// The readable items matching every clause, in the order AtCollection
   /// returns them, and the records that could not be read. Operators: `==`,
-  /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`.
+  /// `!=`, `<`, `<=`, `>`, `>=`, `isNull`, `isNotNull`. An `==` or `!=` value
+  /// that is an object or an array rejects with
+  /// [CollectionFailure.invalidArgument]: neither has structural equality, so
+  /// the clause would match nothing.
   @override
   Future<JsListing> query(List<JsWhereClause> clauses) => _mapFailures(
       () => _read([for (final clause in clauses) _predicate(clause)]));
@@ -460,8 +469,10 @@ final class JsCollectionsAdapter implements ItemCollection {
     final field = PathField<Object?>(path: path, extract: extract);
     switch (clause.op) {
       case '==':
+        _refuseStructuralValue(clause);
         return field.eq(clause.value);
       case '!=':
+        _refuseStructuralValue(clause);
         return field.neq(clause.value);
       case 'isNull':
         return field.isNull;
@@ -488,6 +499,19 @@ final class JsCollectionsAdapter implements ItemCollection {
           refusal: CollectionRefusal.whereValue, subject: clause.op);
     }
     return field.isNotNull.and(compare(value as Comparable<dynamic>));
+  }
+
+  /// Refuses an `==` or `!=` value that is a map or a list.
+  ///
+  /// AtCollection compares with `==`, so an object or an array value is never
+  /// equal to the stored one and the clause would match nothing without
+  /// saying so. Scalars are compared as before.
+  static void _refuseStructuralValue(JsWhereClause clause) {
+    final value = clause.value;
+    if (value is Map || value is List) {
+      throw JsCollectionsError(CollectionFailure.invalidArgument,
+          refusal: CollectionRefusal.whereValue, subject: clause.op);
+    }
   }
 
   static JsItem _item(CItem<Map<String, dynamic>> item) {
@@ -630,6 +654,12 @@ final class JsCollectionsAdapter implements ItemCollection {
             ),
           ArgumentError(name: 'writeTypeTag' || 'typeTag') => (
               CollectionRefusal.typeTag,
+              null
+            ),
+          // A reopen of the cached collection with another expiration: the
+          // field is final and live writers use the first one.
+          ArgumentError(name: 'defaultExpiration') => (
+              CollectionRefusal.expiration,
               null
             ),
           _ => (null, null),
