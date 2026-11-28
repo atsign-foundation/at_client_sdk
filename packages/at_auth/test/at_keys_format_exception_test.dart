@@ -7,7 +7,7 @@ void main() {
   group('Given a JSON object whose field is not what it must be', () {
     test(
         'when badField reports it, then its message and reason name the '
-        'field and what it must be, isJson is true and position is null', () {
+        'field and what it must be, parsed is true and position is null', () {
       final error = AtKeysFormatException.badField(
           'the keychain atKeys entry header',
           'segmentCount',
@@ -26,7 +26,7 @@ void main() {
                   'reason',
                   'a JSON object whose segmentCount is not a whole number '
                       'from 0 to 9')
-              .having((e) => e.isJson, 'isJson', isTrue)
+              .having((e) => e.parsed, 'parsed', isTrue)
               .having((e) => e.position, 'position', isNull)
               .having((e) => e.offset, 'offset', isNull)
               .having((e) => e.source, 'source', isNull));
@@ -61,7 +61,7 @@ void main() {
                   'reason',
                   'a legacy segment header whose segmentCount is not a '
                       'whole number from 0 to 9')
-              .having((e) => e.isJson, 'isJson', isTrue)
+              .having((e) => e.parsed, 'parsed', isTrue)
               .having((e) => e.position, 'position', isNull));
     });
   });

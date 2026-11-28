@@ -1,3 +1,12 @@
+## 4.1.0-rc.2
+
+- fix: `Atsign.enroll` now throws `AtKeysUnusableException`, as `Atsign.open`
+  does, for keys it cannot read or that are recorded for another Atsign, and
+  refuses a keyfile it cannot create, before it sends anything.
+- fix: a request `Atsign.enroll` sent but could not file throws
+  `AtEnrollmentException` naming the enrollment, for the Atsign's manager to
+  deny.
+
 ## 4.1.0-rc.1
 
 - fix: keys and enrollment messages, `AtNoCredentialException`'s and

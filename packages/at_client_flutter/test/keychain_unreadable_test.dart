@@ -836,7 +836,7 @@ void main() {
             expect(
               error,
               isA<AtKeysFormatException>()
-                  .having((e) => e.isJson, 'isJson', isTrue)
+                  .having((e) => e.parsed, 'parsed', isTrue)
                   .having((e) => e.reason, 'reason', contains('segmentCount')),
             );
             final format = error as AtKeysFormatException;

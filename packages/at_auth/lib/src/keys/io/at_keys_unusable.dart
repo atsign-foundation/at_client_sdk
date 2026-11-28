@@ -111,8 +111,8 @@ String whereKeysAre(String source) => 'in ${theAtKeysStore(source)}';
 /// value from them but an enrollment id or an algorithm name.
 String _reasonFor(Object error) {
   final text = switch (error) {
-    AtKeysFormatException(:final isJson, :final reason, :final position) =>
-      isJson
+    AtKeysFormatException(:final parsed, :final reason, :final position) =>
+      parsed
           ? 'it is $reason'
           : 'it is not valid JSON: $reason'
               '${position == null ? '' : ' (at character $position)'}',

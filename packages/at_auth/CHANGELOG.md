@@ -1,3 +1,7 @@
+## 4.1.0-rc.2
+
+- refactor: `AtKeysFormatException.isJson` is renamed `parsed`.
+
 ## 4.1.0-rc.1
 
 - fix: keys messages name where the keys are as "the AtKeys store

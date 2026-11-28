@@ -79,7 +79,7 @@ void main() {
     expect(
         error,
         isA<AtKeysFormatException>()
-            .having((e) => e.isJson, 'isJson', isFalse)
+            .having((e) => e.parsed, 'parsed', isFalse)
             .having((e) => e.reason, 'reason', parserError.message)
             .having((e) => e.position, 'position', text.length + 1)
             .having((e) => e.offset, 'offset', text.length)
@@ -103,7 +103,7 @@ void main() {
     expect(
         error,
         isA<AtKeysFormatException>()
-            .having((e) => e.isJson, 'isJson', isTrue)
+            .having((e) => e.parsed, 'parsed', isTrue)
             .having((e) => e.reason, 'reason', 'not a JSON object')
             .having((e) => e.position, 'position', isNull)
             .having((e) => e.source, 'source', isNull));
